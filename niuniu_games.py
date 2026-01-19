@@ -130,35 +130,50 @@ class NiuniuGames:
         # 超过最大时间按最大时间计算
         work_time = min(work_time, Cooldowns.RUSH_MAX_TIME)
 
-        # 计算金币
-        base_coins = int(work_time / 60 * RushConfig.COINS_PER_MINUTE)
+        # 计算金币（基础收益有上限）
+        base_coins = min(int(work_time / 60 * RushConfig.COINS_PER_MINUTE), RushConfig.MAX_COINS)
         bonus_coins = 0
         bonus_msg = ""
 
         # 时长奖励机制
         minutes = int(work_time / 60)
+        hours = minutes // 60
 
         # 超过30分钟有概率触发奖励事件
-        if minutes >= 30 and random.random() < 0.3:
+        if minutes >= 30 and random.random() < 0.2:  # 20%概率
             bonus_events = [
-                ("🎰 冲到一半捡到了神秘红包！", random.randint(20, 50)),
-                ("⭐ 触发了冲刺暴击！金币翻倍！", base_coins),
-                ("🍀 幸运加成！额外获得时长奖励！", minutes),
-                ("🎁 隐藏成就「持久战士」！", 30),
+                ("🎰 冲到一半捡到了神秘红包！", random.randint(10, 30)),
+                ("⭐ 触发了冲刺暴击！", random.randint(20, 50)),
+                ("🍀 幸运加成！", random.randint(15, 40)),
+                ("🎁 隐藏成就「持久战士」！", 25),
             ]
             event_msg, bonus = random.choice(bonus_events)
             bonus_coins = bonus
             bonus_msg = f"\n{event_msg} +{bonus}金币"
 
-        # 超过1小时额外奖励
-        if minutes >= 60:
-            hour_bonus = (minutes // 60) * 10
+        # 每小时额外奖励（固定）
+        if hours >= 1:
+            hour_bonus = hours * 5  # 每小时+5金币
             bonus_coins += hour_bonus
-            bonus_msg += f"\n🏆 坚持{minutes // 60}小时！额外 +{hour_bonus}金币"
+            bonus_msg += f"\n🏆 坚持{hours}小时！额外 +{hour_bonus}金币"
+
+        # 里程碑奖励
+        if hours >= 3:
+            bonus_coins += 25
+            bonus_msg += f"\n🎖️ 3小时里程碑！+25金币"
+        if hours >= 6:
+            bonus_coins += 50
+            bonus_msg += f"\n🏅 6小时里程碑！+50金币"
+        if hours >= 9:
+            bonus_coins += 75
+            bonus_msg += f"\n🥇 9小时里程碑！+75金币"
+        if hours >= 12:
+            bonus_coins += 100
+            bonus_msg += f"\n👑 12小时满冲成就！+100金币"
 
         # 超过2小时有小概率触发超级奖励
-        if minutes >= 120 and random.random() < 0.1:
-            super_bonus = random.randint(50, 100)
+        if hours >= 2 and random.random() < 0.1:  # 10%概率
+            super_bonus = random.randint(20, 50)
             bonus_coins += super_bonus
             bonus_msg += f"\n🌟 【超级冲刺王】触发！+{super_bonus}金币！"
 

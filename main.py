@@ -12,7 +12,8 @@ from niuniu_games import NiuniuGames
 from niuniu_effects import create_effect_manager, EffectTrigger, EffectContext
 from niuniu_config import (
     PLUGIN_DIR, NIUNIU_LENGTHS_FILE, GAME_TEXTS_FILE, LAST_ACTION_FILE,
-    DajiaoEvents, DajiaoCombo, DailyBonus, TIMEZONE
+    DajiaoEvents, DajiaoCombo, DailyBonus, TimePeriod, TIMEZONE,
+    CompareStreak, CompareBet, CompareAudience
 )
 import pytz
 from datetime import datetime
@@ -272,6 +273,7 @@ class NiuniuPlugin(Star):
                 "打胶": self._dajiao,
                 "我的牛牛": self._show_status,
                 "比划比划": self._compare,
+                "开团": self._kaitan,
                 "牛牛排行": self._show_ranking,
                 "牛牛商城": self.shop.show_shop,
                 "牛牛购买": self.shop.handle_buy,
@@ -421,6 +423,64 @@ class NiuniuPlugin(Star):
             )
             result_msgs.append(daily_text)
 
+        # ===== 时段感知系统 =====
+        current_hour = datetime.now(shanghai_tz).hour
+        current_period = None
+        period_config = None
+
+        # 确定当前时段
+        for period_key, config in TimePeriod.PERIODS.items():
+            start_hour, end_hour = config['hours']
+            if start_hour <= current_hour < end_hour:
+                current_period = period_key
+                period_config = config
+                break
+
+        # 时段问候语
+        time_texts = self.niuniu_texts.get('dajiao', {}).get('time_period', {})
+        if current_period and current_period in time_texts:
+            period_texts = time_texts[current_period]
+            if 'greeting' in period_texts:
+                greeting = random.choice(period_texts['greeting']).format(nickname=nickname)
+                result_msgs.append(greeting)
+
+        # 时段加成
+        time_success_bonus = period_config.get('success_bonus', 0) if period_config else 0
+        time_length_bonus = period_config.get('length_bonus', 0) if period_config else 0
+
+        if time_length_bonus > 0 and current_period in time_texts:
+            period_texts = time_texts[current_period]
+            if 'bonus' in period_texts:
+                bonus_text = random.choice(period_texts['bonus']).format(bonus=time_length_bonus)
+                result_msgs.append(bonus_text)
+            extra_length += time_length_bonus
+
+        # 时段惩罚提示
+        if time_success_bonus < 0 and current_period in time_texts:
+            period_texts = time_texts[current_period]
+            if 'penalty' in period_texts:
+                penalty_text = random.choice(period_texts['penalty']).format(nickname=nickname)
+                result_msgs.append(penalty_text)
+
+        # 深夜/凌晨特殊事件
+        special_chance = period_config.get('special_chance', 0) if period_config else 0
+        time_special_triggered = False
+        if special_chance > 0 and random.random() < special_chance:
+            if current_period in time_texts and 'special' in time_texts[current_period]:
+                special_bonus = random.randint(2, 5)
+                special_text = random.choice(time_texts[current_period]['special']).format(
+                    nickname=nickname, bonus=special_bonus
+                )
+                result_msgs.append(special_text)
+                extra_length += special_bonus
+                time_special_triggered = True
+
+        # 凌晨警告（小概率）
+        if current_period == 'midnight' and random.random() < 0.3:
+            if 'warning' in time_texts.get('midnight', {}):
+                warning_text = random.choice(time_texts['midnight']['warning']).format(nickname=nickname)
+                result_msgs.append(warning_text)
+
         # ===== 灵感迸发检查（上次触发的buff） =====
         has_inspiration = user_data.get('inspiration_active', False)
         if has_inspiration:
@@ -436,17 +496,23 @@ class NiuniuPlugin(Star):
             change = random.randint(3, 6)
         elif elapsed < self.COOLDOWN_30_MIN:  # 10-30分钟
             rand = random.random()
-            if rand < 0.4:   # 40% 增加
+            # 时段加成影响成功率：基础40%增加 + 时段bonus
+            increase_threshold = 0.4 + time_success_bonus
+            decrease_threshold = 0.7  # 减少概率不受时段影响
+            if rand < increase_threshold:
                 change = random.randint(2, 5)
-            elif rand < 0.7:  # 30% 减少
+            elif rand < decrease_threshold:
                 change = -random.randint(1, 3)
                 decrease_template = random.choice(self.niuniu_texts['dajiao']['decrease'])
         else:  # 30分钟后
             rand = random.random()
-            if rand < 0.7:  # 70% 增加
+            # 时段加成影响成功率：基础70%增加 + 时段bonus
+            increase_threshold = 0.7 + time_success_bonus
+            decrease_threshold = 0.9  # 减少概率不受时段影响
+            if rand < increase_threshold:
                 change = random.randint(3, 6)
                 hardness_change += 1
-            elif rand < 0.9:  # 20% 减少
+            elif rand < decrease_threshold:
                 change = -random.randint(1, 2)
                 decrease_template = random.choice(self.niuniu_texts['dajiao']['decrease_30min'])
 
@@ -709,6 +775,53 @@ class NiuniuPlugin(Star):
         compare_records['count'] = compare_count + 1
         self.update_last_actions(last_actions)
 
+        # ===== 解析赌注 =====
+        bet_amount = 0
+        msg_parts = event.message_str.split()
+        for part in msg_parts:
+            if part.isdigit():
+                bet_amount = int(part)
+                break
+
+        # 验证赌注
+        if bet_amount > 0:
+            if bet_amount < CompareBet.MIN_BET or bet_amount > CompareBet.MAX_BET:
+                yield event.plain_result(
+                    self.niuniu_texts['compare'].get('bet_invalid', ['❌ 赌注必须在 {min}-{max} 之间'])[0].format(
+                        min=CompareBet.MIN_BET, max=CompareBet.MAX_BET
+                    )
+                )
+                return
+            # 检查金币是否足够
+            user_coins = self.shop.get_user_coins(group_id, user_id)
+            if user_coins < bet_amount:
+                yield event.plain_result(
+                    random.choice(self.niuniu_texts['compare'].get('bet_insufficient', ['❌ {nickname} 金币不足'])).format(
+                        nickname=nickname, amount=bet_amount
+                    )
+                )
+                return
+
+        # ===== 连胜/连败系统 =====
+        win_streak = user_data.get('compare_win_streak', 0)
+        lose_streak = user_data.get('compare_lose_streak', 0)
+        streak_bonus = 0
+        streak_msgs = []
+
+        if win_streak >= CompareStreak.WIN_STREAK_THRESHOLD:
+            streak_bonus += CompareStreak.WIN_STREAK_BONUS
+            streak_text = random.choice(self.niuniu_texts['compare'].get('win_streak', ['🔥 【{count}连胜】'])).format(
+                nickname=nickname, count=win_streak
+            )
+            streak_msgs.append(streak_text)
+
+        if lose_streak >= CompareStreak.LOSE_STREAK_THRESHOLD:
+            streak_bonus += CompareStreak.LOSE_STREAK_BONUS
+            streak_text = random.choice(self.niuniu_texts['compare'].get('lose_streak', ['🛡️ 【触底反弹】'])).format(
+                nickname=nickname, count=lose_streak
+            )
+            streak_msgs.append(streak_text)
+
         # 获取双方道具
         user_items = self.shop.get_user_items(group_id, user_id)
         target_items = self.shop.get_user_items(group_id, target_id)
@@ -736,13 +849,13 @@ class NiuniuPlugin(Star):
             target_hardness=t_hardness
         )
 
-        # 触发 BEFORE_COMPARE 效果（如夺心魔）
+        # 触发 BEFORE_COMPARE 效果（如夺牛魔）
         ctx = self.effects.trigger(EffectTrigger.BEFORE_COMPARE, ctx, user_items, target_items)
 
         # 消耗触发的道具
         self.effects.consume_items(group_id, user_id, ctx.items_to_consume)
 
-        # 如果被拦截（如夺心魔触发），直接返回结果
+        # 如果被拦截（如夺牛魔触发），直接返回结果
         if ctx.intercept:
             # 应用长度变化
             if ctx.length_change != 0:
@@ -757,6 +870,18 @@ class NiuniuPlugin(Star):
             target_data = self.get_user_data(group_id, target_id)
             ctx.messages.append(f"🗡️ {nickname}: {self.format_length(old_u_len)} → {self.format_length(user_data['length'])}")
             ctx.messages.append(f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(target_data['length'])}")
+
+            # 检查被夺取者的保险（夺牛魔steal效果）
+            from niuniu_config import ShangbaoxianConfig
+            if ctx.target_length_change < 0:
+                target_length_loss = abs(ctx.target_length_change)
+                if target_length_loss >= ShangbaoxianConfig.LENGTH_THRESHOLD:
+                    target_insurance = target_data.get('insurance_charges', 0)
+                    if target_insurance > 0:
+                        # 消耗保险并赔付
+                        self.update_user_data(group_id, target_id, {'insurance_charges': target_insurance - 1})
+                        self.games.update_user_coins(group_id, target_id, ShangbaoxianConfig.PAYOUT)
+                        ctx.messages.append(f"📋 {target_data['nickname']} 保险理赔！损失{target_length_loss}cm，赔付{ShangbaoxianConfig.PAYOUT}金币（剩余{target_insurance - 1}次）")
 
             yield event.plain_result("\n".join(ctx.messages))
             return
@@ -778,12 +903,30 @@ class NiuniuPlugin(Star):
             # 都是正数：正常计算
             length_factor = (u_len - t_len) / max(u_len, t_len, 1) * 0.2
         hardness_factor = (u_hardness - t_hardness) * 0.08
-        win_prob = min(max(base_win + length_factor + hardness_factor, 0.15), 0.85)
+        # 应用连击加成
+        win_prob = min(max(base_win + length_factor + hardness_factor + streak_bonus, 0.15), 0.85)
 
         # 执行判定
         is_win = random.random() < win_prob
         base_gain = random.randint(0, 3)
         base_loss = random.randint(1, 2)
+
+        # ===== 更新连击状态 =====
+        lose_streak_protection_active = False
+        if is_win:
+            new_win_streak = win_streak + 1
+            new_lose_streak = 0
+        else:
+            new_win_streak = 0
+            new_lose_streak = lose_streak + 1
+            # 连败保护：输了不扣长度
+            if lose_streak >= CompareStreak.LOSE_STREAK_THRESHOLD and CompareStreak.LOSE_STREAK_PROTECTION:
+                lose_streak_protection_active = True
+
+        self.update_user_data(group_id, user_id, {
+            'compare_win_streak': new_win_streak,
+            'compare_lose_streak': new_lose_streak
+        })
 
         if is_win:
             # 硬度影响伤害：赢家(user)硬度加成攻击，输家(target)硬度减少损失
@@ -856,8 +999,9 @@ class NiuniuPlugin(Star):
             # 更新目标数据
             self.update_user_data(group_id, target_id, {'length': target_data['length'] + gain})
 
-            # 检查是否防止损失
-            if ctx.prevent_loss:
+            # 检查是否防止损失（道具效果或连败保护）
+            prevent_loss = ctx.prevent_loss or lose_streak_protection_active
+            if prevent_loss:
                 # 不减少长度
                 pass
             else:
@@ -866,8 +1010,13 @@ class NiuniuPlugin(Star):
             text = random.choice(self.niuniu_texts['compare']['lose']).format(
                 loser=nickname,
                 winner=target_data['nickname'],
-                loss=loss if not ctx.prevent_loss else 0
+                loss=loss if not prevent_loss else 0
             )
+
+            # 连败保护提示
+            if lose_streak_protection_active and not ctx.prevent_loss:
+                protection_text = random.choice(self.niuniu_texts['compare'].get('lose_streak_protection', ['🛡️ 【连败保护】不扣长度！'])).format(nickname=nickname)
+                text += f"\n{protection_text}"
 
             # 负数特殊文案
             if u_len <= 0 and t_len <= 0:
@@ -1033,6 +1182,78 @@ class NiuniuPlugin(Star):
         result_msg[1] = f"🗡️ {nickname}: {self.format_length(old_u_len)} → {self.format_length(final_user['length'])}"
         result_msg[2] = f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(final_target['length'])}"
 
+        # ===== 赌注结算 =====
+        if bet_amount > 0:
+            if is_win:
+                winnings = int(bet_amount * CompareBet.WINNER_MULTIPLIER)
+                self.games.update_user_coins(group_id, user_id, winnings)
+                bet_text = random.choice(self.niuniu_texts['compare'].get('bet_win', ['💰 赢得 {amount} 金币！'])).format(
+                    nickname=nickname, amount=winnings
+                )
+            else:
+                self.games.update_user_coins(group_id, user_id, -bet_amount)
+                bet_text = random.choice(self.niuniu_texts['compare'].get('bet_lose', ['💸 失去 {amount} 金币'])).format(
+                    nickname=nickname, amount=bet_amount
+                )
+            result_msg.append(bet_text)
+
+        # ===== 连击提示 =====
+        for msg in streak_msgs:
+            result_msg.insert(4, msg)  # 插入到结果消息后面
+
+        # ===== 围观效应 =====
+        # 记录本次比划时间
+        last_actions = self._load_last_actions()
+        group_compares = last_actions.setdefault(group_id, {}).setdefault('_recent_compares', [])
+        # 清理5分钟前的记录
+        group_compares = [t for t in group_compares if current_time - t < CompareAudience.TIME_WINDOW]
+        group_compares.append(current_time)
+        last_actions[group_id]['_recent_compares'] = group_compares
+        self.update_last_actions(last_actions)
+
+        # 检查是否触发围观效应
+        if len(group_compares) >= CompareAudience.MIN_COMPARES and random.random() < CompareAudience.TRIGGER_CHANCE:
+            bonus = random.randint(CompareAudience.BONUS_LENGTH_MIN, CompareAudience.BONUS_LENGTH_MAX)
+            # 给双方都加长度
+            final_user = self.get_user_data(group_id, user_id)
+            final_target = self.get_user_data(group_id, target_id)
+            self.update_user_data(group_id, user_id, {'length': final_user['length'] + bonus})
+            self.update_user_data(group_id, target_id, {'length': final_target['length'] + bonus})
+            audience_text = random.choice(self.niuniu_texts['compare'].get('audience_effect', ['👀 【围观效应】+{bonus}cm！'])).format(
+                bonus=bonus, count=len(group_compares)
+            )
+            result_msg.append(audience_text)
+            # 更新显示
+            final_user = self.get_user_data(group_id, user_id)
+            final_target = self.get_user_data(group_id, target_id)
+            result_msg[1] = f"🗡️ {nickname}: {self.format_length(old_u_len)} → {self.format_length(final_user['length'])}"
+            result_msg[2] = f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(final_target['length'])}"
+
+        # ===== 保险理赔检查 =====
+        from niuniu_config import ShangbaoxianConfig
+        final_user = self.get_user_data(group_id, user_id)
+        final_target = self.get_user_data(group_id, target_id)
+
+        # 检查用户的保险（用户输了的情况）
+        user_length_loss = max(0, old_u_len - final_user['length'])
+        if user_length_loss >= ShangbaoxianConfig.LENGTH_THRESHOLD:
+            user_insurance = final_user.get('insurance_charges', 0)
+            if user_insurance > 0:
+                # 消耗保险并赔付
+                self.update_user_data(group_id, user_id, {'insurance_charges': user_insurance - 1})
+                self.games.update_user_coins(group_id, user_id, ShangbaoxianConfig.PAYOUT)
+                result_msg.append(f"📋 {nickname} 保险理赔！损失{user_length_loss}cm，赔付{ShangbaoxianConfig.PAYOUT}金币（剩余{user_insurance - 1}次）")
+
+        # 检查目标的保险（目标输了的情况）
+        target_length_loss = max(0, old_t_len - final_target['length'])
+        if target_length_loss >= ShangbaoxianConfig.LENGTH_THRESHOLD:
+            target_insurance = final_target.get('insurance_charges', 0)
+            if target_insurance > 0:
+                # 消耗保险并赔付
+                self.update_user_data(group_id, target_id, {'insurance_charges': target_insurance - 1})
+                self.games.update_user_coins(group_id, target_id, ShangbaoxianConfig.PAYOUT)
+                result_msg.append(f"📋 {final_target['nickname']} 保险理赔！损失{target_length_loss}cm，赔付{ShangbaoxianConfig.PAYOUT}金币（剩余{target_insurance - 1}次）")
+
         yield event.plain_result("\n".join(result_msg))
 
     async def _handle_halving_event(self, group_id, user_id, target_id, nickname, target_nickname, user_items, target_items, result_msg):
@@ -1077,6 +1298,166 @@ class NiuniuPlugin(Star):
             self.effects.consume_items(group_id, target_id, ctx_target.items_to_consume)
 
         yield None  # Generator placeholder
+
+    async def _kaitan(self, event):
+        """开团功能 - 群友混战（固定8场）"""
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+        nickname = event.get_sender_name()
+
+        group_data = self.get_group_data(group_id)
+        if not group_data.get('plugin_enabled', False):
+            yield event.plain_result("❌ 插件未启用")
+            return
+
+        # 检查发起者是否注册
+        user_data = self.get_user_data(group_id, user_id)
+        if not user_data:
+            yield event.plain_result("❌ 请先注册牛牛")
+            return
+
+        # 解析所有@的用户
+        at_users = []
+        if hasattr(event.message_obj, 'message') and event.message_obj.message:
+            for seg in event.message_obj.message:
+                if hasattr(seg, 'type') and seg.type == 'at':
+                    target_id = str(seg.data.get('qq', ''))
+                    if target_id:
+                        at_users.append(target_id)
+
+        # 构建参与者列表
+        participants = []
+
+        if at_users:
+            # 有@人：发起者 + @的人
+            participants.append((user_id, nickname))
+            for target_id in at_users:
+                if target_id != user_id:
+                    target_data = self.get_user_data(group_id, target_id)
+                    if target_data:
+                        participants.append((target_id, target_data.get('nickname', f'用户{target_id}')))
+        else:
+            # 没@人：全群已注册用户参与
+            data = self._load_niuniu_lengths()
+            group_users = data.get(group_id, {})
+            for uid, udata in group_users.items():
+                # 跳过非用户数据（如plugin_enabled, _recent_compares等）
+                if uid.startswith('_') or uid == 'plugin_enabled':
+                    continue
+                if isinstance(udata, dict) and 'length' in udata:
+                    participants.append((uid, udata.get('nickname', f'用户{uid}')))
+
+        # 去重
+        seen = set()
+        unique_participants = []
+        for p in participants:
+            if p[0] not in seen:
+                seen.add(p[0])
+                unique_participants.append(p)
+        participants = unique_participants
+
+        # 至少需要2人
+        if len(participants) < 2:
+            yield event.plain_result("❌ 开团至少需要2人！\n用法：开团 或 开团 @群友1 @群友2 ...")
+            return
+
+        # 打乱顺序
+        random.shuffle(participants)
+
+        result_msgs = ["⚔️ ═══ 牛牛大乱斗 ═══ ⚔️", f"👥 参与者：{len(participants)}人", ""]
+
+        # 记录战绩
+        wins = {p[0]: 0 for p in participants}
+        length_changes = {p[0]: 0 for p in participants}
+
+        # 固定8场战斗
+        MAX_BATTLES = 8
+        battle_count = 0
+        failed_attempts = 0
+
+        while battle_count < MAX_BATTLES and failed_attempts < 20:
+            # 随机选两个不同的参与者
+            if len(participants) < 2:
+                break
+            p1, p2 = random.sample(participants, 2)
+            p1_id, p1_name = p1
+            p2_id, p2_name = p2
+
+            # 获取最新数据
+            p1_data = self.get_user_data(group_id, p1_id)
+            p2_data = self.get_user_data(group_id, p2_id)
+
+            if not p1_data or not p2_data:
+                failed_attempts += 1
+                continue
+
+            p1_len = p1_data['length']
+            p2_len = p2_data['length']
+            p1_hard = p1_data['hardness']
+            p2_hard = p2_data['hardness']
+
+            # 简化胜率计算
+            base_win = 0.5
+            if p1_len > 0 and p2_len > 0:
+                length_factor = (p1_len - p2_len) / max(p1_len, p2_len, 1) * 0.2
+            elif p1_len <= 0 and p2_len > 0:
+                length_factor = -0.2
+            elif p1_len > 0 and p2_len <= 0:
+                length_factor = 0.2
+            else:
+                length_factor = 0
+            hardness_factor = (p1_hard - p2_hard) * 0.08
+            win_prob = min(max(base_win + length_factor + hardness_factor, 0.15), 0.85)
+
+            # 判定
+            p1_wins = random.random() < win_prob
+            gain = random.randint(1, 3)
+            loss = random.randint(1, 2)
+
+            if p1_wins:
+                wins[p1_id] += 1
+                length_changes[p1_id] += gain
+                length_changes[p2_id] -= loss
+                self.update_user_data(group_id, p1_id, {'length': p1_data['length'] + gain})
+                self.update_user_data(group_id, p2_id, {'length': p2_data['length'] - loss})
+                result_msgs.append(f"⚔️ {p1_name} 🆚 {p2_name} → 🏆 {p1_name} (+{gain}cm)")
+            else:
+                wins[p2_id] += 1
+                length_changes[p2_id] += gain
+                length_changes[p1_id] -= loss
+                self.update_user_data(group_id, p1_id, {'length': p1_data['length'] - loss})
+                self.update_user_data(group_id, p2_id, {'length': p2_data['length'] + gain})
+                result_msgs.append(f"⚔️ {p1_name} 🆚 {p2_name} → 🏆 {p2_name} (+{gain}cm)")
+
+            battle_count += 1
+
+        # 统计结果
+        result_msgs.append("")
+        result_msgs.append("📊 ═══ 战绩统计 ═══ 📊")
+
+        # 只显示参与过战斗的人（有胜场或有长度变化）
+        active_participants = [p for p in participants if wins[p[0]] > 0 or length_changes[p[0]] != 0]
+
+        # 按胜场排序
+        sorted_participants = sorted(active_participants, key=lambda p: (wins[p[0]], length_changes[p[0]]), reverse=True)
+
+        for rank, (pid, pname) in enumerate(sorted_participants, 1):
+            final_data = self.get_user_data(group_id, pid)
+            change = length_changes[pid]
+            change_str = f"+{change}" if change >= 0 else str(change)
+            if rank == 1:
+                result_msgs.append(f"👑 {pname}: {wins[pid]}胜 ({change_str}cm) → {self.format_length(final_data['length'])}")
+            else:
+                result_msgs.append(f"{rank}. {pname}: {wins[pid]}胜 ({change_str}cm) → {self.format_length(final_data['length'])}")
+
+        # 宣布冠军
+        if sorted_participants:
+            champion = sorted_participants[0]
+            result_msgs.append("")
+            result_msgs.append(f"🎉 本次大乱斗冠军：{champion[1]}！")
+
+        yield event.plain_result("\n".join(result_msgs))
+
     async def _show_status(self, event):
         """查看牛牛状态"""
         group_id = str(event.message_obj.group_id)
