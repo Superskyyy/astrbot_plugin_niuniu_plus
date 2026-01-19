@@ -370,15 +370,24 @@ class JiefuJipinEffect(ItemEffect):
     consume_on_use = False  # Active item, no inventory
 
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
-        import time
+        from datetime import datetime
+        import pytz
+        from niuniu_config import TIMEZONE
 
-        # 检查每日冷却
+        # 检查每日冷却（每天0点重置）
+        tz = pytz.timezone(TIMEZONE)
+        now = datetime.now(tz)
+        today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_midnight_ts = today_midnight.timestamp()
+
         last_use = ctx.user_data.get('last_jiefu_time', 0)
-        current_time = time.time()
-        if current_time - last_use < 86400:  # 24小时
-            remaining_hours = int((86400 - (current_time - last_use)) / 3600)
-            remaining_mins = int((86400 - (current_time - last_use)) % 3600 / 60)
-            ctx.messages.append(f"⏰ 劫富济贫每天只能用一次！还需等待 {remaining_hours}小时{remaining_mins}分钟")
+        if last_use >= today_midnight_ts:  # 今天已经用过
+            # 计算到明天0点的时间
+            tomorrow_midnight = today_midnight_ts + 86400
+            remaining_secs = int(tomorrow_midnight - now.timestamp())
+            remaining_hours = remaining_secs // 3600
+            remaining_mins = (remaining_secs % 3600) // 60
+            ctx.messages.append(f"⏰ 劫富济贫每天只能用一次！明天0点后再来（还需 {remaining_hours}小时{remaining_mins}分钟）")
             ctx.extra['refund'] = True
             ctx.intercept = True
             return ctx
