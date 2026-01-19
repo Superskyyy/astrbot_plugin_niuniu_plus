@@ -50,7 +50,7 @@ class NiuniuShop:
 
     async def show_shop(self, event: AstrMessageEvent):
         """显示商城"""
-        shop_list = ["🛒 牛牛商城（使用 牛牛购买+编号）"]
+        shop_list = ["🛒 牛牛商城", "📝 牛牛购买 编号 [数量] （如：牛牛购买 1 5）"]
         for item in self.get_shop_items():
             shop_list.append(f"{item['id']}. {item['name']} - {item['desc']} (价格: {item['price']} 金币)")
         yield event.plain_result("\n".join(shop_list))
@@ -295,13 +295,23 @@ class NiuniuShop:
         }
 
     async def handle_buy(self, event: AstrMessageEvent):
-        """处理购买命令"""
+        """处理购买命令，支持批量购买"""
         msg_parts = event.message_str.split()
         if len(msg_parts) < 2 or not msg_parts[1].isdigit():
-            yield event.plain_result("❌ 格式：牛牛购买 商品编号\n例：牛牛购买 1")
+            yield event.plain_result("❌ 格式：牛牛购买 商品编号 [数量]\n例：牛牛购买 1\n例：牛牛购买 1 5（连续购买5次）")
             return
 
         item_id = int(msg_parts[1])
+
+        # 解析购买数量（默认为1）
+        buy_count = 1
+        if len(msg_parts) >= 3 and msg_parts[2].isdigit():
+            buy_count = int(msg_parts[2])
+            if buy_count < 1:
+                buy_count = 1
+            elif buy_count > 99:
+                buy_count = 99  # 设置上限防止滥用
+
         shop_items = self.get_shop_items()
         selected_item = next((i for i in shop_items if i['id'] == item_id), None)
 
@@ -325,27 +335,71 @@ class NiuniuShop:
             result_msg = []
             user_data = self._get_user_data(group_id, user_id)
             final_price = selected_item['price']  # 默认价格，动态定价道具会在效果中更新
+            total_cost = 0  # 批量购买总花费
+            actual_buy_count = 0  # 实际购买次数
 
             if selected_item['type'] == 'passive':
-                # Passive items go to inventory
+                # Passive items go to inventory - 支持批量购买
                 user_data.setdefault('items', {})
                 current = user_data['items'].get(selected_item['name'], 0)
-                quantity = selected_item.get('quantity', 1)
+                quantity_per_buy = selected_item.get('quantity', 1)
                 max_count = selected_item.get('max', 3)
+                price_per_buy = selected_item['price']
 
-                # 检查是否会超过上限
-                if current + quantity > max_count:
-                    if current >= max_count:
-                        yield event.plain_result(f"⚠️ 已达到最大持有量（当前{current}个，最大{max_count}个）")
-                    else:
-                        yield event.plain_result(f"⚠️ 购买后会超过上限（当前{current}个，购买+{quantity}个，最大{max_count}个）")
+                # 检查是否已达上限
+                if current >= max_count:
+                    yield event.plain_result(f"⚠️ 已达到最大持有量（当前{current}个，最大{max_count}个）")
                     return
 
-                user_data['items'][selected_item['name']] = current + quantity
-                result_msg.append(f"📦 获得 {selected_item['name']}x{quantity}")
+                # 计算可以购买的次数
+                remaining_capacity = max_count - current
+                max_buys_by_capacity = remaining_capacity // quantity_per_buy
+                max_buys_by_coins = int(user_coins // price_per_buy)
+
+                actual_buy_count = min(buy_count, max_buys_by_capacity, max_buys_by_coins)
+
+                if actual_buy_count <= 0:
+                    if max_buys_by_coins <= 0:
+                        yield event.plain_result("❌ 金币不足，无法购买")
+                    else:
+                        yield event.plain_result(f"⚠️ 购买后会超过上限（当前{current}个，最大{max_count}个）")
+                    return
+
+                total_quantity = quantity_per_buy * actual_buy_count
+                total_cost = price_per_buy * actual_buy_count
+
+                user_data['items'][selected_item['name']] = current + total_quantity
+
+                if actual_buy_count == 1:
+                    result_msg.append(f"📦 获得 {selected_item['name']}x{total_quantity}")
+                else:
+                    result_msg.append(f"📦 批量购买{actual_buy_count}次，获得 {selected_item['name']}x{total_quantity}")
+
+                # 如果请求的数量没有全部购买，说明原因
+                if actual_buy_count < buy_count:
+                    if max_buys_by_capacity < buy_count and max_buys_by_capacity <= max_buys_by_coins:
+                        result_msg.append(f"⚠️ 已达到持有上限（{max_count}个）")
+                    else:
+                        result_msg.append(f"⚠️ 金币不足，仅购买{actual_buy_count}次")
+
                 self._save_user_data(group_id, user_id, user_data)
+                final_price = total_cost  # 更新为总花费
 
             elif selected_item['type'] == 'active':
+                # Active items - 立即使用类道具不支持批量购买
+                if buy_count > 1:
+                    yield event.plain_result("⚠️ 该道具为立即使用类，不支持批量购买")
+                    return
+
+                # 检查硬度上限 - 如果道具增加硬度且已达上限则拒绝购买
+                from niuniu_config import NiuniuConfig
+                effect = self.main.effects.effects.get(selected_item['name'])
+                if effect and hasattr(effect, 'hardness_change') and effect.hardness_change > 0:
+                    current_hardness = user_data.get('hardness', 1)
+                    if current_hardness >= NiuniuConfig.MAX_HARDNESS:
+                        yield event.plain_result(f"⚠️ 硬度已达上限（{NiuniuConfig.MAX_HARDNESS}），无法购买增加硬度的道具")
+                        return
+
                 # Active items use effect system
                 extra_data = {'item_name': selected_item['name'], 'user_coins': user_coins}
 
