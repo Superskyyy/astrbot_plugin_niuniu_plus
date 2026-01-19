@@ -11,8 +11,11 @@ from niuniu_shop import NiuniuShop
 from niuniu_games import NiuniuGames
 from niuniu_effects import create_effect_manager, EffectTrigger, EffectContext
 from niuniu_config import (
-    PLUGIN_DIR, NIUNIU_LENGTHS_FILE, GAME_TEXTS_FILE, LAST_ACTION_FILE
+    PLUGIN_DIR, NIUNIU_LENGTHS_FILE, GAME_TEXTS_FILE, LAST_ACTION_FILE,
+    DajiaoEvents, DajiaoCombo, DailyBonus, TIMEZONE
 )
+import pytz
+from datetime import datetime
 
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
@@ -246,7 +249,7 @@ class NiuniuPlugin(Star):
 
         is_rushing = user_data.get('is_rushing', False) if user_data else False
 
-        # 处理其他命令
+        # 处理其他命令（开冲现在是非阻塞的，可以边冲边做其他事）
         if msg.startswith("开冲"):
             if is_rushing:
                 yield event.plain_result("❌ 你已经在开冲了，无需重复操作")
@@ -260,9 +263,6 @@ class NiuniuPlugin(Star):
             async for result in self.games.stop_rush(event):
                 yield result
         elif msg.startswith("飞飞机"):
-            if is_rushing:
-                yield event.plain_result("❌ 牛牛快冲晕了，还做不了其他事情，要不先停止开冲？")
-                return
             async for result in self.games.fly_plane(event):
                 yield result
         else:
@@ -280,9 +280,6 @@ class NiuniuPlugin(Star):
 
             for cmd, handler in handler_map.items():
                 if msg.startswith(cmd):
-                    if is_rushing:
-                        yield event.plain_result("❌ 牛牛快冲晕了，还做不了其他事情，要不先停止开冲？")
-                        return
                     async for result in handler(event):
                         yield result
                     return
@@ -348,7 +345,7 @@ class NiuniuPlugin(Star):
         yield event.plain_result(text)
 
     async def _dajiao(self, event: AstrMessageEvent):
-        """打胶功能"""
+        """打胶功能 - 增强版：包含随机事件、连击系统、每日首次奖励"""
         group_id = str(event.message_obj.group_id)
         user_id = str(event.get_sender_id())
         nickname = event.get_sender_name()
@@ -403,67 +400,246 @@ class NiuniuPlugin(Star):
         else:
             elapsed = time.time() - last_time
 
-        # 计算变化
-        change = 0
         current_time = time.time()
-        hardness_updated = False
+        result_msgs = []  # 收集所有消息
         old_hardness = user_data['hardness']
+        hardness_change = 0
+        extra_length = 0
+        extra_coins = 0
+        time_warp_triggered = False
 
-        if elapsed < self.COOLDOWN_30_MIN:  # 10-30分钟
+        # ===== 每日首次奖励检查 =====
+        shanghai_tz = pytz.timezone(TIMEZONE)
+        today_str = datetime.now(shanghai_tz).strftime("%Y-%m-%d")
+        last_dajiao_date = user_data.get('last_dajiao_date', '')
+        is_daily_first = (last_dajiao_date != today_str)
+
+        if is_daily_first:
+            extra_length += DailyBonus.FIRST_DAJIAO_LENGTH_BONUS
+            daily_text = random.choice(self.niuniu_texts['dajiao']['daily_first']).format(
+                nickname=nickname, bonus=DailyBonus.FIRST_DAJIAO_LENGTH_BONUS
+            )
+            result_msgs.append(daily_text)
+
+        # ===== 灵感迸发检查（上次触发的buff） =====
+        has_inspiration = user_data.get('inspiration_active', False)
+        if has_inspiration:
+            # 清除灵感状态
+            self.update_user_data(group_id, user_id, {'inspiration_active': False})
+
+        # ===== 计算基础变化 =====
+        change = 0
+        decrease_template = None
+
+        if has_inspiration:
+            # 灵感迸发：必定成功
+            change = random.randint(3, 6)
+        elif elapsed < self.COOLDOWN_30_MIN:  # 10-30分钟
             rand = random.random()
             if rand < 0.4:   # 40% 增加
                 change = random.randint(2, 5)
             elif rand < 0.7:  # 30% 减少
                 change = -random.randint(1, 3)
-                template = random.choice(self.niuniu_texts['dajiao']['decrease'])
+                decrease_template = random.choice(self.niuniu_texts['dajiao']['decrease'])
         else:  # 30分钟后
             rand = random.random()
             if rand < 0.7:  # 70% 增加
                 change = random.randint(3, 6)
-                user_data['hardness'] = min(user_data['hardness'] + 1, 10)
-                if user_data['hardness'] > old_hardness:
-                    hardness_updated = True
+                hardness_change += 1
             elif rand < 0.9:  # 20% 减少
                 change = -random.randint(1, 2)
-                template = random.choice(self.niuniu_texts['dajiao']['decrease_30min'])
+                decrease_template = random.choice(self.niuniu_texts['dajiao']['decrease_30min'])
 
-        # 应用变化并保存到文件
+        # ===== 随机事件处理 =====
+        event_triggered = False
+
+        # 暴击 (3%) - 增长x3
+        if not event_triggered and change > 0 and random.random() < DajiaoEvents.CRITICAL_CHANCE:
+            change = change * 3
+            crit_text = random.choice(self.niuniu_texts['dajiao']['critical']).format(nickname=nickname)
+            result_msgs.append(crit_text)
+            event_triggered = True
+
+        # 失手 (2%) - 损失x2
+        if not event_triggered and change < 0 and random.random() < DajiaoEvents.FUMBLE_CHANCE:
+            change = change * 2
+            fumble_text = random.choice(self.niuniu_texts['dajiao']['fumble']).format(nickname=nickname)
+            result_msgs.append(fumble_text)
+            event_triggered = True
+
+        # 硬度觉醒 (5%) - +1~2硬度
+        if not event_triggered and random.random() < DajiaoEvents.HARDNESS_AWAKENING_CHANCE:
+            bonus = random.randint(DajiaoEvents.HARDNESS_AWAKENING_MIN, DajiaoEvents.HARDNESS_AWAKENING_MAX)
+            hardness_change += bonus
+            awakening_text = random.choice(self.niuniu_texts['dajiao']['hardness_awakening']).format(
+                nickname=nickname, bonus=bonus
+            )
+            result_msgs.append(awakening_text)
+            event_triggered = True
+
+        # 金币掉落 (8%) - 10-30金币
+        if not event_triggered and random.random() < DajiaoEvents.COIN_DROP_CHANCE:
+            coins = random.randint(DajiaoEvents.COIN_DROP_MIN, DajiaoEvents.COIN_DROP_MAX)
+            extra_coins += coins
+            coin_text = random.choice(self.niuniu_texts['dajiao']['coin_drop']).format(
+                nickname=nickname, coins=coins
+            )
+            result_msgs.append(coin_text)
+            event_triggered = True
+
+        # 时间扭曲 (2%) - 重置冷却
+        if not event_triggered and random.random() < DajiaoEvents.TIME_WARP_CHANCE:
+            time_warp_triggered = True
+            warp_text = random.choice(self.niuniu_texts['dajiao']['time_warp']).format(nickname=nickname)
+            result_msgs.append(warp_text)
+            event_triggered = True
+
+        # 灵感迸发 (3%) - 下次必成功
+        if not event_triggered and random.random() < DajiaoEvents.INSPIRATION_CHANCE:
+            self.update_user_data(group_id, user_id, {'inspiration_active': True})
+            insp_text = random.choice(self.niuniu_texts['dajiao']['inspiration']).format(nickname=nickname)
+            result_msgs.append(insp_text)
+            event_triggered = True
+
+        # 观众效应 (5%) - 5分钟内有人打胶则双方+1cm
+        if not event_triggered and random.random() < DajiaoEvents.AUDIENCE_EFFECT_CHANCE:
+            # 查找最近5分钟内打过胶的其他用户
+            group_actions = last_actions.get(group_id, {})
+            recent_dajiaoer = None
+            for uid, actions in group_actions.items():
+                if uid != user_id and isinstance(actions, dict):
+                    other_time = actions.get('dajiao', 0)
+                    if current_time - other_time < DajiaoEvents.AUDIENCE_EFFECT_WINDOW:
+                        other_data = self.get_user_data(group_id, uid)
+                        if other_data:
+                            recent_dajiaoer = (uid, other_data)
+                            break
+            if recent_dajiaoer:
+                other_uid, other_data = recent_dajiaoer
+                # 双方各+1cm
+                extra_length += 1
+                self.update_user_data(group_id, other_uid, {'length': other_data['length'] + 1})
+                audience_text = random.choice(self.niuniu_texts['dajiao']['audience_effect']).format(
+                    nickname=nickname, other=other_data['nickname']
+                )
+                result_msgs.append(audience_text)
+                event_triggered = True
+
+        # 神秘力量 (2%) - 随机±5~15cm
+        if not event_triggered and random.random() < DajiaoEvents.MYSTERIOUS_FORCE_CHANCE:
+            mysterious_change = random.randint(DajiaoEvents.MYSTERIOUS_FORCE_MIN, DajiaoEvents.MYSTERIOUS_FORCE_MAX)
+            if random.random() < 0.5:
+                mysterious_change = -mysterious_change
+            change_str = f"+{mysterious_change}" if mysterious_change > 0 else str(mysterious_change)
+            extra_length += mysterious_change
+            mysterious_text = random.choice(self.niuniu_texts['dajiao']['mysterious_force']).format(
+                nickname=nickname, change=change_str
+            )
+            result_msgs.append(mysterious_text)
+            event_triggered = True
+
+        # ===== 连击系统 =====
+        combo_count = user_data.get('combo_count', 0)
+        if change >= 0:  # 成功或无效（非负数）
+            combo_count += 1
+            combo_bonus_msg = None
+
+            # 检查连击奖励
+            if combo_count == DajiaoCombo.COMBO_3_THRESHOLD:
+                extra_length += DajiaoCombo.COMBO_3_LENGTH_BONUS
+                combo_bonus_msg = random.choice(self.niuniu_texts['dajiao']['combo_3']).format(
+                    nickname=nickname, bonus=DajiaoCombo.COMBO_3_LENGTH_BONUS
+                )
+            elif combo_count == DajiaoCombo.COMBO_5_THRESHOLD:
+                extra_length += DajiaoCombo.COMBO_5_LENGTH_BONUS
+                extra_coins += DajiaoCombo.COMBO_5_COIN_BONUS
+                combo_bonus_msg = random.choice(self.niuniu_texts['dajiao']['combo_5']).format(
+                    nickname=nickname,
+                    length_bonus=DajiaoCombo.COMBO_5_LENGTH_BONUS,
+                    coin_bonus=DajiaoCombo.COMBO_5_COIN_BONUS
+                )
+            elif combo_count == DajiaoCombo.COMBO_10_THRESHOLD:
+                extra_length += DajiaoCombo.COMBO_10_LENGTH_BONUS
+                extra_coins += DajiaoCombo.COMBO_10_COIN_BONUS
+                hardness_change += DajiaoCombo.COMBO_10_HARDNESS_BONUS
+                combo_bonus_msg = random.choice(self.niuniu_texts['dajiao']['combo_10']).format(
+                    nickname=nickname,
+                    length_bonus=DajiaoCombo.COMBO_10_LENGTH_BONUS,
+                    coin_bonus=DajiaoCombo.COMBO_10_COIN_BONUS,
+                    hardness_bonus=DajiaoCombo.COMBO_10_HARDNESS_BONUS
+                )
+
+            if combo_bonus_msg:
+                result_msgs.append(combo_bonus_msg)
+        else:
+            # 失败，重置连击
+            if combo_count >= 3:
+                break_text = random.choice(self.niuniu_texts['dajiao']['combo_break']).format(
+                    nickname=nickname, count=combo_count
+                )
+                result_msgs.append(break_text)
+            combo_count = 0
+
+        # ===== 应用所有变化 =====
+        total_change = change + extra_length
+        new_hardness = min(10, max(1, old_hardness + hardness_change))
+        hardness_updated = new_hardness != old_hardness
+
         updated_data = {
-            'length': user_data['length'] + change
+            'length': user_data['length'] + total_change,
+            'combo_count': combo_count,
+            'last_dajiao_date': today_str
         }
         if hardness_updated:
-            updated_data['hardness'] = user_data['hardness']
+            updated_data['hardness'] = new_hardness
+
         self.update_user_data(group_id, user_id, updated_data)
 
-        # 更新冷却时间
+        # 更新金币
+        if extra_coins > 0:
+            self.games.update_user_coins(group_id, user_id, extra_coins)
+
+        # 更新冷却时间（如果没有时间扭曲）
         last_actions = self._load_last_actions()
-        last_actions.setdefault(group_id, {}).setdefault(user_id, {})['dajiao'] = current_time
+        if time_warp_triggered:
+            # 时间扭曲：设置为很久以前，这样下次不会冷却
+            last_actions.setdefault(group_id, {}).setdefault(user_id, {})['dajiao'] = 0
+        else:
+            last_actions.setdefault(group_id, {}).setdefault(user_id, {})['dajiao'] = current_time
         self.update_last_actions(last_actions)
 
-        # 生成消息
+        # ===== 生成基础消息 =====
         if change > 0:
             template = random.choice(self.niuniu_texts['dajiao']['increase'])
         elif change < 0:
-            template = template
+            template = decrease_template or random.choice(self.niuniu_texts['dajiao']['decrease'])
         else:
             template = random.choice(self.niuniu_texts['dajiao']['no_effect'])
 
-        text = template.format(nickname=nickname, change=abs(change))
+        base_text = template.format(nickname=nickname, change=abs(change))
 
-        # 合并效果消息
+        # 合并效果消息（道具效果）
         if ctx.messages:
-            final_text = "\n".join(ctx.messages + [text])
-        else:
-            final_text = text
+            result_msgs = ctx.messages + result_msgs
 
-        # 重新获取最新数据以显示
+        # 添加基础消息
+        result_msgs.append(base_text)
+
+        # ===== 构建最终输出 =====
         user_data = self.get_user_data(group_id, user_id)
-        result_text = f"{final_text}\n当前长度：{self.format_length(user_data['length'])}"
+        final_text = "\n".join(result_msgs)
+        final_text += f"\n当前长度：{self.format_length(user_data['length'])}"
+
         if hardness_updated:
-            result_text += f"\n💪 硬度提升: {old_hardness} → {user_data['hardness']}"
+            final_text += f"\n💪 硬度变化: {old_hardness} → {new_hardness}"
         else:
-            result_text += f"\n当前硬度：{user_data['hardness']}"
-        yield event.plain_result(result_text)
+            final_text += f"\n当前硬度：{user_data['hardness']}"
+
+        # 显示连击数（如果有）
+        if combo_count >= 2:
+            final_text += f"\n🔥 当前连击：{combo_count}"
+
+        yield event.plain_result(final_text)
 
     async def _compare(self, event):
         """比划功能"""

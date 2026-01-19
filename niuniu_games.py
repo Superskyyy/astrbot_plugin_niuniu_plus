@@ -94,7 +94,12 @@ class NiuniuGames:
         data.setdefault(group_id, {})[user_id] = user_data
         self._save_data(data)
         
-        yield event.plain_result(f"💪 {nickname} 芜湖！开冲！输入\"停止开冲\"来结束并结算金币。")
+        rush_msgs = [
+            f"💪 {nickname} 芜湖！开冲！\n⏱️ 后台计时中，你可以继续打胶、比划~\n📝 输入「停止开冲」来结算金币",
+            f"🚀 {nickname} 开始后台冲刺！\n🎮 放心玩其他的，冲的金币照算~\n📝 输入「停止开冲」来收菜",
+            f"⚡ {nickname} 的牛牛开始疯狂输出！\n🎯 不影响其他操作，后台自动计时\n📝 想停就喊「停止开冲」",
+        ]
+        yield event.plain_result(random.choice(rush_msgs))
     
     async def stop_rush(self, event: AstrMessageEvent):
         """停止开冲并结算金币"""
@@ -126,14 +131,55 @@ class NiuniuGames:
         work_time = min(work_time, Cooldowns.RUSH_MAX_TIME)
 
         # 计算金币
-        coins = int(work_time / 60 * RushConfig.COINS_PER_MINUTE)
-        user_data['coins'] = user_data.get('coins', 0) + coins
-        
+        base_coins = int(work_time / 60 * RushConfig.COINS_PER_MINUTE)
+        bonus_coins = 0
+        bonus_msg = ""
+
+        # 时长奖励机制
+        minutes = int(work_time / 60)
+
+        # 超过30分钟有概率触发奖励事件
+        if minutes >= 30 and random.random() < 0.3:
+            bonus_events = [
+                ("🎰 冲到一半捡到了神秘红包！", random.randint(20, 50)),
+                ("⭐ 触发了冲刺暴击！金币翻倍！", base_coins),
+                ("🍀 幸运加成！额外获得时长奖励！", minutes),
+                ("🎁 隐藏成就「持久战士」！", 30),
+            ]
+            event_msg, bonus = random.choice(bonus_events)
+            bonus_coins = bonus
+            bonus_msg = f"\n{event_msg} +{bonus}金币"
+
+        # 超过1小时额外奖励
+        if minutes >= 60:
+            hour_bonus = (minutes // 60) * 10
+            bonus_coins += hour_bonus
+            bonus_msg += f"\n🏆 坚持{minutes // 60}小时！额外 +{hour_bonus}金币"
+
+        # 超过2小时有小概率触发超级奖励
+        if minutes >= 120 and random.random() < 0.1:
+            super_bonus = random.randint(50, 100)
+            bonus_coins += super_bonus
+            bonus_msg += f"\n🌟 【超级冲刺王】触发！+{super_bonus}金币！"
+
+        total_coins = base_coins + bonus_coins
+        user_data['coins'] = user_data.get('coins', 0) + total_coins
+
         # 保存到文件
         data.setdefault(group_id, {})[user_id] = user_data
         self._save_data(data)
-        
-        yield event.plain_result(f"🎉 {nickname} 总算冲够了！你获得了 {coins} 金币！")
+
+        # 结算消息
+        result_lines = [
+            f"🎉 {nickname} 冲刺结束！",
+            f"⏱️ 冲了 {minutes} 分钟",
+            f"💰 基础收益：{base_coins} 金币",
+        ]
+        if bonus_msg:
+            result_lines.append(bonus_msg)
+        result_lines.append(f"📊 总计：{total_coins} 金币")
+
+        yield event.plain_result("\n".join(result_lines))
         
         # 重置状态
         user_data['is_rushing'] = False
@@ -183,7 +229,10 @@ class NiuniuGames:
         data.setdefault(group_id, {})[user_id] = user_data
         self._save_data(data)
 
-        yield event.plain_result(f"🎉 {nickname} {event_template['desc']}！你获得了 {event_coins} 金币！")
+        if event_coins >= 0:
+            yield event.plain_result(f"✈️ {nickname} {event_template['desc']}\n💰 获得 {event_coins} 金币！")
+        else:
+            yield event.plain_result(f"✈️ {nickname} {event_template['desc']}\n💸 损失 {abs(event_coins)} 金币！")
     
     def update_user_coins(self, group_id: str, user_id: str, coins: float):
         """更新用户金币"""
