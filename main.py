@@ -9,13 +9,13 @@ from astrbot.api.all import *
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from niuniu_shop import NiuniuShop
 from niuniu_games import NiuniuGames
+from niuniu_effects import create_effect_manager, EffectTrigger, EffectContext
+from niuniu_config import (
+    PLUGIN_DIR, NIUNIU_LENGTHS_FILE, GAME_TEXTS_FILE, LAST_ACTION_FILE
+)
 
-# 常量定义
-PLUGIN_DIR = os.path.join('data', 'plugins', 'astrbot_plugin_niuniu')
+# 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
-NIUNIU_LENGTHS_FILE = os.path.join('data', 'niuniu_lengths.yml')
-NIUNIU_TEXTS_FILE = os.path.join(PLUGIN_DIR, 'niuniu_game_texts.yml')
-LAST_ACTION_FILE = os.path.join(PLUGIN_DIR, 'last_actions.yml')
 
 @register("niuniu_plugin", "长安某", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.7.2")
 class NiuniuPlugin(Star):
@@ -33,6 +33,8 @@ class NiuniuPlugin(Star):
         self.admins = self._load_admins()  # 加载管理员列表
         self.shop = NiuniuShop(self)  # 实例化商城模块
         self.games = NiuniuGames(self)  # 实例化游戏模块
+        self.effects = create_effect_manager()  # 实例化效果管理器
+        self.effects.set_shop(self.shop)  # 设置商城引用
     
     # region 数据文件操作
     def _create_niuniu_lengths_file(self):
@@ -78,103 +80,13 @@ class NiuniuPlugin(Star):
             self.context.logger.error(f"保存失败: {str(e)}")
 
     def _load_niuniu_texts(self):
-        """加载游戏文本"""
-        default_texts = {
-            'register': {
-                'success': "🧧 {nickname} 成功注册牛牛！\n📏 初始长度：{length}cm\n💪 硬度等级：{hardness}",
-                'already_registered': "⚠️ {nickname} 你已经注册过牛牛啦！",
-            },
-            'dajiao': {
-                'cooldown': [
-                    "⏳ {nickname} 牛牛需要休息，{remaining}分钟后可再打胶",
-                    "🛑 冷却中，{nickname} 请耐心等待 (＞﹏＜)"
-                ],
-                'increase': [
-                    "🚀 {nickname} 打胶成功！长度增加 {change}cm！",
-                    "🎉 {nickname} 的牛牛茁壮成长！+{change}cm"
-                ],
-                'decrease': [
-                    "😱 {nickname} 用力过猛！长度减少 {change}cm！",
-                    "⚠️ {nickname} 操作失误！-{change}cm"
-                ],
-                'decrease_30min': [
-                    "😱 {nickname} 用力过猛！长度减少 {change}cm！",
-                    "⚠️ {nickname} 操作失误！-{change}cm"
-                ],
-                'no_effect': [
-                    "🌀 {nickname} 的牛牛毫无变化...",
-                    "🔄 {nickname} 这次打胶没有效果"
-                ],
-                'not_registered': "❌ {nickname} 请先注册牛牛"
-            },
-            'my_niuniu': {
-                'info': "📊 {nickname} 的牛牛状态\n📏 长度：{length}\n💪 硬度：{hardness}\n📝 评价：{evaluation}",
-                'evaluation': {
-                    'short': ["小巧玲珑", "精致可爱"],
-                    'medium': ["中规中矩", "潜力无限"],
-                    'long': ["威风凛凛", "傲视群雄"],
-                    'very_long': ["擎天巨柱", "突破天际"],
-                    'super_long': ["超级长", "无与伦比"],
-                    'ultra_long': ["超越极限", "无人能敌"]
-                },
-                'not_registered': "❌ {nickname} 请先注册牛牛"
-            },
-            'compare': {
-                'no_target': "❌ {nickname} 请指定比划对象",
-                'target_not_registered': "❌ 对方尚未注册牛牛",
-                'cooldown': "⏳ {nickname} 请等待{remaining}分钟后再比划",
-                'self_compare': "❌ 不能和自己比划",
-                'win': [
-                    "🎉 {winner} 战胜了 {loser}！\n📈 增加 {gain}cm",
-                    "🏆 {winner} 的牛牛更胜一筹！+{gain}cm"
-                ],
-                'lose': [
-                    "😭 {loser} 败给 {winner}\n📉 减少 {loss}cm",
-                    "💔 {loser} 的牛牛不敌对方！-{loss}cm"
-                ],
-                'draw': "🤝 双方势均力敌！",
-                'double_loss': "😱 {nickname1} 和 {nickname2} 的牛牛因过于柔软发生缠绕，长度减半！",
-                'hardness_win': "🎉 {nickname} 因硬度优势获胜！",
-                'hardness_lose': "💔 {nickname} 因硬度劣势败北！",
-                'user_no_increase': "😅 {nickname} 的牛牛没有任何增长。"
-            },
-            'ranking': {
-                'header': "🏅 牛牛排行榜 TOP10：\n",
-                'no_data': "📭 本群暂无牛牛数据",
-                'item': "{rank}. {name} ➜ {length}"
-            },
-            'menu': {
-                'default': """📜 牛牛菜单：
-🔹 注册牛牛 - 初始化你的牛牛
-🔹 打胶 - 提升牛牛长度
-🔹 我的牛牛 - 查看当前状态
-🔹 比划比划 @目标 - 发起对决
-🔹 牛牛排行 - 查看群排行榜
-🔹 牛牛开/关 - 管理插件"""
-            },
-            'system': {
-                'enable': "✅ 牛牛插件已启用",
-                'disable': "❌ 牛牛插件已禁用"
-            }
-        }
-        
+        """从 YAML 文件加载游戏文本"""
         try:
-            if os.path.exists(NIUNIU_TEXTS_FILE):
-                with open(NIUNIU_TEXTS_FILE, 'r', encoding='utf-8') as f:
-                    custom_texts = yaml.safe_load(f) or {}
-                    return self._deep_merge(default_texts, custom_texts)
+            with open(GAME_TEXTS_FILE, 'r', encoding='utf-8') as f:
+                return yaml.safe_load(f)
         except Exception as e:
             self.context.logger.error(f"加载文本失败: {str(e)}")
-        return default_texts
-
-    def _deep_merge(self, base, update):
-        """深度合并字典"""
-        for key, value in update.items():
-            if isinstance(value, dict):
-                base[key] = self._deep_merge(base.get(key, {}), value)
-            else:
-                base[key] = value
-        return base
+            raise RuntimeError(f"无法加载游戏文本配置: {GAME_TEXTS_FILE}")
 
     def _load_last_actions(self):
         """加载冷却数据"""
@@ -259,7 +171,13 @@ class NiuniuPlugin(Star):
     # region 工具方法
     def format_length(self, length):
         """格式化长度显示"""
-        if length >= 100:
+        if length <= -100:
+            return f"{length/100:.2f}m (凹)"
+        elif length < 0:
+            return f"{length}cm (凹)"
+        elif length == 0:
+            return "0cm (无)"
+        elif length >= 100:
             return f"{length/100:.2f}m"
         return f"{length}cm"
 
@@ -422,7 +340,7 @@ class NiuniuPlugin(Star):
         }
         self.update_user_data(group_id, user_id, user_data)
 
-        text = self.niuniu_texts['register']['success'].format(
+        text = random.choice(self.niuniu_texts['register']['success']).format(
             nickname=nickname,
             length=user_data['length'],
             hardness=user_data['hardness']
@@ -447,42 +365,55 @@ class NiuniuPlugin(Star):
             return
 
         user_items = self.shop.get_user_items(group_id, user_id)
-        has_zhiming_rhythm = user_items.get("致命节奏", 0) > 0
         last_actions = self._load_last_actions()
         last_time = last_actions.setdefault(group_id, {}).get(user_id, {}).get('dajiao', 0)
-        
-        # 初始化消息容器
-        result_msg = []
-        
+
         # 检查是否处于冷却期
         on_cooldown, remaining = self.check_cooldown(last_time, self.COOLDOWN_10_MIN)
-        
-        # 只有在冷却期内且持有道具时才触发效果
-        if on_cooldown and has_zhiming_rhythm:
-            # 消耗道具并跳过冷却
-            self.shop.consume_item(group_id, user_id, "致命节奏")
-            result_msg.append(f"⚡ 触发致命节奏！{nickname} 无视冷却强行打胶！")
+
+        # 创建效果上下文
+        ctx = EffectContext(
+            group_id=group_id,
+            user_id=user_id,
+            nickname=nickname,
+            user_data=user_data,
+            user_length=user_data['length'],
+            user_hardness=user_data['hardness'],
+            extra={'on_cooldown': on_cooldown, 'remaining': remaining}
+        )
+
+        # 触发 BEFORE_DAJIAO 效果
+        ctx = self.effects.trigger(EffectTrigger.BEFORE_DAJIAO, ctx, user_items)
+
+        # 消耗触发的道具
+        self.effects.consume_items(group_id, user_id, ctx.items_to_consume)
+
+        # 检查冷却（可能被效果跳过）
+        if on_cooldown and not ctx.skip_cooldown:
+            mins = int(remaining // 60) + 1
+            text = random.choice(self.niuniu_texts['dajiao']['cooldown']).format(
+                nickname=nickname, remaining=mins
+            )
+            yield event.plain_result(text)
+            return
+
+        # 计算经过时间
+        if ctx.extra.get('force_bonus_window'):
             elapsed = self.COOLDOWN_30_MIN + 1  # 强制进入增益逻辑
         else:
-            # 原有冷却处理
-            if on_cooldown and not has_zhiming_rhythm:
-                mins = int(remaining // 60) + 1
-                text = random.choice(self.niuniu_texts['dajiao']['cooldown']).format(
-                    nickname=nickname, remaining=mins
-                )
-                yield event.plain_result(text)
-                return
             elapsed = time.time() - last_time
 
         # 计算变化
         change = 0
         current_time = time.time()
+        hardness_updated = False
+        old_hardness = user_data['hardness']
 
         if elapsed < self.COOLDOWN_30_MIN:  # 10-30分钟
             rand = random.random()
             if rand < 0.4:   # 40% 增加
                 change = random.randint(2, 5)
-            elif rand < 0.7: # 30% 减少
+            elif rand < 0.7:  # 30% 减少
                 change = -random.randint(1, 3)
                 template = random.choice(self.niuniu_texts['dajiao']['decrease'])
         else:  # 30分钟后
@@ -490,15 +421,17 @@ class NiuniuPlugin(Star):
             if rand < 0.7:  # 70% 增加
                 change = random.randint(3, 6)
                 user_data['hardness'] = min(user_data['hardness'] + 1, 10)
-            elif rand < 0.9: # 20% 减少
+                if user_data['hardness'] > old_hardness:
+                    hardness_updated = True
+            elif rand < 0.9:  # 20% 减少
                 change = -random.randint(1, 2)
                 template = random.choice(self.niuniu_texts['dajiao']['decrease_30min'])
 
         # 应用变化并保存到文件
         updated_data = {
-            'length': max(1, user_data['length'] + change)
+            'length': user_data['length'] + change
         }
-        if 'hardness' in locals():
+        if hardness_updated:
             updated_data['hardness'] = user_data['hardness']
         self.update_user_data(group_id, user_id, updated_data)
 
@@ -511,21 +444,27 @@ class NiuniuPlugin(Star):
         if change > 0:
             template = random.choice(self.niuniu_texts['dajiao']['increase'])
         elif change < 0:
-            template = template  
+            template = template
         else:
             template = random.choice(self.niuniu_texts['dajiao']['no_effect'])
 
         text = template.format(nickname=nickname, change=abs(change))
-        
-        # 合并提示消息
-        if result_msg:
-            final_text = "\n".join(result_msg + [text])
+
+        # 合并效果消息
+        if ctx.messages:
+            final_text = "\n".join(ctx.messages + [text])
         else:
             final_text = text
-            
+
         # 重新获取最新数据以显示
         user_data = self.get_user_data(group_id, user_id)
-        yield event.plain_result(f"{final_text}\n当前长度：{self.format_length(user_data['length'])}")
+        result_text = f"{final_text}\n当前长度：{self.format_length(user_data['length'])}"
+        if hardness_updated:
+            result_text += f"\n💪 硬度提升: {old_hardness} → {user_data['hardness']}"
+        else:
+            result_text += f"\n当前硬度：{user_data['hardness']}"
+        yield event.plain_result(result_text)
+
     async def _compare(self, event):
         """比划功能"""
         group_id = str(event.message_obj.group_id)
@@ -548,7 +487,7 @@ class NiuniuPlugin(Star):
         if not target_id:
             yield event.plain_result(self.niuniu_texts['compare']['no_target'].format(nickname=nickname))
             return
-        
+
         if target_id == user_id:
             yield event.plain_result(self.niuniu_texts['compare']['self_compare'])
             return
@@ -580,7 +519,7 @@ class NiuniuPlugin(Star):
         # 如果超过10分钟，重置计数
         if current_time - last_compare_time > 600:
             compare_records['count'] = 0
-            compare_records['last_time'] = current_time  # 更新最后比划时间
+            compare_records['last_time'] = current_time
             self.update_last_actions(last_actions)
 
         compare_count = compare_records.get('count', 0)
@@ -594,253 +533,287 @@ class NiuniuPlugin(Star):
         compare_records['count'] = compare_count + 1
         self.update_last_actions(last_actions)
 
-        # 检查是否持有夺心魔蝌蚪罐头
+        # 获取双方道具
         user_items = self.shop.get_user_items(group_id, user_id)
-        if user_items.get("夺心魔蝌蚪罐头", 0) > 0:
-            # 随机决定效果
-            effect_chance = random.random()
-            if effect_chance < 0.5:  # 50%的概率夺取对方全部长度
-                original_target_length = target_data['length']
-                updated_user = {
-                    'length': user_data['length'] + original_target_length
-                }
-                updated_target = {
-                    'length': 1
-                }
-                self.update_user_data(group_id, user_id, updated_user)
-                self.update_user_data(group_id, target_id, updated_target)
-                result_msg = [
-                    "⚔️ 【牛牛对决结果】 ⚔️",
-                    f"🎉 {nickname} 获得了夺心魔技能，夺取了 {target_data['nickname']} 的全部长度！",
-                    f"🗡️ {nickname}: {self.format_length(user_data['length'] - original_target_length)} → {self.format_length(user_data['length'] + original_target_length)}",
-                    f"🛡️ {target_data['nickname']}: {self.format_length(original_target_length)} → 1cm"
-                ]
-                self.shop.consume_item(group_id, user_id, "夺心魔蝌蚪罐头")
-                yield event.plain_result("\n".join(result_msg))
-                return
-            elif effect_chance < 0.6:  # 10%的概率清空自己的长度
-                updated_user = {
-                    'length': 1
-                }
-                self.update_user_data(group_id, user_id, updated_user)
-                result_msg = [
-                    "⚔️ 【牛牛对决结果】 ⚔️",
-                    f"💔 {nickname} 使用夺心魔蝌蚪罐头，牛牛变成了夺心魔！！！",
-                    f"🗡️ {nickname}: {self.format_length(user_data['length'])} → 1cm",
-                    f"🛡️ {target_data['nickname']}: {self.format_length(target_data['length'])}"
-                ]
-                self.shop.consume_item(group_id, user_id, "夺心魔蝌蚪罐头")
-                yield event.plain_result("\n".join(result_msg))
-                return
-            else:  # 40%的概率无效
-                result_msg = [
-                    "⚔️ 【牛牛对决结果】 ⚔️",
-                    f"⚠️ {nickname} 使用夺心魔蝌蚪罐头，但是罐头好像坏掉了...",
-                    f"🗡️ {nickname}: {self.format_length(user_data['length'])}",
-                    f"🛡️ {target_data['nickname']}: {self.format_length(target_data['length'])}"
-                ]
-                self.shop.consume_item(group_id, user_id, "夺心魔蝌蚪罐头")
-                yield event.plain_result("\n".join(result_msg))
-                return
+        target_items = self.shop.get_user_items(group_id, target_id)
 
-        # 计算胜负
+        # 记录比划前的长度
         u_len = user_data['length']
         t_len = target_data['length']
         u_hardness = user_data['hardness']
         t_hardness = target_data['hardness']
-
-        # 基础胜率
-        base_win = 0.5
-
-        # 长度影响（最多影响20%的胜率）
-        length_factor = (u_len - t_len) / max(u_len, t_len) * 0.2
-
-        # 硬度影响（最多影响10%的胜率）
-        hardness_factor = (u_hardness - t_hardness) * 0.05
-
-        # 最终胜率（限制在20%-80%之间）
-        win_prob = min(max(base_win + length_factor + hardness_factor, 0.2), 0.8)
-
-        # 记录比划前的长度
         old_u_len = u_len
         old_t_len = t_len
 
-        # 执行判定
-        if random.random() < win_prob:
-            gain = random.randint(0, 3)
-            loss = random.randint(1, 2)
-            updated_user = {
-                'length': user_data['length'] + gain
-            }
-            updated_target = {
-                'length': max(1, target_data['length'] - loss)
-            }
-            self.update_user_data(group_id, user_id, updated_user)
-            self.update_user_data(group_id, target_id, updated_target)
-            text = random.choice(self.niuniu_texts['compare']['win']).format(
-                nickname=nickname,
-                target_nickname=target_data['nickname'],
-                gain=gain
-            )
-            total_gain = gain
-            if (self.shop.get_user_items(group_id, user_id).get("淬火爪刀", 0) > 0 
-                and abs(u_len - t_len) > 10 
-                and u_len < t_len):
-                extra_loot = int(target_data['length'] * 0.1)
-                updated_user = {
-                    'length': user_data['length'] + gain + extra_loot
-                }
-                self.update_user_data(group_id, user_id, updated_user)
-                total_gain += extra_loot
-                text += f"\n🔥 淬火爪刀触发！额外掠夺 {extra_loot}cm！"
-                self.shop.consume_item(group_id, user_id, "淬火爪刀")  
+        # 创建效果上下文
+        ctx = EffectContext(
+            group_id=group_id,
+            user_id=user_id,
+            nickname=nickname,
+            user_data=user_data,
+            target_id=target_id,
+            target_nickname=target_data['nickname'],
+            target_data=target_data,
+            user_length=u_len,
+            user_hardness=u_hardness,
+            target_length=t_len,
+            target_hardness=t_hardness
+        )
 
-            if abs(u_len - t_len) >= 20 and user_data['hardness'] < target_data['hardness']:
+        # 触发 BEFORE_COMPARE 效果（如夺心魔）
+        ctx = self.effects.trigger(EffectTrigger.BEFORE_COMPARE, ctx, user_items, target_items)
+
+        # 消耗触发的道具
+        self.effects.consume_items(group_id, user_id, ctx.items_to_consume)
+
+        # 如果被拦截（如夺心魔触发），直接返回结果
+        if ctx.intercept:
+            # 应用长度变化
+            if ctx.length_change != 0:
+                new_user_len = user_data['length'] + ctx.length_change
+                self.update_user_data(group_id, user_id, {'length': new_user_len})
+            if ctx.target_length_change != 0:
+                new_target_len = target_data['length'] + ctx.target_length_change
+                self.update_user_data(group_id, target_id, {'length': new_target_len})
+
+            # 添加长度变化显示
+            user_data = self.get_user_data(group_id, user_id)
+            target_data = self.get_user_data(group_id, target_id)
+            ctx.messages.append(f"🗡️ {nickname}: {self.format_length(old_u_len)} → {self.format_length(user_data['length'])}")
+            ctx.messages.append(f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(target_data['length'])}")
+
+            yield event.plain_result("\n".join(ctx.messages))
+            return
+
+        # 计算胜负 (支持负数长度)
+        base_win = 0.5
+        # 负数长度特殊处理
+        if u_len <= 0 and t_len > 0:
+            # 用户凹进去了，对方正常：极大劣势
+            length_factor = -0.2
+        elif u_len > 0 and t_len <= 0:
+            # 用户正常，对方凹进去了：极大优势
+            length_factor = 0.2
+        elif u_len <= 0 and t_len <= 0:
+            # 都凹进去了：谁更接近0谁有优势
+            max_abs = max(abs(u_len), abs(t_len), 1)
+            length_factor = (u_len - t_len) / max_abs * 0.2
+        else:
+            # 都是正数：正常计算
+            length_factor = (u_len - t_len) / max(u_len, t_len, 1) * 0.2
+        hardness_factor = (u_hardness - t_hardness) * 0.08
+        win_prob = min(max(base_win + length_factor + hardness_factor, 0.15), 0.85)
+
+        # 执行判定
+        is_win = random.random() < win_prob
+        base_gain = random.randint(0, 3)
+        base_loss = random.randint(1, 2)
+
+        if is_win:
+            # 硬度影响伤害：赢家(user)硬度加成攻击，输家(target)硬度减少损失
+            hardness_bonus = max(0, int((u_hardness - 5) * 0.3))
+            hardness_defense = max(0, int((t_hardness - 5) * 0.2))
+            gain = base_gain + hardness_bonus
+            loss = max(1, base_loss - hardness_defense)
+            # 触发 ON_COMPARE_WIN 效果
+            ctx = self.effects.trigger(EffectTrigger.ON_COMPARE_WIN, ctx, user_items, target_items)
+            self.effects.consume_items(group_id, user_id, ctx.items_to_consume)
+
+            # 基础增益 + 效果增益
+            total_gain = gain + ctx.length_change
+
+            # 更新数据
+            self.update_user_data(group_id, user_id, {'length': user_data['length'] + total_gain})
+            self.update_user_data(group_id, target_id, {'length': target_data['length'] - loss})
+
+            text = random.choice(self.niuniu_texts['compare']['win']).format(
+                winner=nickname,
+                loser=target_data['nickname'],
+                gain=total_gain
+            )
+
+            # 负数特殊文案
+            if u_len <= 0 and t_len <= 0:
+                text += f"\n🕳️ 两个凹牛牛之间的较量！{nickname} 凹得更有型！"
+            elif u_len <= 0:
+                text += f"\n🎊 逆天改命！{nickname} 凹着都能赢！"
+            elif t_len <= 0:
+                text += f"\n💀 {target_data['nickname']} 的凹牛牛毫无还手之力..."
+
+            # 添加效果消息
+            for msg in ctx.messages:
+                text += f"\n{msg}"
+
+            # 额外逻辑：极大劣势但硬度优势获胜奖励
+            if u_len < t_len and abs(u_len - t_len) >= 20 and u_hardness > t_hardness:
                 extra_gain = random.randint(0, 5)
-                updated_user = {
-                    'length': user_data['length'] + gain + extra_gain
-                }
-                self.update_user_data(group_id, user_id, updated_user)
+                self.update_user_data(group_id, user_id, {'length': user_data['length'] + total_gain + extra_gain})
                 total_gain += extra_gain
                 text += f"\n🎁 由于极大劣势获胜，额外增加 {extra_gain}cm！"
-            if abs(u_len - t_len) > 10 and u_len < t_len:
+
+            # 额外逻辑：掠夺（非道具触发，仅当目标长度为正时）
+            if abs(u_len - t_len) > 10 and u_len < t_len and t_len > 0:
                 stolen_length = int(target_data['length'] * 0.2)
-                updated_user = {
-                    'length': user_data['length'] + gain + stolen_length
-                }
-                updated_target = {
-                    'length': max(1, target_data['length'] - loss - stolen_length)
-                }
-                self.update_user_data(group_id, user_id, updated_user)
-                self.update_user_data(group_id, target_id, updated_target)
-                total_gain += stolen_length
+                current_user = self.get_user_data(group_id, user_id)
+                current_target = self.get_user_data(group_id, target_id)
+                self.update_user_data(group_id, user_id, {'length': current_user['length'] + stolen_length})
+                self.update_user_data(group_id, target_id, {'length': current_target['length'] - stolen_length})
                 text += f"\n🎉 {nickname} 掠夺了 {stolen_length}cm！"
-            if abs(u_len - t_len) <= 5 and user_data['hardness'] > target_data['hardness']:
+
+            # 硬度优势获胜提示
+            if abs(u_len - t_len) <= 5 and u_hardness > t_hardness:
                 text += f"\n🎉 {nickname} 因硬度优势获胜！"
+
             if total_gain == 0:
                 text += f"\n{self.niuniu_texts['compare']['user_no_increase'].format(nickname=nickname)}"
         else:
-            gain = random.randint(0, 3)
-            loss = random.randint(1, 2)
-            updated_target = {
-                'length': target_data['length'] + gain
-            }
-            if self.shop.consume_item(group_id, user_id, "余震"):
-                result_msg = [f"🛡️ 【余震生效】{nickname} 未减少长度！"]
-                self.update_user_data(group_id, target_id, updated_target)
+            # 硬度影响伤害：赢家(target)硬度加成攻击，输家(user)硬度减少损失
+            hardness_bonus = max(0, int((t_hardness - 5) * 0.3))
+            hardness_defense = max(0, int((u_hardness - 5) * 0.2))
+            gain = base_gain + hardness_bonus
+            loss = max(1, base_loss - hardness_defense)
+
+            # 触发 ON_COMPARE_LOSE 效果
+            ctx = self.effects.trigger(EffectTrigger.ON_COMPARE_LOSE, ctx, user_items, target_items)
+            self.effects.consume_items(group_id, user_id, ctx.items_to_consume)
+
+            # 更新目标数据
+            self.update_user_data(group_id, target_id, {'length': target_data['length'] + gain})
+
+            # 检查是否防止损失
+            if ctx.prevent_loss:
+                # 不减少长度
+                pass
             else:
-                updated_user = {
-                    'length': max(1, user_data['length'] - loss)
-                }
-                updated_target = {
-                    'length': target_data['length'] + gain
-                }
-                self.update_user_data(group_id, user_id, updated_user)
-                self.update_user_data(group_id, target_id, updated_target)
-                result_msg = [f"💔 {nickname} 减少 {loss}cm"]
+                self.update_user_data(group_id, user_id, {'length': user_data['length'] - loss})
+
             text = random.choice(self.niuniu_texts['compare']['lose']).format(
-                nickname=nickname,
-                target_nickname=target_data['nickname'],
-                loss=loss
+                loser=nickname,
+                winner=target_data['nickname'],
+                loss=loss if not ctx.prevent_loss else 0
             )
-        # 硬度衰减
-        if random.random() < 0.3:
-            updated_user = {
-                'hardness': max(1, user_data['hardness'] - 1)
-            }
-            self.update_user_data(group_id, user_id, updated_user)
-        if random.random() < 0.3:
-            updated_target = {
-                'hardness': max(1, target_data['hardness'] - 1)
-            }
-            self.update_user_data(group_id, target_id, updated_target)
+
+            # 负数特殊文案
+            if u_len <= 0 and t_len <= 0:
+                text += f"\n🕳️ 凹牛牛对决！{nickname} 凹得不够深..."
+            elif u_len <= 0:
+                text += f"\n😭 {nickname} 凹着牛牛还敢挑战，真是勇气可嘉..."
+            elif t_len <= 0:
+                text += f"\n😱 居然输给了凹牛牛！{nickname} 羞愧难当！"
+
+            # 添加效果消息
+            for msg in ctx.messages:
+                text += f"\n{msg}"
+
+        # 硬度衰减（只有输家有概率衰减，15%概率）
+        hardness_decay_msg = ""
+        if is_win:
+            # 用户赢了，目标(输家)可能衰减
+            if random.random() < 0.15:
+                current_target = self.get_user_data(group_id, target_id)
+                old_hardness = current_target['hardness']
+                new_hardness = max(1, old_hardness - 1)
+                if new_hardness < old_hardness:
+                    self.update_user_data(group_id, target_id, {'hardness': new_hardness})
+                    hardness_decay_msg = f"\n💪 {target_data['nickname']} 硬度下降: {old_hardness} → {new_hardness}"
+        else:
+            # 用户输了，用户(输家)可能衰减
+            if random.random() < 0.15:
+                current_user = self.get_user_data(group_id, user_id)
+                old_hardness = current_user['hardness']
+                new_hardness = max(1, old_hardness - 1)
+                if new_hardness < old_hardness:
+                    self.update_user_data(group_id, user_id, {'hardness': new_hardness})
+                    hardness_decay_msg = f"\n💪 {nickname} 硬度下降: {old_hardness} → {new_hardness}"
 
         # 重新获取最新数据
         user_data = self.get_user_data(group_id, user_id)
         target_data = self.get_user_data(group_id, target_id)
+
         result_msg = [
             "⚔️ 【牛牛对决结果】 ⚔️",
             f"🗡️ {nickname}: {self.format_length(old_u_len)} → {self.format_length(user_data['length'])}",
             f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(target_data['length'])}",
             f"📢 {text}"
         ]
+
+        # 添加硬度衰减提示
+        if hardness_decay_msg:
+            result_msg.append(hardness_decay_msg.strip())
+
+        # 特殊事件
         special_event_triggered = False
+
+        # 势均力敌
         if abs(u_len - t_len) <= 5 and random.random() < 0.075:
-            result_msg.append("💥 双方势均力敌！")
+            draw_text = random.choice(self.niuniu_texts['compare']['draw'])
+            result_msg.append(draw_text)
             special_event_triggered = True
+
         # 硬度过低触发缠绕
         if not special_event_triggered and (user_data['hardness'] <= 2 or target_data['hardness'] <= 2) and random.random() < 0.05:
-            # 记录双方原始长度
-            original_user_len = user_data['length']
-            original_target_len = target_data['length']
-            
-            # 执行减半操作
-            updated_user = {
-                'length': max(1, original_user_len // 2)
-            }
-            updated_target = {
-                'length': max(1, original_target_len // 2)
-            }
-            self.update_user_data(group_id, user_id, updated_user)
-            self.update_user_data(group_id, target_id, updated_target)
-            
-            # 检查发起方妙脆角
-            if self.shop.get_user_items(group_id, user_id).get("妙脆角", 0) > 0:
-                updated_user = {
-                    'length': original_user_len
-                }
-                self.update_user_data(group_id, user_id, updated_user)
-                result_msg.append(f"🛡️ {nickname} 的妙脆角生效，防止了长度减半！")
-                self.shop.consume_item(group_id, user_id, "妙脆角")
-            
-            # 检查目标方妙脆角
-            if self.shop.get_user_items(group_id, target_id).get("妙脆角", 0) > 0:
-                updated_target = {
-                    'length': original_target_len
-                }
-                self.update_user_data(group_id, target_id, updated_target)
-                result_msg.append(f"🛡️ {target_data['nickname']} 的妙脆角生效，防止了长度减半！")
-                self.shop.consume_item(group_id, target_id, "妙脆角")
-            
-            result_msg.append("双方牛牛因过于柔软发生缠绕！")
+            async for msg in self._handle_halving_event(group_id, user_id, target_id, nickname, target_data['nickname'], user_items, target_items, result_msg):
+                pass
+            tangle_text = random.choice(self.niuniu_texts['compare']['tangle']).format(
+                nickname1=nickname, nickname2=target_data['nickname']
+            )
+            result_msg.append(tangle_text)
             special_event_triggered = True
 
         # 长度相近触发减半
         if not special_event_triggered and abs(u_len - t_len) < 10 and random.random() < 0.025:
-            original_user_len = user_data['length']
-            original_target_len = target_data['length']
-            
-            updated_user = {
-                'length': max(1, original_user_len // 2)
-            }
-            updated_target = {
-                'length': max(1, original_target_len // 2)
-            }
-            self.update_user_data(group_id, user_id, updated_user)
-            self.update_user_data(group_id, target_id, updated_target)
-            
-            # 检查发起方
-            if self.shop.get_user_items(group_id, user_id).get("妙脆角", 0) > 0:
-                updated_user = {
-                    'length': original_user_len
-                }
-                self.update_user_data(group_id, user_id, updated_user)
-                result_msg.append(f"🛡️ {nickname} 的妙脆角生效，防止了长度减半！")
-                self.shop.consume_item(group_id, user_id, "妙脆角")
-            
-            # 检查目标方
-            if self.shop.get_user_items(group_id, target_id).get("妙脆角", 0) > 0:
-                updated_target = {
-                    'length': original_target_len
-                }
-                self.update_user_data(group_id, target_id, updated_target)
-                result_msg.append(f"🛡️ {target_data['nickname']} 的妙脆角生效，防止了长度减半！")
-                self.shop.consume_item(group_id, target_id, "妙脆角")
-            
-            result_msg.append(self.niuniu_texts['compare']['double_loss'].format(nickname1=nickname, nickname2=target_data['nickname']))
+            async for msg in self._handle_halving_event(group_id, user_id, target_id, nickname, target_data['nickname'], user_items, target_items, result_msg):
+                pass
+            halving_text = random.choice(self.niuniu_texts['compare']['halving']).format(
+                nickname1=nickname, nickname2=target_data['nickname']
+            )
+            result_msg.append(halving_text)
             special_event_triggered = True
 
         yield event.plain_result("\n".join(result_msg))
+
+    async def _handle_halving_event(self, group_id, user_id, target_id, nickname, target_nickname, user_items, target_items, result_msg):
+        """处理减半事件，使用效果系统"""
+        user_data = self.get_user_data(group_id, user_id)
+        target_data = self.get_user_data(group_id, target_id)
+        original_user_len = user_data['length']
+        original_target_len = target_data['length']
+
+        # 先执行减半
+        self.update_user_data(group_id, user_id, {'length': original_user_len // 2})
+        self.update_user_data(group_id, target_id, {'length': original_target_len // 2})
+
+        # 检查用户的妙脆角
+        ctx_user = EffectContext(
+            group_id=group_id,
+            user_id=user_id,
+            nickname=nickname,
+            user_data=user_data,
+            user_length=original_user_len
+        )
+        ctx_user = self.effects.trigger(EffectTrigger.ON_HALVING, ctx_user, user_items)
+
+        if ctx_user.prevent_halving:
+            self.update_user_data(group_id, user_id, {'length': original_user_len})
+            result_msg.extend(ctx_user.messages)
+            self.effects.consume_items(group_id, user_id, ctx_user.items_to_consume)
+
+        # 检查目标的妙脆角
+        ctx_target = EffectContext(
+            group_id=group_id,
+            user_id=target_id,
+            nickname=target_nickname,
+            user_data=target_data,
+            user_length=original_target_len
+        )
+        ctx_target = self.effects.trigger(EffectTrigger.ON_HALVING, ctx_target, target_items)
+
+        if ctx_target.prevent_halving:
+            self.update_user_data(group_id, target_id, {'length': original_target_len})
+            result_msg.extend(ctx_target.messages)
+            self.effects.consume_items(group_id, target_id, ctx_target.items_to_consume)
+
+        yield None  # Generator placeholder
     async def _show_status(self, event):
         """查看牛牛状态"""
         group_id = str(event.message_obj.group_id)
@@ -860,7 +833,11 @@ class NiuniuPlugin(Star):
         # 评价系统
         length = user_data['length']
         length_str = self.format_length(length)
-        if length < 12:
+        if length < 0:
+            evaluation = random.choice(self.niuniu_texts['my_niuniu']['evaluation'].get('negative', ['你的牛牛已经凹进去了...']))
+        elif length == 0:
+            evaluation = random.choice(self.niuniu_texts['my_niuniu']['evaluation'].get('zero', ['你的牛牛消失了...']))
+        elif length < 12:
             evaluation = random.choice(self.niuniu_texts['my_niuniu']['evaluation']['short'])
         elif length < 25:
             evaluation = random.choice(self.niuniu_texts['my_niuniu']['evaluation']['medium'])
@@ -876,6 +853,7 @@ class NiuniuPlugin(Star):
         text = self.niuniu_texts['my_niuniu']['info'].format(
             nickname=nickname,
             length=length_str,
+            hardness=user_data['hardness'],
             evaluation=evaluation
         )
         yield event.plain_result(text)
@@ -900,19 +878,32 @@ class NiuniuPlugin(Star):
             yield event.plain_result(self.niuniu_texts['ranking']['no_data'])
             return
 
-        # 排序并取前10
-        sorted_users = sorted(valid_users, key=lambda x: x[1]['length'], reverse=True)[:10]
+        # 排序所有用户
+        sorted_users = sorted(valid_users, key=lambda x: x[1]['length'], reverse=True)
+        total_users = len(sorted_users)
 
         # 构建排行榜
         ranking = [self.niuniu_texts['ranking']['header']]
-        for idx, (uid, data) in enumerate(sorted_users, 1):
+
+        # 显示前10名
+        top_users = sorted_users[:10]
+        for idx, (uid, data) in enumerate(top_users, 1):
+            hardness = data.get('hardness', 1)
             ranking.append(
-                self.niuniu_texts['ranking']['item'].format(
-                    rank=idx,
-                    name=data['nickname'],
-                    length=self.format_length(data['length'])
-                )
+                f"{idx}. {data['nickname']} ➜ {self.format_length(data['length'])} 💪{hardness}"
             )
+
+        # 如果总人数超过10，显示...和后3名
+        if total_users > 10:
+            ranking.append("...")
+            # 取后3名（避免与前10重复）
+            bottom_start = max(10, total_users - 3)
+            bottom_users = sorted_users[bottom_start:]
+            for idx, (uid, data) in enumerate(bottom_users, bottom_start + 1):
+                hardness = data.get('hardness', 1)
+                ranking.append(
+                    f"{idx}. {data['nickname']} ➜ {self.format_length(data['length'])} 💪{hardness}"
+                )
 
         yield event.plain_result("\n".join(ranking))
     async def _show_menu(self, event):

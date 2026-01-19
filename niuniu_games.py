@@ -6,12 +6,15 @@ import pytz
 from datetime import datetime
 import os
 from typing import Dict, Any
+from niuniu_config import (
+    TIMEZONE, NIUNIU_LENGTHS_FILE, Cooldowns, FLY_PLANE_EVENTS, RushConfig
+)
 
 class NiuniuGames:
     def __init__(self, main_plugin):
         self.main = main_plugin  # 主插件实例
-        self.shanghai_tz = pytz.timezone('Asia/Shanghai')  # 设置上海时区
-        self.data_file = os.path.join('data', 'niuniu_lengths.yml')
+        self.shanghai_tz = pytz.timezone(TIMEZONE)
+        self.data_file = NIUNIU_LENGTHS_FILE
     
     def _load_data(self) -> Dict[str, Any]:
         """加载YAML数据"""
@@ -64,20 +67,20 @@ class NiuniuGames:
             user_data['last_rush_start_date'] = current_date
         
         # 检查今日已冲次数
-        if user_data.get('today_rush_count', 0) >= 3:
+        if user_data.get('today_rush_count', 0) >= Cooldowns.RUSH_DAILY_LIMIT:
             yield event.plain_result(f" {nickname} 你冲得到处都是，明天再来吧")
             return
-        
+
         # 检查冷却时间
         last_rush_end_time = user_data.get('last_rush_end_time', 0)
-        if current_time - last_rush_end_time < 1800:  # 30分钟冷却
-            remaining = 1800 - (current_time - last_rush_end_time)
+        if current_time - last_rush_end_time < Cooldowns.RUSH_COOLDOWN:
+            remaining = Cooldowns.RUSH_COOLDOWN - (current_time - last_rush_end_time)
             yield event.plain_result(f"⏳ {nickname} 牛牛冲累了，休息{int(remaining//60)+1}分钟再冲吧")
             return
-        
+
         # 检查是否已经在冲
         if user_data.get('is_rushing', False):
-            remaining = user_data.get('rush_start_time', 0) + 14400 - current_time  # 4小时
+            remaining = user_data.get('rush_start_time', 0) + Cooldowns.RUSH_MAX_TIME - current_time
             if remaining > 0:
                 yield event.plain_result(f"⏳ {nickname} 你已经在冲了（剩余{int(remaining//60)+1}分钟）")
                 return
@@ -113,17 +116,17 @@ class NiuniuGames:
         
         # 计算冲的时间
         work_time = time.time() - user_data.get('rush_start_time', 0)
-        
-        # 时间不足10分钟无奖励
-        if work_time < 600:  # 10分钟
-            yield event.plain_result(f"❌ {nickname} 至少冲够十分钟才能停")
+
+        # 时间不足最小时间无奖励
+        if work_time < Cooldowns.RUSH_MIN_TIME:
+            yield event.plain_result(f"❌ {nickname} 至少冲够{Cooldowns.RUSH_MIN_TIME // 60}分钟才能停")
             return
-        
-        # 超过4小时按4小时计算
-        work_time = min(work_time, 14400)  # 4小时
-        
+
+        # 超过最大时间按最大时间计算
+        work_time = min(work_time, Cooldowns.RUSH_MAX_TIME)
+
         # 计算金币
-        coins = int(work_time / 60)
+        coins = int(work_time / 60 * RushConfig.COINS_PER_MINUTE)
         user_data['coins'] = user_data.get('coins', 0) + coins
         
         # 保存到文件
@@ -163,30 +166,24 @@ class NiuniuGames:
         
         # 检查冷却时间
         last_fly_time = user_data.get('last_fly_time', 0)
-        if time.time() - last_fly_time < 14400:  # 4小时冷却
-            remaining = 14400 - (time.time() - last_fly_time)
+        if time.time() - last_fly_time < Cooldowns.FLY_PLANE_COOLDOWN:
+            remaining = Cooldowns.FLY_PLANE_COOLDOWN - (time.time() - last_fly_time)
             yield event.plain_result(f"✈️ 油箱空了，{nickname} {int(remaining//60)+1}分钟后可再起飞")
             return
-        
+
         # 飞行事件
-        fly_events = [
-            {"desc": "牛牛没赶上飞机，不过也算出来透了口气", "coins": random.randint(20, 40)},
-            {"desc": "竟然赶上了国际航班，遇到了兴奋的大母猴", "coins": random.randint(80, 100)},
-            {"desc": "无惊无险，牛牛顺利抵达目的地", "coins": random.randint(70, 80)},
-            {"desc": "牛牛刚出来就遇到了冷空气，冻得像个鹌鹑似的", "coins": random.randint(40, 60)},
-            {"desc": "牛牛好像到奇怪的地方，不过也算是完成了目标", "coins": random.randint(60, 80)}
-        ]
-        event_data = random.choice(fly_events)
-        
+        event_template = random.choice(FLY_PLANE_EVENTS)
+        event_coins = random.randint(event_template["coins_min"], event_template["coins_max"])
+
         # 更新金币和时间
-        user_data['coins'] = user_data.get('coins', 0) + event_data["coins"]
+        user_data['coins'] = user_data.get('coins', 0) + event_coins
         user_data['last_fly_time'] = time.time()
         
         # 保存到文件
         data.setdefault(group_id, {})[user_id] = user_data
         self._save_data(data)
-        
-        yield event.plain_result(f"🎉 {nickname} {event_data['desc']}！你获得了 {event_data['coins']} 金币！")
+
+        yield event.plain_result(f"🎉 {nickname} {event_template['desc']}！你获得了 {event_coins} 金币！")
     
     def update_user_coins(self, group_id: str, user_id: str, coins: float):
         """更新用户金币"""
