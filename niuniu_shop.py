@@ -386,14 +386,81 @@ class NiuniuShop:
                 final_price = total_cost  # 更新为总花费
 
             elif selected_item['type'] == 'active':
-                # Active items - 立即使用类道具不支持批量购买
-                if buy_count > 1:
-                    yield event.plain_result("⚠️ 该道具为立即使用类，不支持批量购买")
+                # Active items - 区分简单道具和复杂道具
+                from niuniu_config import NiuniuConfig
+                effect = self.main.effects.effects.get(selected_item['name'])
+
+                # 复杂道具列表（有特殊逻辑，不支持批量购买）
+                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生']
+                is_simple_item = selected_item['name'] not in complex_items
+
+                # 简单道具支持批量购买
+                if is_simple_item and buy_count > 1:
+                    price_per_buy = selected_item['price']
+                    max_buys_by_coins = int(user_coins // price_per_buy)
+
+                    # 检查硬度上限限制可购买次数
+                    max_buys_by_hardness = buy_count
+                    if effect and hasattr(effect, 'hardness_change') and effect.hardness_change > 0:
+                        current_hardness = user_data.get('hardness', 1)
+                        if current_hardness >= NiuniuConfig.MAX_HARDNESS:
+                            yield event.plain_result(f"⚠️ 硬度已达上限（{NiuniuConfig.MAX_HARDNESS}），无法购买增加硬度的道具")
+                            return
+                        # 计算最多能买几次才达到硬度上限
+                        remaining_hardness = NiuniuConfig.MAX_HARDNESS - current_hardness
+                        max_buys_by_hardness = remaining_hardness // effect.hardness_change
+                        if max_buys_by_hardness <= 0:
+                            max_buys_by_hardness = 1  # 至少能买1次
+
+                    actual_buy_count = min(buy_count, max_buys_by_coins, max_buys_by_hardness)
+
+                    if actual_buy_count <= 0:
+                        yield event.plain_result("❌ 金币不足，无法购买")
+                        return
+
+                    # 计算总效果
+                    total_length_change = (effect.length_change if hasattr(effect, 'length_change') else 0) * actual_buy_count
+                    total_hardness_change = (effect.hardness_change if hasattr(effect, 'hardness_change') else 0) * actual_buy_count
+                    total_cost = price_per_buy * actual_buy_count
+
+                    # 应用效果
+                    old_length = user_data.get('length', 0)
+                    old_hardness = user_data.get('hardness', 1)
+                    user_data['length'] = old_length + total_length_change
+                    user_data['hardness'] = min(NiuniuConfig.MAX_HARDNESS, max(1, old_hardness + total_hardness_change))
+                    self._save_user_data(group_id, user_id, user_data)
+
+                    # 生成消息
+                    if total_length_change != 0:
+                        if total_length_change > 0:
+                            result_msg.append(f"✨ 长度增加了{total_length_change}cm")
+                        else:
+                            result_msg.append(f"✨ 长度减少了{-total_length_change}cm")
+                    if total_hardness_change != 0:
+                        if total_hardness_change > 0:
+                            result_msg.append(f"✨ 硬度增加了{total_hardness_change}")
+                        else:
+                            result_msg.append(f"✨ 硬度减少了{-total_hardness_change}")
+
+                    if actual_buy_count < buy_count:
+                        if max_buys_by_hardness < buy_count and max_buys_by_hardness <= max_buys_by_coins:
+                            result_msg.append(f"⚠️ 硬度已达上限，仅购买{actual_buy_count}次")
+                        else:
+                            result_msg.append(f"⚠️ 金币不足，仅购买{actual_buy_count}次")
+                    else:
+                        result_msg.append(f"📦 批量购买{actual_buy_count}次")
+
+                    # 扣除金币
+                    self.update_user_coins(group_id, user_id, user_coins - total_cost)
+                    yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
+                    return
+
+                # 复杂道具或单次购买
+                if not is_simple_item and buy_count > 1:
+                    yield event.plain_result("⚠️ 该道具有特殊效果，不支持批量购买")
                     return
 
                 # 检查硬度上限 - 如果道具增加硬度且已达上限则拒绝购买
-                from niuniu_config import NiuniuConfig
-                effect = self.main.effects.effects.get(selected_item['name'])
                 if effect and hasattr(effect, 'hardness_change') and effect.hardness_change > 0:
                     current_hardness = user_data.get('hardness', 1)
                     if current_hardness >= NiuniuConfig.MAX_HARDNESS:
