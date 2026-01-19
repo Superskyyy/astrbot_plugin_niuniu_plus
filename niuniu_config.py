@@ -117,11 +117,55 @@ class RegisterConfig:
 # Fly Plane (飞飞机) Configuration
 # =============================================================================
 FLY_PLANE_EVENTS = [
+    # 低收益 (20-50)
     {"desc": "牛牛没赶上飞机，不过也算出来透了口气", "coins_min": 20, "coins_max": 40},
-    {"desc": "竟然赶上了国际航班，遇到了兴奋的大母猴", "coins_min": 80, "coins_max": 100},
-    {"desc": "无惊无险，牛牛顺利抵达目的地", "coins_min": 70, "coins_max": 80},
-    {"desc": "牛牛刚出来就遇到了冷空气，冻得像个鹌鹑似的", "coins_min": 40, "coins_max": 60},
-    {"desc": "牛牛好像到奇怪的地方，不过也算是完成了目标", "coins_min": 60, "coins_max": 80}
+    {"desc": "牛牛刚出来就遇到了冷空气，冻得像个鹌鹑似的", "coins_min": 30, "coins_max": 50},
+    {"desc": "飞机延误了，牛牛在候机厅睡着了", "coins_min": 20, "coins_max": 35},
+    {"desc": "牛牛坐的是廉价航空，腿都伸不开", "coins_min": 25, "coins_max": 40},
+    {"desc": "牛牛被安检拦下来检查了半天", "coins_min": 20, "coins_max": 30},
+    {"desc": "牛牛的行李丢了，只能空手而归", "coins_min": 15, "coins_max": 25},
+    # 中等收益 (50-80)
+    {"desc": "无惊无险，牛牛顺利抵达目的地", "coins_min": 60, "coins_max": 75},
+    {"desc": "牛牛好像到奇怪的地方，不过也算是完成了目标", "coins_min": 55, "coins_max": 70},
+    {"desc": "牛牛在飞机上认识了新朋友，收获颇丰", "coins_min": 60, "coins_max": 80},
+    {"desc": "飞行途中牛牛看了三部电影，心情愉悦", "coins_min": 50, "coins_max": 65},
+    {"desc": "牛牛幸运地被升舱到商务舱", "coins_min": 65, "coins_max": 80},
+    {"desc": "牛牛在免税店血拼了一番", "coins_min": 55, "coins_max": 75},
+    {"desc": "空姐对牛牛特别照顾，全程VIP待遇", "coins_min": 60, "coins_max": 80},
+    # 高收益 (80-120)
+    {"desc": "竟然赶上了国际航班，遇到了兴奋的大母猴", "coins_min": 85, "coins_max": 110},
+    {"desc": "牛牛意外发现飞机上有隐藏任务，奖励丰厚", "coins_min": 90, "coins_max": 120},
+    {"desc": "牛牛被选中参加机上抽奖，中了大奖！", "coins_min": 100, "coins_max": 130},
+    {"desc": "牛牛帮助空乘解决了紧急情况，获得感谢奖励", "coins_min": 85, "coins_max": 105},
+    {"desc": "牛牛在头等舱偶遇神秘富婆，收获满满", "coins_min": 95, "coins_max": 120},
+    {"desc": "飞机经过百慕大三角，牛牛获得了神秘力量加持", "coins_min": 80, "coins_max": 100},
+    # 特殊事件 (极端)
+    {"desc": "牛牛的飞机迫降在无人岛，意外发现宝藏！", "coins_min": 120, "coins_max": 150},
+    {"desc": "牛牛成功阻止了一场劫机，成为英雄！", "coins_min": 130, "coins_max": 160},
+    {"desc": "牛牛买的机票中了航空公司年度大奖！", "coins_min": 150, "coins_max": 200},
+    {"desc": "牛牛不小心走进了驾驶舱，被机长收为徒弟", "coins_min": 100, "coins_max": 140},
+    {"desc": "牛牛的座位下面发现了前乘客遗落的金条", "coins_min": 140, "coins_max": 180},
+    # 搞笑事件
+    {"desc": "牛牛把花生米当成了安眠药，睡了一路", "coins_min": 40, "coins_max": 55},
+    {"desc": "牛牛和邻座大妈聊了一路，耳朵都快聋了", "coins_min": 35, "coins_max": 50},
+    {"desc": "牛牛在飞机上拉肚子，厕所排了半小时队", "coins_min": 25, "coins_max": 40},
+    {"desc": "牛牛被小孩踢了一路椅背，精神损失惨重", "coins_min": 30, "coins_max": 45},
+    {"desc": "牛牛旁边坐了个打呼噜的，一路没睡着", "coins_min": 35, "coins_max": 50},
+    {"desc": "牛牛手机没电了，整趟航班只能发呆", "coins_min": 30, "coins_max": 45},
+    # 终极事件 (超高收益)
+    {"desc": "✈️ 牛牛的飞机穿越到了平行宇宙，带回了另一个世界的财富！", "coins_min": 250, "coins_max": 350},
+    {"desc": "👑 牛牛意外成为航空公司第一亿名乘客，获得终身免费机票+巨额奖金！", "coins_min": 300, "coins_max": 400},
+    # 负面事件 (扣钱)
+    {"desc": "💸 牛牛在飞机上打翻了红酒，赔了一大笔清洁费", "coins_min": -80, "coins_max": -50},
+    {"desc": "🚨 牛牛被发现超重行李，被罚款了", "coins_min": -60, "coins_max": -30},
+    {"desc": "💀 牛牛不小心损坏了座椅屏幕，要赔偿！", "coins_min": -100, "coins_max": -60},
+    {"desc": "🎰 牛牛在飞机上玩骰子输了（不要问为什么飞机上有赌场）", "coins_min": -120, "coins_max": -70},
+    {"desc": "🤮 牛牛晕机吐在了邻座身上，被索赔干洗费", "coins_min": -50, "coins_max": -20},
+    {"desc": "📱 牛牛的手机掉进马桶里了，损失惨重", "coins_min": -70, "coins_max": -40},
+    {"desc": "🚔 牛牛下飞机时被税务局拦住，补交了一大笔税", "coins_min": -150, "coins_max": -80},
+    {"desc": "💔 牛牛被空姐发了好牛卡，精神和金钱双重损失", "coins_min": -40, "coins_max": -20},
+    {"desc": "🦠 牛牛在飞机上感染了牛感，医药费花光了积蓄", "coins_min": -100, "coins_max": -50},
+    {"desc": "⚠️ 牛牛误触紧急出口，被罚了巨款！", "coins_min": -200, "coins_max": -100}
 ]
 
 # =============================================================================
@@ -209,8 +253,23 @@ DEFAULT_SHOP_ITEMS = [
         'type': 'active',
         'desc': "抛硬币！50%概率长度翻倍，50%概率长度减半",
         'price': 30
+    },
+    {
+        'id': 11,
+        'name': "劫富济贫",
+        'type': 'active',
+        'desc': "从群首富抢15%长度，平分给最穷的3人（每天限1次）",
+        'price': 60
     }
 ]
+
+# =============================================================================
+# 劫富济贫 Configuration
+# =============================================================================
+class JiefuJipinConfig:
+    STEAL_PERCENT = 0.15           # 15% from richest
+    BENEFICIARY_COUNT = 3          # Give to bottom 3
+    DAILY_LIMIT = 1                # Once per day
 
 # =============================================================================
 # Duoxinmo Item Probabilities

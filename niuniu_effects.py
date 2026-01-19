@@ -360,6 +360,111 @@ class DutuyingbiEffect(ItemEffect):
 
 
 # =============================================================================
+# 劫富济贫 Effect
+# =============================================================================
+
+class JiefuJipinEffect(ItemEffect):
+    """劫富济贫 - Robin Hood: steal from richest, give to poorest 3"""
+    name = "劫富济贫"
+    triggers = [EffectTrigger.ON_PURCHASE]
+    consume_on_use = False  # Active item, no inventory
+
+    def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        # 需要从 extra 获取群组数据
+        group_data = ctx.extra.get('group_data', {})
+        if not group_data:
+            ctx.messages.append("❌ 无法获取群组数据")
+            ctx.intercept = True
+            return ctx
+
+        # 过滤有效用户（有长度数据的）
+        valid_users = [(uid, data) for uid, data in group_data.items()
+                       if isinstance(data, dict) and 'length' in data]
+
+        if len(valid_users) < 4:
+            ctx.messages.append("❌ 群里牛牛不足4人，无法发动劫富济贫！")
+            ctx.intercept = True
+            return ctx
+
+        # 按长度排序
+        sorted_users = sorted(valid_users, key=lambda x: x[1].get('length', 0), reverse=True)
+
+        # 找出首富
+        richest_id, richest_data = sorted_users[0]
+        richest_length = richest_data.get('length', 0)
+        richest_name = richest_data.get('nickname', richest_id)
+
+        # 检查自己是不是首富
+        if richest_id == ctx.user_id:
+            ctx.messages.append("😅 你就是群首富，劫谁？劫自己？")
+            ctx.intercept = True
+            ctx.extra['refund'] = True  # 标记需要退款
+            return ctx
+
+        # 检查首富长度
+        if richest_length <= 0:
+            ctx.messages.append(f"🤔 群里最长的是 {richest_name}（{richest_length}cm）...这也叫富？算了不抢了")
+            ctx.intercept = True
+            ctx.extra['refund'] = True
+            return ctx
+
+        # 计算抢夺数量（15%）
+        steal_amount = int(richest_length * 0.15)
+        if steal_amount < 1:
+            steal_amount = 1
+
+        # 找出最穷的3人（排除首富）
+        poorest_3 = sorted_users[-3:]
+
+        # 检查最穷的人里有没有首富（理论上不会，但防止边界情况）
+        poorest_3 = [(uid, data) for uid, data in poorest_3 if uid != richest_id]
+
+        if len(poorest_3) == 0:
+            ctx.messages.append("❌ 找不到可以接济的穷人！")
+            ctx.intercept = True
+            ctx.extra['refund'] = True
+            return ctx
+
+        # 平分给最穷的人
+        share_each = steal_amount // len(poorest_3)
+        remainder = steal_amount % len(poorest_3)
+
+        # 记录需要更新的数据
+        ctx.extra['robin_hood'] = {
+            'richest_id': richest_id,
+            'richest_name': richest_name,
+            'steal_amount': steal_amount,
+            'beneficiaries': []
+        }
+
+        for i, (uid, data) in enumerate(poorest_3):
+            # 第一个人获得余数
+            amount = share_each + (remainder if i == 0 else 0)
+            if amount > 0:
+                ctx.extra['robin_hood']['beneficiaries'].append({
+                    'user_id': uid,
+                    'nickname': data.get('nickname', uid),
+                    'amount': amount
+                })
+
+        # 构建消息
+        beneficiary_texts = []
+        for b in ctx.extra['robin_hood']['beneficiaries']:
+            beneficiary_texts.append(f"  💰 {b['nickname']} +{b['amount']}cm")
+
+        ctx.messages.extend([
+            "🦸 ═══ 劫富济贫 ═══ 🦸",
+            f"🎯 目标锁定：{richest_name}（{richest_length}cm）",
+            f"💸 抢走了 {steal_amount}cm！",
+            "📦 分发给最穷的群友：",
+            *beneficiary_texts,
+            "══════════════════"
+        ])
+
+        return ctx
+
+
+# =============================================================================
 # Effect Manager Factory
 # =============================================================================
 
@@ -380,5 +485,6 @@ def create_effect_manager() -> EffectManager:
     manager.register(BumiezhiwoEffect())
     manager.register(AmstlangEffect())
     manager.register(DutuyingbiEffect())
+    manager.register(JiefuJipinEffect())
 
     return manager

@@ -1,6 +1,7 @@
 import os
 import yaml
 import copy
+import random
 from typing import Dict, Any, List
 from astrbot.api.all import Context, AstrMessageEvent
 from niuniu_config import (
@@ -201,6 +202,13 @@ class NiuniuShop:
 
             elif selected_item['type'] == 'active':
                 # Active items use effect system
+                extra_data = {'item_name': selected_item['name']}
+
+                # 劫富济贫需要群组数据
+                if selected_item['name'] == '劫富济贫':
+                    niuniu_data = self._load_niuniu_data()
+                    extra_data['group_data'] = niuniu_data.get(group_id, {})
+
                 ctx = EffectContext(
                     group_id=group_id,
                     user_id=user_id,
@@ -208,7 +216,7 @@ class NiuniuShop:
                     user_data=user_data,
                     user_length=user_data.get('length', 0),
                     user_hardness=user_data.get('hardness', 1),
-                    extra={'item_name': selected_item['name']}
+                    extra=extra_data
                 )
 
                 # Trigger ON_PURCHASE for this specific item
@@ -216,7 +224,31 @@ class NiuniuShop:
                 if effect and EffectTrigger.ON_PURCHASE in effect.triggers:
                     ctx = effect.on_trigger(EffectTrigger.ON_PURCHASE, ctx)
 
-                    # Apply changes
+                    # 检查是否需要退款（操作失败）
+                    if ctx.extra.get('refund'):
+                        yield event.plain_result("\n".join(ctx.messages))
+                        return
+
+                    # 处理劫富济贫的特殊逻辑
+                    if ctx.extra.get('robin_hood'):
+                        robin_hood = ctx.extra['robin_hood']
+                        niuniu_data = self._load_niuniu_data()
+                        group_data = niuniu_data.setdefault(group_id, {})
+
+                        # 扣除首富的长度
+                        richest_id = robin_hood['richest_id']
+                        if richest_id in group_data:
+                            group_data[richest_id]['length'] = group_data[richest_id].get('length', 0) - robin_hood['steal_amount']
+
+                        # 给穷人加长度
+                        for beneficiary in robin_hood['beneficiaries']:
+                            uid = beneficiary['user_id']
+                            if uid in group_data:
+                                group_data[uid]['length'] = group_data[uid].get('length', 0) + beneficiary['amount']
+
+                        self._save_niuniu_data(niuniu_data)
+
+                    # Apply changes to current user
                     if ctx.length_change != 0:
                         user_data['length'] = user_data.get('length', 0) + ctx.length_change
                     if ctx.hardness_change != 0:
@@ -259,6 +291,16 @@ class NiuniuShop:
         
         # 显示金币总额
         total_coins = self.get_user_coins(group_id, user_id)
-        result_list.append(f"💰 你的金币：{total_coins}")
+        if total_coins < 0:
+            debt_msgs = [
+                f"💸 你的金币：{total_coins} (欠债中，要打工还钱了！)",
+                f"📉 你的金币：{total_coins} (负债累累，牛牛都要被抵押了！)",
+                f"💀 你的金币：{total_coins} (破产警告！快去搬砖！)",
+                f"🚨 你的金币：{total_coins} (已被列入老赖名单！)",
+                f"😭 你的金币：{total_coins} (穷得只剩牛牛了...)"
+            ]
+            result_list.append(random.choice(debt_msgs))
+        else:
+            result_list.append(f"💰 你的金币：{total_coins}")
 
         yield event.plain_result("\n".join(result_list))
