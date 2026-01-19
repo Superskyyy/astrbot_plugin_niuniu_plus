@@ -1060,7 +1060,7 @@ class ShangbaoxianEffect(ItemEffect):
             "📋 ══ 上保险 ══ 📋",
             f"✨ {ctx.nickname} 购买了保险！",
             f"🔒 获得 {ShangbaoxianConfig.CHARGES} 次保险",
-            f"💰 真正损失>={ShangbaoxianConfig.DAMAGE_THRESHOLD}cm长度时赔付{ShangbaoxianConfig.PAYOUT}金币",
+            f"💰 真正损失>={ShangbaoxianConfig.LENGTH_THRESHOLD}cm长度时赔付{ShangbaoxianConfig.PAYOUT}金币",
             f"⚠️ 注意：自残类不赔付（自爆/月牙天冲）",
             f"📊 当前保险次数：{new_charges}",
             "═══════════════════"
