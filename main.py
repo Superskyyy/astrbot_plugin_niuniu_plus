@@ -770,6 +770,93 @@ class NiuniuPlugin(Star):
             result_msg.append(halving_text)
             special_event_triggered = True
 
+        # ===== 随机趣味事件 =====
+        # 重新获取最新数据
+        current_user = self.get_user_data(group_id, user_id)
+        current_target = self.get_user_data(group_id, target_id)
+
+        # 暴击 (3%) - 赢家额外造成伤害
+        if not special_event_triggered and is_win and random.random() < 0.03:
+            extra_damage = loss  # 额外造成等量伤害
+            self.update_user_data(group_id, target_id, {'length': current_target['length'] - extra_damage})
+            crit_text = random.choice(self.niuniu_texts['compare'].get('critical', ['💥 【暴击】伤害翻倍！'])).format(winner=nickname)
+            result_msg.append(crit_text)
+            special_event_triggered = True
+
+        # 闪避 (3%) - 输家免疫损失
+        if not special_event_triggered and not is_win and random.random() < 0.03:
+            # 恢复输家损失的长度
+            self.update_user_data(group_id, user_id, {'length': current_user['length'] + loss})
+            dodge_text = random.choice(self.niuniu_texts['compare'].get('dodge', ['💨 【闪避】免疫损失！'])).format(loser=nickname)
+            result_msg.append(dodge_text)
+            special_event_triggered = True
+
+        # 反噬 (2%) - 结果反转
+        if not special_event_triggered and random.random() < 0.02:
+            # 交换双方的变化
+            user_change = current_user['length'] - old_u_len
+            target_change = current_target['length'] - old_t_len
+            self.update_user_data(group_id, user_id, {'length': old_u_len + target_change})
+            self.update_user_data(group_id, target_id, {'length': old_t_len + user_change})
+            backfire_text = random.choice(self.niuniu_texts['compare'].get('backfire', ['🔄 【反噬】结果反转！'])).format(
+                winner=nickname if is_win else target_data['nickname'],
+                loser=target_data['nickname'] if is_win else nickname
+            )
+            result_msg.append(backfire_text)
+            special_event_triggered = True
+
+        # 双赢 (2%) - 双方都获益
+        if not special_event_triggered and random.random() < 0.02:
+            bonus = random.randint(2, 5)
+            current_user = self.get_user_data(group_id, user_id)
+            current_target = self.get_user_data(group_id, target_id)
+            self.update_user_data(group_id, user_id, {'length': current_user['length'] + bonus})
+            self.update_user_data(group_id, target_id, {'length': current_target['length'] + bonus})
+            double_win_text = random.choice(self.niuniu_texts['compare'].get('double_win', ['🎊 【双赢】双方都+{gain}cm！'])).format(gain=bonus)
+            result_msg.append(double_win_text)
+            special_event_triggered = True
+
+        # 硬度觉醒 (5%) - 赢家硬度<=3时触发
+        winner_id = user_id if is_win else target_id
+        winner_name = nickname if is_win else target_data['nickname']
+        winner_data = self.get_user_data(group_id, winner_id)
+        if not special_event_triggered and winner_data['hardness'] <= 3 and random.random() < 0.05:
+            new_hardness = min(10, winner_data['hardness'] + 2)
+            self.update_user_data(group_id, winner_id, {'hardness': new_hardness})
+            awakening_text = random.choice(self.niuniu_texts['compare'].get('hardness_awakening', ['💪 【硬度觉醒】硬度+2！'])).format(nickname=winner_name)
+            result_msg.append(awakening_text)
+            special_event_triggered = True
+
+        # 长度互换 (1%) - 长度差>30cm时触发
+        if not special_event_triggered and abs(u_len - t_len) > 30 and random.random() < 0.01:
+            current_user = self.get_user_data(group_id, user_id)
+            current_target = self.get_user_data(group_id, target_id)
+            user_len_now = current_user['length']
+            target_len_now = current_target['length']
+            self.update_user_data(group_id, user_id, {'length': target_len_now})
+            self.update_user_data(group_id, target_id, {'length': user_len_now})
+            swap_text = random.choice(self.niuniu_texts['compare'].get('length_swap', ['🔀 【长度互换】双方长度交换！'])).format(
+                nickname1=nickname, nickname2=target_data['nickname']
+            )
+            result_msg.append(swap_text)
+            special_event_triggered = True
+
+        # 幸运一击 (10%) - 输家长度<5cm时触发
+        loser_id = target_id if is_win else user_id
+        loser_name = target_data['nickname'] if is_win else nickname
+        loser_data = self.get_user_data(group_id, loser_id)
+        if not special_event_triggered and loser_data['length'] < 5 and random.random() < 0.10:
+            self.update_user_data(group_id, loser_id, {'length': loser_data['length'] + 5})
+            lucky_text = random.choice(self.niuniu_texts['compare'].get('lucky_strike', ['🍀 【幸运一击】+5cm！'])).format(loser=loser_name)
+            result_msg.append(lucky_text)
+            special_event_triggered = True
+
+        # 更新最终显示的长度
+        final_user = self.get_user_data(group_id, user_id)
+        final_target = self.get_user_data(group_id, target_id)
+        result_msg[1] = f"🗡️ {nickname}: {self.format_length(old_u_len)} → {self.format_length(final_user['length'])}"
+        result_msg[2] = f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(final_target['length'])}"
+
         yield event.plain_result("\n".join(result_msg))
 
     async def _handle_halving_event(self, group_id, user_id, target_id, nickname, target_nickname, user_items, target_items, result_msg):
