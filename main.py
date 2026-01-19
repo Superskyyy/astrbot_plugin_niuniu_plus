@@ -971,19 +971,12 @@ class NiuniuPlugin(Star):
         streak_bonus = 0
         streak_msgs = []
 
+        # 连胜/连败加成（影响胜率）
         if win_streak >= CompareStreak.WIN_STREAK_THRESHOLD:
             streak_bonus += CompareStreak.WIN_STREAK_BONUS
-            streak_text = random.choice(self.niuniu_texts['compare'].get('win_streak', ['🔥 【{count}连胜】'])).format(
-                nickname=nickname, count=win_streak
-            )
-            streak_msgs.append(streak_text)
 
         if lose_streak >= CompareStreak.LOSE_STREAK_THRESHOLD:
             streak_bonus += CompareStreak.LOSE_STREAK_BONUS
-            streak_text = random.choice(self.niuniu_texts['compare'].get('lose_streak', ['🛡️ 【触底反弹】'])).format(
-                nickname=nickname, count=lose_streak
-            )
-            streak_msgs.append(streak_text)
 
         # 获取双方道具
         user_items = self.shop.get_user_items(group_id, user_id)
@@ -1090,6 +1083,18 @@ class NiuniuPlugin(Star):
             'compare_win_streak': new_win_streak,
             'compare_lose_streak': new_lose_streak
         })
+
+        # 生成连胜/连败消息（在比划结果确定后）
+        if is_win and new_win_streak >= CompareStreak.WIN_STREAK_THRESHOLD:
+            streak_text = random.choice(self.niuniu_texts['compare'].get('win_streak', ['🔥 【{count}连胜】'])).format(
+                nickname=nickname, count=new_win_streak
+            )
+            streak_msgs.append(streak_text)
+        elif not is_win and new_lose_streak >= CompareStreak.LOSE_STREAK_THRESHOLD:
+            streak_text = random.choice(self.niuniu_texts['compare'].get('lose_streak', ['🛡️ 【触底反弹】'])).format(
+                nickname=nickname, count=new_lose_streak
+            )
+            streak_msgs.append(streak_text)
 
         if is_win:
             # 硬度影响伤害：赢家(user)硬度加成攻击，输家(target)硬度减少损失
