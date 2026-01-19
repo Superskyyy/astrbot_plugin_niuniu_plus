@@ -248,6 +248,11 @@ class NiuniuShop:
 
                         self._save_niuniu_data(niuniu_data)
 
+                    # 记录劫富济贫使用时间
+                    if ctx.extra.get('record_jiefu_time'):
+                        import time
+                        user_data['last_jiefu_time'] = time.time()
+
                     # Apply changes to current user
                     if ctx.length_change != 0:
                         user_data['length'] = user_data.get('length', 0) + ctx.length_change

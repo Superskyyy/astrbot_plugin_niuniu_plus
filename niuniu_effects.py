@@ -370,6 +370,19 @@ class JiefuJipinEffect(ItemEffect):
     consume_on_use = False  # Active item, no inventory
 
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        import time
+
+        # 检查每日冷却
+        last_use = ctx.user_data.get('last_jiefu_time', 0)
+        current_time = time.time()
+        if current_time - last_use < 86400:  # 24小时
+            remaining_hours = int((86400 - (current_time - last_use)) / 3600)
+            remaining_mins = int((86400 - (current_time - last_use)) % 3600 / 60)
+            ctx.messages.append(f"⏰ 劫富济贫每天只能用一次！还需等待 {remaining_hours}小时{remaining_mins}分钟")
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
         # 需要从 extra 获取群组数据
         group_data = ctx.extra.get('group_data', {})
         if not group_data:
@@ -460,6 +473,9 @@ class JiefuJipinEffect(ItemEffect):
             *beneficiary_texts,
             "══════════════════"
         ])
+
+        # 标记需要记录使用时间
+        ctx.extra['record_jiefu_time'] = True
 
         return ctx
 
