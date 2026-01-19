@@ -97,7 +97,7 @@ class NiuniuPlugin(Star):
         try:
             with open(LAST_ACTION_FILE, 'r', encoding='utf-8') as f:
                 return yaml.safe_load(f) or {}
-        except:
+        except Exception:
             return {}
 
     def _save_last_actions(self, data):
@@ -711,6 +711,58 @@ class NiuniuPlugin(Star):
         # 添加基础消息
         result_msgs.append(base_text)
 
+        # ===== 波及他人事件 (8%概率) =====
+        if random.random() < 0.08:
+            group_data = self.get_group_data(group_id)
+            # 找到其他已注册用户
+            other_users = [
+                (uid, data) for uid, data in group_data.items()
+                if isinstance(data, dict) and 'length' in data
+                and uid != user_id and not uid.startswith('_') and uid != 'plugin_enabled'
+            ]
+            if other_users:
+                victim_id, victim_data = random.choice(other_users)
+                victim_name = victim_data.get('nickname', victim_id)
+                collateral_texts = self.niuniu_texts['dajiao'].get('collateral_damage', {})
+
+                # 70%长度事件，30%硬度事件
+                if random.random() < 0.70:
+                    # 长度事件：75%坏事，25%好事
+                    if random.random() < 0.75:
+                        # 坏事：扣别人 1~5cm（小意外）
+                        damage = random.randint(1, 5)
+                        new_length = victim_data['length'] - damage
+                        self.update_user_data(group_id, victim_id, {'length': new_length})
+                        if collateral_texts.get('bad'):
+                            template = random.choice(collateral_texts['bad'])
+                            result_msgs.append(template.format(nickname=nickname, victim=victim_name, damage=damage))
+                    else:
+                        # 好事：给别人 1~3cm
+                        bonus = random.randint(1, 3)
+                        new_length = victim_data['length'] + bonus
+                        self.update_user_data(group_id, victim_id, {'length': new_length})
+                        if collateral_texts.get('good'):
+                            template = random.choice(collateral_texts['good'])
+                            result_msgs.append(template.format(nickname=nickname, victim=victim_name, bonus=bonus))
+                else:
+                    # 硬度事件：75%坏事，25%好事
+                    if random.random() < 0.75:
+                        # 坏事：扣别人硬度 1~2
+                        h_damage = random.randint(1, 2)
+                        new_hardness = max(1, victim_data.get('hardness', 1) - h_damage)
+                        self.update_user_data(group_id, victim_id, {'hardness': new_hardness})
+                        if collateral_texts.get('hardness_bad'):
+                            template = random.choice(collateral_texts['hardness_bad'])
+                            result_msgs.append(template.format(nickname=nickname, victim=victim_name, h_damage=h_damage))
+                    else:
+                        # 好事：给别人硬度 1~2
+                        h_bonus = random.randint(1, 2)
+                        new_hardness = min(10, victim_data.get('hardness', 1) + h_bonus)
+                        self.update_user_data(group_id, victim_id, {'hardness': new_hardness})
+                        if collateral_texts.get('hardness_good'):
+                            template = random.choice(collateral_texts['hardness_good'])
+                            result_msgs.append(template.format(nickname=nickname, victim=victim_name, h_bonus=h_bonus))
+
         # ===== 构建最终输出 =====
         user_data = self.get_user_data(group_id, user_id)
         final_text = "\n".join(result_msgs)
@@ -971,13 +1023,41 @@ class NiuniuPlugin(Star):
                 gain=total_gain
             )
 
-            # 负数特殊文案
-            if u_len <= 0 and t_len <= 0:
-                text += f"\n🕳️ 两个凹牛牛之间的较量！{nickname} 凹得更有型！"
-            elif u_len <= 0:
-                text += f"\n🎊 逆天改命！{nickname} 凹着都能赢！"
-            elif t_len <= 0:
-                text += f"\n💀 {target_data['nickname']} 的凹牛牛毫无还手之力..."
+            # 负数/0长度特殊文案
+            if u_len == 0 or t_len == 0:
+                zero_text = random.choice(self.niuniu_texts['compare'].get('zero_length', ['👻 0长度牛牛参战！']))
+                text += f"\n{zero_text}"
+            if u_len < 0 and t_len < 0:
+                special_text = random.choice(self.niuniu_texts['compare'].get('both_negative_win', ['🕳️ 凹牛牛对决！'])).format(winner=nickname, loser=target_data['nickname'])
+                text += f"\n{special_text}"
+            elif u_len < 0 < t_len:
+                special_text = random.choice(self.niuniu_texts['compare'].get('negative_win', ['🎊 逆天！负数赢了！'])).format(winner=nickname, loser=target_data['nickname'])
+                text += f"\n{special_text}"
+            elif t_len < 0 < u_len:
+                special_text = random.choice(self.niuniu_texts['compare'].get('vs_negative_win', ['💀 凹牛牛毫无还手之力...'])).format(winner=nickname, loser=target_data['nickname'])
+                text += f"\n{special_text}"
+
+            # 长度悬殊特殊文案（差距>50cm）
+            length_diff = abs(u_len - t_len)
+            if length_diff > 50:
+                if u_len > t_len:
+                    # 大的赢了，正常碾压
+                    gap_text = random.choice(self.niuniu_texts['compare'].get('length_gap_win', ['🐘 碾压局！'])).format(winner=nickname, loser=target_data['nickname'])
+                else:
+                    # 小的赢了，大翻车
+                    gap_text = random.choice(self.niuniu_texts['compare'].get('length_gap_upset', ['😱 大翻车！'])).format(winner=nickname, loser=target_data['nickname'])
+                text += f"\n{gap_text}"
+
+            # 硬度悬殊特殊文案（差距>=5）
+            hardness_diff = abs(u_hardness - t_hardness)
+            if hardness_diff >= 5:
+                if u_hardness > t_hardness:
+                    # 硬的赢了，正常
+                    h_gap_text = random.choice(self.niuniu_texts['compare'].get('hardness_gap_win', ['🗿 以刚克柔！'])).format(winner=nickname, loser=target_data['nickname'])
+                else:
+                    # 软的赢了，翻车
+                    h_gap_text = random.choice(self.niuniu_texts['compare'].get('hardness_gap_upset', ['🫠 以柔克刚！'])).format(winner=nickname, loser=target_data['nickname'])
+                text += f"\n{h_gap_text}"
 
             # 添加效果消息
             for msg in ctx.messages:
@@ -990,14 +1070,23 @@ class NiuniuPlugin(Star):
                 total_gain += extra_gain
                 text += f"\n🎁 由于极大劣势获胜，额外增加 {extra_gain}cm！"
 
-            # 额外逻辑：掠夺（非道具触发，仅当目标长度为正时）
+            # 额外逻辑：掠夺（非道具触发，仅当目标战前长度为正时）
             if abs(u_len - t_len) > 10 and u_len < t_len and t_len > 0:
-                stolen_length = int(target_data['length'] * 0.2)
                 current_user = self.get_user_data(group_id, user_id)
                 current_target = self.get_user_data(group_id, target_id)
-                self.update_user_data(group_id, user_id, {'length': current_user['length'] + stolen_length})
-                self.update_user_data(group_id, target_id, {'length': current_target['length'] - stolen_length})
-                text += f"\n🎉 {nickname} 掠夺了 {stolen_length}cm！"
+                if current_target['length'] <= 0:
+                    # 战后目标变成0/负数
+                    status = '凹进去' if current_target['length'] < 0 else '归零'
+                    text += f"\n🕳️ {target_data['nickname']} 被打到{status}了，没什么可掠夺的..."
+                else:
+                    stolen_length = int(current_target['length'] * 0.2)
+                    if stolen_length > 0:
+                        self.update_user_data(group_id, user_id, {'length': current_user['length'] + stolen_length})
+                        self.update_user_data(group_id, target_id, {'length': current_target['length'] - stolen_length})
+                        text += f"\n🎉 {nickname} 掠夺了 {stolen_length}cm！"
+                    else:
+                        # 长度太短，20%不足1cm
+                        text += f"\n😅 {target_data['nickname']} 长度太短了，掠夺不到什么..."
 
             # 硬度优势获胜提示
             if abs(u_len - t_len) <= 5 and u_hardness > t_hardness:
@@ -1038,13 +1127,41 @@ class NiuniuPlugin(Star):
                 protection_text = random.choice(self.niuniu_texts['compare'].get('lose_streak_protection', ['🛡️ 【连败保护】不扣长度！'])).format(nickname=nickname)
                 text += f"\n{protection_text}"
 
-            # 负数特殊文案
-            if u_len <= 0 and t_len <= 0:
-                text += f"\n🕳️ 凹牛牛对决！{nickname} 凹得不够深..."
-            elif u_len <= 0:
-                text += f"\n😭 {nickname} 凹着牛牛还敢挑战，真是勇气可嘉..."
-            elif t_len <= 0:
-                text += f"\n😱 居然输给了凹牛牛！{nickname} 羞愧难当！"
+            # 负数/0长度特殊文案
+            if u_len == 0 or t_len == 0:
+                zero_text = random.choice(self.niuniu_texts['compare'].get('zero_length', ['👻 0长度牛牛参战！']))
+                text += f"\n{zero_text}"
+            if u_len < 0 and t_len < 0:
+                special_text = random.choice(self.niuniu_texts['compare'].get('both_negative_lose', ['🕳️ 凹牛牛对决！'])).format(loser=nickname, winner=target_data['nickname'])
+                text += f"\n{special_text}"
+            elif u_len < 0 < t_len:
+                special_text = random.choice(self.niuniu_texts['compare'].get('negative_lose', ['😭 凹着还敢挑战...'])).format(loser=nickname, winner=target_data['nickname'])
+                text += f"\n{special_text}"
+            elif t_len < 0 < u_len:
+                special_text = random.choice(self.niuniu_texts['compare'].get('vs_negative_lose', ['😱 居然输给了凹牛牛！'])).format(loser=nickname, winner=target_data['nickname'])
+                text += f"\n{special_text}"
+
+            # 长度悬殊特殊文案（差距>50cm）
+            length_diff = abs(u_len - t_len)
+            if length_diff > 50:
+                if u_len > t_len:
+                    # 大的输了，大翻车
+                    gap_text = random.choice(self.niuniu_texts['compare'].get('length_gap_upset', ['😱 大翻车！'])).format(winner=target_data['nickname'], loser=nickname)
+                else:
+                    # 小的输了，正常碾压
+                    gap_text = random.choice(self.niuniu_texts['compare'].get('length_gap_win', ['🐘 碾压局！'])).format(winner=target_data['nickname'], loser=nickname)
+                text += f"\n{gap_text}"
+
+            # 硬度悬殊特殊文案（差距>=5）
+            hardness_diff = abs(u_hardness - t_hardness)
+            if hardness_diff >= 5:
+                if u_hardness > t_hardness:
+                    # 硬的输了，翻车
+                    h_gap_text = random.choice(self.niuniu_texts['compare'].get('hardness_gap_upset', ['🫠 以柔克刚！'])).format(winner=target_data['nickname'], loser=nickname)
+                else:
+                    # 软的输了，正常
+                    h_gap_text = random.choice(self.niuniu_texts['compare'].get('hardness_gap_win', ['🗿 以刚克柔！'])).format(winner=target_data['nickname'], loser=nickname)
+                text += f"\n{h_gap_text}"
 
             # 添加效果消息
             for msg in ctx.messages:
@@ -1075,8 +1192,15 @@ class NiuniuPlugin(Star):
         user_data = self.get_user_data(group_id, user_id)
         target_data = self.get_user_data(group_id, target_id)
 
+        # 计算硬度变化显示
+        u_hardness_now = user_data['hardness']
+        t_hardness_now = target_data['hardness']
+        u_h_str = f"硬度{u_hardness}" if u_hardness == u_hardness_now else f"硬度{u_hardness}→{u_hardness_now}"
+        t_h_str = f"硬度{t_hardness}" if t_hardness == t_hardness_now else f"硬度{t_hardness}→{t_hardness_now}"
+
         result_msg = [
             "⚔️ 【牛牛对决结果】 ⚔️",
+            f"📊 {nickname}({self.format_length(old_u_len)}/{u_h_str}) vs {target_data['nickname']}({self.format_length(old_t_len)}/{t_h_str})",
             f"🗡️ {nickname}: {self.format_length(old_u_len)} → {self.format_length(user_data['length'])}",
             f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(target_data['length'])}",
             f"📢 {text}"
@@ -1095,24 +1219,40 @@ class NiuniuPlugin(Star):
             result_msg.append(draw_text)
             special_event_triggered = True
 
-        # 硬度过低触发缠绕
-        if not special_event_triggered and (user_data['hardness'] <= 2 or target_data['hardness'] <= 2) and random.random() < 0.05:
+        # 双方硬度都低于平均值时触发缠绕（20%概率）
+        if not special_event_triggered and u_hardness < 5 and t_hardness < 5 and random.random() < 0.20:
             async for msg in self._handle_halving_event(group_id, user_id, target_id, nickname, target_data['nickname'], user_items, target_items, result_msg):
                 pass
             tangle_text = random.choice(self.niuniu_texts['compare']['tangle']).format(
-                nickname1=nickname, nickname2=target_data['nickname']
+                nickname1=nickname, nickname2=target_data['nickname'],
+                hardness1=u_hardness, hardness2=t_hardness
             )
             result_msg.append(tangle_text)
             special_event_triggered = True
 
-        # 长度相近触发减半
-        if not special_event_triggered and abs(u_len - t_len) < 10 and random.random() < 0.025:
-            async for msg in self._handle_halving_event(group_id, user_id, target_id, nickname, target_data['nickname'], user_items, target_items, result_msg):
-                pass
-            halving_text = random.choice(self.niuniu_texts['compare']['halving']).format(
-                nickname1=nickname, nickname2=target_data['nickname']
+        # 激烈碰撞：长度比例接近 + 总长度越大概率越高
+        u_len_positive = max(1, u_len)  # 避免除以0，负数按1算
+        t_len_positive = max(1, t_len)
+        length_ratio = min(u_len_positive, t_len_positive) / max(u_len_positive, t_len_positive)
+        total_length = max(0, u_len) + max(0, t_len)
+        collision_chance = min(0.01 + total_length / 1500 * 0.10, 0.12)  # 1%~12%
+        # 只有比例 >= 0.8 才可能触发
+        if not special_event_triggered and length_ratio >= 0.8 and random.random() < collision_chance:
+            # 计算各自损失：至少10cm，或自身10%取较大值
+            user_collision_loss = max(10, int(max(0, u_len) * 0.10))
+            target_collision_loss = max(10, int(max(0, t_len) * 0.10))
+            # 应用损失
+            current_user = self.get_user_data(group_id, user_id)
+            current_target = self.get_user_data(group_id, target_id)
+            self.update_user_data(group_id, user_id, {'length': current_user['length'] - user_collision_loss})
+            self.update_user_data(group_id, target_id, {'length': current_target['length'] - target_collision_loss})
+            collision_text = random.choice(self.niuniu_texts['compare'].get('collision', [
+                '💥 【激烈碰撞】双方牛牛猛烈撞击！{nickname1} -{loss1}cm，{nickname2} -{loss2}cm！'
+            ])).format(
+                nickname1=nickname, nickname2=target_data['nickname'],
+                loss1=user_collision_loss, loss2=target_collision_loss
             )
-            result_msg.append(halving_text)
+            result_msg.append(collision_text)
             special_event_triggered = True
 
         # ===== 随机趣味事件 =====
@@ -1166,9 +1306,10 @@ class NiuniuPlugin(Star):
         winner_name = nickname if is_win else target_data['nickname']
         winner_data = self.get_user_data(group_id, winner_id)
         if not special_event_triggered and winner_data['hardness'] <= 3 and random.random() < 0.05:
-            new_hardness = min(10, winner_data['hardness'] + 2)
+            hardness_bonus = random.randint(1, 3)
+            new_hardness = min(10, winner_data['hardness'] + hardness_bonus)
             self.update_user_data(group_id, winner_id, {'hardness': new_hardness})
-            awakening_text = random.choice(self.niuniu_texts['compare'].get('hardness_awakening', ['💪 【硬度觉醒】硬度+2！'])).format(nickname=winner_name)
+            awakening_text = random.choice(self.niuniu_texts['compare'].get('hardness_awakening', ['💪 【硬度觉醒】硬度+{bonus}！'])).format(nickname=winner_name, bonus=hardness_bonus)
             result_msg.append(awakening_text)
             special_event_triggered = True
 
@@ -1191,16 +1332,17 @@ class NiuniuPlugin(Star):
         loser_name = target_data['nickname'] if is_win else nickname
         loser_data = self.get_user_data(group_id, loser_id)
         if not special_event_triggered and loser_data['length'] < 5 and random.random() < 0.10:
-            self.update_user_data(group_id, loser_id, {'length': loser_data['length'] + 5})
-            lucky_text = random.choice(self.niuniu_texts['compare'].get('lucky_strike', ['🍀 【幸运一击】+5cm！'])).format(loser=loser_name)
+            lucky_bonus = random.randint(3, 7)
+            self.update_user_data(group_id, loser_id, {'length': loser_data['length'] + lucky_bonus})
+            lucky_text = random.choice(self.niuniu_texts['compare'].get('lucky_strike', ['🍀 【幸运一击】+{bonus}cm！'])).format(loser=loser_name, bonus=lucky_bonus)
             result_msg.append(lucky_text)
             special_event_triggered = True
 
         # 更新最终显示的长度
         final_user = self.get_user_data(group_id, user_id)
         final_target = self.get_user_data(group_id, target_id)
-        result_msg[1] = f"🗡️ {nickname}: {self.format_length(old_u_len)} → {self.format_length(final_user['length'])}"
-        result_msg[2] = f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(final_target['length'])}"
+        result_msg[2] = f"🗡️ {nickname}: {self.format_length(old_u_len)} → {self.format_length(final_user['length'])}"
+        result_msg[3] = f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(final_target['length'])}"
 
         # ===== 赌注结算 =====
         if bet_amount > 0:
@@ -1219,7 +1361,7 @@ class NiuniuPlugin(Star):
 
         # ===== 连击提示 =====
         for msg in streak_msgs:
-            result_msg.insert(4, msg)  # 插入到结果消息后面
+            result_msg.insert(5, msg)  # 插入到结果消息后面
 
         # ===== 围观效应 =====
         # 记录本次比划时间
@@ -1233,21 +1375,72 @@ class NiuniuPlugin(Star):
 
         # 检查是否触发围观效应
         if len(group_compares) >= CompareAudience.MIN_COMPARES and random.random() < CompareAudience.TRIGGER_CHANCE:
-            bonus = random.randint(CompareAudience.BONUS_LENGTH_MIN, CompareAudience.BONUS_LENGTH_MAX)
-            # 给双方都加长度
+            # 根据权重随机选择效果类型
+            effects = list(CompareAudience.EFFECT_WEIGHTS.keys())
+            weights = list(CompareAudience.EFFECT_WEIGHTS.values())
+            effect_type = random.choices(effects, weights=weights, k=1)[0]
+
             final_user = self.get_user_data(group_id, user_id)
             final_target = self.get_user_data(group_id, target_id)
-            self.update_user_data(group_id, user_id, {'length': final_user['length'] + bonus})
-            self.update_user_data(group_id, target_id, {'length': final_target['length'] + bonus})
-            audience_text = random.choice(self.niuniu_texts['compare'].get('audience_effect', ['👀 【围观效应】+{bonus}cm！'])).format(
-                bonus=bonus, count=len(group_compares)
-            )
+
+            if effect_type == 'bonus_length':
+                # 加长度
+                bonus = random.randint(CompareAudience.BONUS_LENGTH_MIN, CompareAudience.BONUS_LENGTH_MAX)
+                self.update_user_data(group_id, user_id, {'length': final_user['length'] + bonus})
+                self.update_user_data(group_id, target_id, {'length': final_target['length'] + bonus})
+                audience_text = random.choice(self.niuniu_texts['compare'].get('audience_effect', ['👀 【围观效应】+{bonus}cm！'])).format(
+                    bonus=bonus, count=len(group_compares)
+                )
+            elif effect_type == 'penalty_length':
+                # 副作用：减长度
+                penalty = random.randint(CompareAudience.PENALTY_LENGTH_MIN, CompareAudience.PENALTY_LENGTH_MAX)
+                self.update_user_data(group_id, user_id, {'length': final_user['length'] - penalty})
+                self.update_user_data(group_id, target_id, {'length': final_target['length'] - penalty})
+                audience_text = random.choice(self.niuniu_texts['compare'].get('audience_penalty', ['😱 【围观副作用】太多人看了，双方都-{penalty}cm！'])).format(
+                    penalty=penalty, count=len(group_compares)
+                )
+            elif effect_type == 'bonus_coins':
+                # 奖励金币（双方）
+                coins = random.randint(CompareAudience.BONUS_COINS_MIN, CompareAudience.BONUS_COINS_MAX)
+                self.games.update_user_coins(group_id, user_id, coins)
+                self.games.update_user_coins(group_id, target_id, coins)
+                audience_text = random.choice(self.niuniu_texts['compare'].get('audience_coins', ['💰 【围观打赏】观众们打赏了，双方各获得{coins}金币！'])).format(
+                    coins=coins, count=len(group_compares)
+                )
+            elif effect_type == 'group_bonus':
+                # 群友福利：给全群注册用户发金币
+                coins = random.randint(CompareAudience.GROUP_BONUS_COINS_MIN, CompareAudience.GROUP_BONUS_COINS_MAX)
+                group_data = self.get_group_data(group_id)
+                beneficiaries = 0
+                for uid, udata in group_data.items():
+                    if uid.startswith('_') or uid == 'plugin_enabled' or not isinstance(udata, dict):
+                        continue
+                    self.games.update_user_coins(group_id, uid, coins)
+                    beneficiaries += 1
+                audience_text = random.choice(self.niuniu_texts['compare'].get('group_bonus', ['🎁 【群友福利】全群{beneficiaries}人每人获得{coins}金币！'])).format(
+                    coins=coins, beneficiaries=beneficiaries, count=len(group_compares)
+                )
+            else:  # group_penalty
+                # 群友惩罚：全群注册用户减长度
+                penalty = random.randint(CompareAudience.GROUP_PENALTY_LENGTH_MIN, CompareAudience.GROUP_PENALTY_LENGTH_MAX)
+                group_data = self.get_group_data(group_id)
+                victims = 0
+                for uid, udata in group_data.items():
+                    if uid.startswith('_') or uid == 'plugin_enabled' or not isinstance(udata, dict):
+                        continue
+                    self.update_user_data(group_id, uid, {'length': udata.get('length', 0) - penalty})
+                    victims += 1
+                audience_text = random.choice(self.niuniu_texts['compare'].get('group_penalty', ['💀 【群友遭殃】全群{victims}人每人-{penalty}cm！'])).format(
+                    penalty=penalty, victims=victims, count=len(group_compares)
+                )
+
             result_msg.append(audience_text)
-            # 更新显示
-            final_user = self.get_user_data(group_id, user_id)
-            final_target = self.get_user_data(group_id, target_id)
-            result_msg[1] = f"🗡️ {nickname}: {self.format_length(old_u_len)} → {self.format_length(final_user['length'])}"
-            result_msg[2] = f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(final_target['length'])}"
+            # 更新显示（仅长度变化时更新）
+            if effect_type in ('bonus_length', 'penalty_length', 'group_penalty'):
+                final_user = self.get_user_data(group_id, user_id)
+                final_target = self.get_user_data(group_id, target_id)
+                result_msg[2] = f"🗡️ {nickname}: {self.format_length(old_u_len)} → {self.format_length(final_user['length'])}"
+                result_msg[3] = f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(final_target['length'])}"
 
         # ===== 保险理赔检查 =====
         from niuniu_config import ShangbaoxianConfig
@@ -1376,9 +1569,9 @@ class NiuniuPlugin(Star):
                 unique_participants.append(p)
         participants = unique_participants
 
-        # 至少需要2人
-        if len(participants) < 2:
-            yield event.plain_result("❌ 开团至少需要2人！\n用法：开团 或 开团 @群友1 @群友2 ...")
+        # 至少需要3人才能叫"团"
+        if len(participants) < 3:
+            yield event.plain_result("❌ 开团至少需要3人！\n用法：开团 或 开团 @群友1 @群友2 ...")
             return
 
         # 打乱顺序
@@ -1531,11 +1724,11 @@ class NiuniuPlugin(Star):
             return
 
         # 过滤有效用户数据
-        data = self._load_niuniu_lengths()
-        group_data = data.get(group_id, {'plugin_enabled': False})
+        all_data = self._load_niuniu_lengths()
+        group_data = all_data.get(group_id, {'plugin_enabled': False})
         valid_users = [
-            (uid, data) for uid, data in group_data.items()
-            if isinstance(data, dict) and 'length' in data
+            (uid, udata) for uid, udata in group_data.items()
+            if isinstance(udata, dict) and 'length' in udata
         ]
 
         if not valid_users:

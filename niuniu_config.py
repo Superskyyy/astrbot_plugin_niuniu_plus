@@ -230,9 +230,36 @@ class CompareBet:
 class CompareAudience:
     TIME_WINDOW = 300              # 5分钟内
     MIN_COMPARES = 3               # 至少3次比划
-    BONUS_LENGTH_MIN = 1           # 奖励1~3cm
-    BONUS_LENGTH_MAX = 3
     TRIGGER_CHANCE = 0.3           # 30% 触发概率
+
+    # 效果类型及权重
+    EFFECT_WEIGHTS = {
+        'bonus_length': 40,        # 40% 加长度（双方）
+        'penalty_length': 15,      # 15% 减长度（双方，副作用）
+        'bonus_coins': 20,         # 20% 奖励金币（双方）
+        'group_bonus': 15,         # 15% 群友福利（全群加金币）
+        'group_penalty': 10,       # 10% 群友惩罚（全群减长度）
+    }
+
+    # 加长度配置（双方）
+    BONUS_LENGTH_MIN = 1
+    BONUS_LENGTH_MAX = 3
+
+    # 副作用：减长度配置（双方）
+    PENALTY_LENGTH_MIN = 1
+    PENALTY_LENGTH_MAX = 2
+
+    # 金币奖励配置（双方）
+    BONUS_COINS_MIN = 20
+    BONUS_COINS_MAX = 80
+
+    # 群友福利配置（全群注册用户）
+    GROUP_BONUS_COINS_MIN = 10
+    GROUP_BONUS_COINS_MAX = 30
+
+    # 群友惩罚配置（全群减长度）
+    GROUP_PENALTY_LENGTH_MIN = 1
+    GROUP_PENALTY_LENGTH_MAX = 3
 
 # =============================================================================
 # Registration Configuration
