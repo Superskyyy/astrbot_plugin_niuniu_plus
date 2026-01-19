@@ -558,38 +558,38 @@ class BaoxianxiangConfig:
 # =============================================================================
 class QiongniuYishengConfig:
     # 结果概率分布 (总和=1.0)
-    # 期望长度: 0.40*(-5.5) + 0.35*(+7.5) + 0.20*(+15) + 0.05*(+32.5) ≈ +5cm
-    # 期望硬度: 0.40*(-0.5) + 0.35*(0) + 0.20*(+1) + 0.05*(+2) ≈ +0.1
+    # 期望长度: 0.45*(-4) + 0.30*(+4.5) + 0.20*(+9) + 0.05*(+20) ≈ +1.55cm
+    # 期望硬度: 0.45*(-0.5) + 0.30*(0) + 0.20*(+1) + 0.05*(+2) ≈ -0.025
     OUTCOMES = [
         {
             'name': 'bad',
-            'chance': 0.40,           # 40% 倒霉
-            'length_min': -8,
-            'length_max': -3,
+            'chance': 0.45,           # 45% 倒霉
+            'length_min': -6,
+            'length_max': -2,
             'hardness_min': -1,
             'hardness_max': 0,
         },
         {
             'name': 'neutral',
-            'chance': 0.35,           # 35% 小赚
-            'length_min': 5,
-            'length_max': 10,
+            'chance': 0.30,           # 30% 小赚
+            'length_min': 3,
+            'length_max': 6,
             'hardness_min': 0,
             'hardness_max': 0,
         },
         {
             'name': 'good',
             'chance': 0.20,           # 20% 不错
-            'length_min': 10,
-            'length_max': 20,
+            'length_min': 6,
+            'length_max': 12,
             'hardness_min': 1,
             'hardness_max': 1,
         },
         {
             'name': 'jackpot',
             'chance': 0.05,           # 5% 大奖
-            'length_min': 25,
-            'length_max': 40,
+            'length_min': 15,
+            'length_max': 25,
             'hardness_min': 2,
             'hardness_max': 2,
         },
