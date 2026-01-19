@@ -278,7 +278,9 @@ class NiuniuPlugin(Star):
                 "牛牛排行": self._show_ranking,
                 "牛牛商城": self.shop.show_shop,
                 "牛牛购买": self.shop.handle_buy,
-                "牛牛背包": self.shop.show_items
+                "牛牛背包": self.shop.show_items,
+                "重置所有牛牛": self._reset_all_niuniu,
+                "牛牛红包": self._niuniu_hongbao
             }
 
             for cmd, handler in handler_map.items():
@@ -313,6 +315,91 @@ class NiuniuPlugin(Star):
         self.update_group_data(group_id, {'plugin_enabled': enable})
         text_key = 'enable' if enable else 'disable'
         yield event.plain_result(self.niuniu_texts['system'][text_key])
+
+    async def _reset_all_niuniu(self, event):
+        """重置所有牛牛 - 仅管理员可用"""
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+
+        # 检查是否为管理员
+        if not self.is_admin(user_id):
+            yield event.plain_result("❌ 只有管理员才能使用此指令")
+            return
+
+        # 加载数据
+        data = self._load_niuniu_lengths()
+        group_data = data.get(group_id, {})
+
+        # 统计重置人数
+        reset_count = 0
+        plugin_enabled = group_data.get('plugin_enabled', False)
+
+        # 重置所有用户数据
+        for uid in list(group_data.keys()):
+            if uid.startswith('_') or uid == 'plugin_enabled':
+                continue
+            if isinstance(group_data[uid], dict) and 'length' in group_data[uid]:
+                # 保留昵称，重置其他数据
+                nickname = group_data[uid].get('nickname', f'用户{uid}')
+                group_data[uid] = {
+                    'nickname': nickname,
+                    'length': random.randint(3, 10),
+                    'hardness': 1,
+                    'coins': 0,
+                    'items': {}
+                }
+                reset_count += 1
+
+        # 保留插件启用状态
+        group_data['plugin_enabled'] = plugin_enabled
+        data[group_id] = group_data
+        self._save_niuniu_lengths(data)
+
+        yield event.plain_result(f"✅ 已重置本群 {reset_count} 个牛牛的数据！\n所有人重新开始，公平竞争~")
+
+    async def _niuniu_hongbao(self, event):
+        """牛牛红包 - 给所有人发金币，仅管理员可用"""
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+
+        # 检查是否为管理员
+        if not self.is_admin(user_id):
+            yield event.plain_result("❌ 只有管理员才能使用此指令")
+            return
+
+        # 解析金币数量
+        msg_parts = event.message_str.split()
+        if len(msg_parts) < 2 or not msg_parts[1].isdigit():
+            yield event.plain_result("❌ 格式：牛牛红包 金币数量\n例：牛牛红包 100")
+            return
+
+        amount = int(msg_parts[1])
+        if amount <= 0:
+            yield event.plain_result("❌ 红包金额必须大于0")
+            return
+
+        if amount > 10000:
+            yield event.plain_result("❌ 单次红包金额不能超过10000")
+            return
+
+        # 加载数据
+        data = self._load_niuniu_lengths()
+        group_data = data.get(group_id, {})
+
+        # 给所有用户发红包
+        receive_count = 0
+        for uid in list(group_data.keys()):
+            if uid.startswith('_') or uid == 'plugin_enabled':
+                continue
+            if isinstance(group_data[uid], dict) and 'length' in group_data[uid]:
+                group_data[uid]['coins'] = group_data[uid].get('coins', 0) + amount
+                receive_count += 1
+
+        data[group_id] = group_data
+        self._save_niuniu_lengths(data)
+
+        total = amount * receive_count
+        yield event.plain_result(f"🧧 发红包成功！\n💰 每人 {amount} 金币\n👥 共 {receive_count} 人领取\n💵 总计发出 {total} 金币")
 
     async def _register(self, event):
         """注册牛牛"""
