@@ -18,10 +18,10 @@ class NiuniuShop:
         self._create_default_shop_config()  # 确保配置文件存在
 
     def _create_default_shop_config(self):
-        """创建默认商城配置文件"""
-        if not os.path.exists(self.shop_config_path):
-            with open(self.shop_config_path, 'w', encoding='utf-8') as f:
-                yaml.dump(DEFAULT_SHOP_ITEMS, f, allow_unicode=True)
+        """创建/更新默认商城配置文件，始终同步最新道具"""
+        # 始终用最新的 DEFAULT_SHOP_ITEMS 覆盖，确保新道具能加入商城
+        with open(self.shop_config_path, 'w', encoding='utf-8') as f:
+            yaml.dump(DEFAULT_SHOP_ITEMS, f, allow_unicode=True)
 
     def _load_shop_config(self) -> List[Dict[str, Any]]:
         """加载商城配置"""
@@ -482,7 +482,7 @@ class NiuniuShop:
                             # 应用硬度变化（不受祸水东引影响）
                             if hardness_change != 0:
                                 old_hardness = group_data[uid].get('hardness', 1)
-                                group_data[uid]['hardness'] = max(1, min(10, old_hardness + hardness_change))
+                                group_data[uid]['hardness'] = max(1, min(100, old_hardness + hardness_change))
 
                         # 处理交换事件（交换如果亏了也触发保险）
                         for swap in chaos_storm.get('swaps', []):
@@ -658,13 +658,13 @@ class NiuniuShop:
                     if ctx.length_change != 0:
                         user_data['length'] = old_length + ctx.length_change
                     if ctx.hardness_change != 0:
-                        # 主动自残允许硬度归0，其他情况最小为1
+                        # 主动自残允许硬度归0，其他情况最小为1，上限100
                         from niuniu_config import ShangbaoxianConfig
                         item_name = ctx.extra.get('item_name', '')
                         if item_name in ShangbaoxianConfig.INTENTIONAL_SELF_HURT_ITEMS:
-                            user_data['hardness'] = max(0, old_hardness + ctx.hardness_change)
+                            user_data['hardness'] = min(100, max(0, old_hardness + ctx.hardness_change))
                         else:
-                            user_data['hardness'] = max(1, old_hardness + ctx.hardness_change)
+                            user_data['hardness'] = min(100, max(1, old_hardness + ctx.hardness_change))
 
                     # 计算实际损失
                     length_loss = max(0, old_length - user_data.get('length', 0))

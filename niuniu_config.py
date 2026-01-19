@@ -57,7 +57,7 @@ class DajiaoConfig:
     LATE_DECREASE_MIN = 1
     LATE_DECREASE_MAX = 2
     LATE_HARDNESS_INCREASE = 1     # Hardness increase on success
-    MAX_HARDNESS = 10              # Maximum hardness cap
+    MAX_HARDNESS = 100             # Maximum hardness cap
 
 # =============================================================================
 # Dajiao Random Events Configuration

@@ -27,6 +27,7 @@ class NiuniuPlugin(Star):
     COOLDOWN_10_MIN = 600    # 10分钟
     COOLDOWN_30_MIN = 1800   # 30分钟
     COMPARE_COOLDOWN = 600   # 比划冷却
+    KAITAN_COOLDOWN = 3600   # 开团冷却（1小时）
     INVITE_LIMIT = 3         # 邀请次数限制
 
     def __init__(self, context: Context, config: dict = None):
@@ -648,7 +649,7 @@ class NiuniuPlugin(Star):
 
         # ===== 应用所有变化 =====
         total_change = change + extra_length
-        new_hardness = min(10, max(1, old_hardness + hardness_change))
+        new_hardness = min(100, max(1, old_hardness + hardness_change))
         hardness_updated = new_hardness != old_hardness
 
         updated_data = {
@@ -746,22 +747,25 @@ class NiuniuPlugin(Star):
                             result_msgs.append(template.format(nickname=nickname, victim=victim_name, bonus=bonus))
                 else:
                     # 硬度事件：75%坏事，25%好事
+                    victim_old_hardness = victim_data.get('hardness', 1)
                     if random.random() < 0.75:
                         # 坏事：扣别人硬度 1~2
                         h_damage = random.randint(1, 2)
-                        new_hardness = max(1, victim_data.get('hardness', 1) - h_damage)
-                        self.update_user_data(group_id, victim_id, {'hardness': new_hardness})
+                        victim_new_hardness = max(1, victim_old_hardness - h_damage)
+                        self.update_user_data(group_id, victim_id, {'hardness': victim_new_hardness})
                         if collateral_texts.get('hardness_bad'):
                             template = random.choice(collateral_texts['hardness_bad'])
                             result_msgs.append(template.format(nickname=nickname, victim=victim_name, h_damage=h_damage))
+                            result_msgs.append(f"  └ {victim_name} 硬度: {victim_old_hardness} → {victim_new_hardness}")
                     else:
                         # 好事：给别人硬度 1~2
                         h_bonus = random.randint(1, 2)
-                        new_hardness = min(10, victim_data.get('hardness', 1) + h_bonus)
-                        self.update_user_data(group_id, victim_id, {'hardness': new_hardness})
+                        victim_new_hardness = min(100, victim_old_hardness + h_bonus)
+                        self.update_user_data(group_id, victim_id, {'hardness': victim_new_hardness})
                         if collateral_texts.get('hardness_good'):
                             template = random.choice(collateral_texts['hardness_good'])
                             result_msgs.append(template.format(nickname=nickname, victim=victim_name, h_bonus=h_bonus))
+                            result_msgs.append(f"  └ {victim_name} 硬度: {victim_old_hardness} → {victim_new_hardness}")
 
         # ===== 构建最终输出 =====
         user_data = self.get_user_data(group_id, user_id)
@@ -1307,7 +1311,7 @@ class NiuniuPlugin(Star):
         winner_data = self.get_user_data(group_id, winner_id)
         if not special_event_triggered and winner_data['hardness'] <= 3 and random.random() < 0.05:
             hardness_bonus = random.randint(1, 3)
-            new_hardness = min(10, winner_data['hardness'] + hardness_bonus)
+            new_hardness = min(100, winner_data['hardness'] + hardness_bonus)
             self.update_user_data(group_id, winner_id, {'hardness': new_hardness})
             awakening_text = random.choice(self.niuniu_texts['compare'].get('hardness_awakening', ['💪 【硬度觉醒】硬度+{bonus}！'])).format(nickname=winner_name, bonus=hardness_bonus)
             result_msg.append(awakening_text)
@@ -1529,6 +1533,15 @@ class NiuniuPlugin(Star):
             yield event.plain_result("❌ 请先注册牛牛")
             return
 
+        # 检查开团冷却
+        last_actions = self._load_last_actions()
+        last_kaitan = last_actions.setdefault(group_id, {}).setdefault(user_id, {}).get('kaitan', 0)
+        on_cooldown, remaining = self.check_cooldown(last_kaitan, self.KAITAN_COOLDOWN)
+        if on_cooldown:
+            mins = int(remaining // 60) + 1
+            yield event.plain_result(f"❌ {nickname}，你开团太频繁了！还需等待 {mins} 分钟后才能再次开团")
+            return
+
         # 解析所有@的用户
         at_users = []
         if hasattr(event.message_obj, 'message') and event.message_obj.message:
@@ -1668,6 +1681,11 @@ class NiuniuPlugin(Star):
             champion = sorted_participants[0]
             result_msgs.append("")
             result_msgs.append(f"🎉 本次大乱斗冠军：{champion[1]}！")
+
+        # 更新开团冷却时间
+        last_actions = self._load_last_actions()
+        last_actions.setdefault(group_id, {}).setdefault(user_id, {})['kaitan'] = time.time()
+        self.update_last_actions(last_actions)
 
         yield event.plain_result("\n".join(result_msgs))
 
