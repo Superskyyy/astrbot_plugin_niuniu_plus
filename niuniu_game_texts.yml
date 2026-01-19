@@ -191,57 +191,123 @@ dajiao:
     - "🌿 {nickname} 的牛牛在光合作用"
     - "🎭 {nickname} 的牛牛：今天是划水的一天"
   not_registered: "❌ {nickname} 请先注册牛牛"
+  # 无效果时的安慰奖彩蛋
+  no_effect_easter_egg:
+    length:
+      - "🎁 虽然没效果，但{nickname}捡到了路边的{reward}cm！"
+      - "🍀 {nickname}的牛牛没反应，但意外获得了{reward}cm安慰奖！"
+      - "✨ {nickname}空手套白狼！凭空多出{reward}cm！"
+      - "🎲 {nickname}的牛牛摸鱼时偷偷长了{reward}cm"
+      - "🌟 老天爷看{nickname}可怜，赏了{reward}cm"
+      - "🎪 {nickname}的牛牛虽然罢工，但工会补偿了{reward}cm"
+      - "🧧 系统发红包！{nickname}获得{reward}cm！"
+      - "🎯 {nickname}抽中隐藏奖励：+{reward}cm！"
+    coins:
+      - "💰 {nickname}的牛牛没动静，但口袋里多了{reward}金币！"
+      - "🪙 {nickname}打胶时踢到了{reward}金币！"
+      - "🎰 {nickname}触发了安慰奖：{reward}金币！"
+      - "💎 {nickname}的牛牛在装死，但捡到了{reward}金币"
+      - "🧧 系统觉得{nickname}太惨了，补贴{reward}金币"
+      - "🎁 {nickname}获得参与奖：{reward}金币！"
+      - "✨ {nickname}的牛牛摆烂成功，获得摆烂补贴{reward}金币"
+      - "🌟 {nickname}什么都没做就赚了{reward}金币，躺赢！"
   # 随机事件
   critical:
     - "💥 【暴击】{nickname} 打出了完美一击！增长x3！"
     - "⚡ 【会心一击】{nickname} 的牛牛爆发了！增长翻三倍！"
     - "🔥 【超级暴击】{nickname} 手感火热！牛牛疯狂生长！"
+    - "🎯 【精准打击】{nickname} 一击必杀！三倍增长！"
+    - "⭐ 【天选之人】{nickname} 被选中了！增长x3！"
+    - "🌟 【神之一手】{nickname} 打出了传说中的一击！"
+    - "🎰 【大奖】{nickname} 抽中SSR！暴击生效！"
+    - "🦸 【觉醒】{nickname} 的牛牛觉醒了隐藏力量！"
   fumble:
     - "😵 【失手】{nickname} 用力过猛！损失翻倍！"
     - "💀 【翻车】{nickname} 操作失误！牛牛遭受重创！"
     - "🤕 【悲剧】{nickname} 手抖了！损失加倍！"
+    - "🙈 【社死】{nickname} 被人撞见了！惊吓翻倍！"
+    - "😱 【惨案】{nickname} 的牛牛发出了惨叫！"
+    - "🤡 【小丑】{nickname} 表演失败！损失x2！"
+    - "💔 【心碎】{nickname} 的牛牛伤透了心！"
+    - "🌧️ 【暴风雨】{nickname} 遭遇了命运的暴击！"
   hardness_awakening:
     - "💪 【硬度觉醒】{nickname} 的牛牛突然变硬了！硬度+{bonus}！"
     - "⚡ 【觉醒】{nickname} 觉醒了隐藏力量！硬度提升{bonus}点！"
     - "🔥 【进化】{nickname} 的牛牛硬化了！+{bonus}硬度！"
+    - "🗿 【石化】{nickname} 的牛牛变得像石头一样硬！+{bonus}！"
+    - "💎 【钻石化】{nickname} 的牛牛达到了钻石硬度！+{bonus}！"
+    - "🦾 【机械改造】{nickname} 的牛牛升级了！硬度+{bonus}！"
+    - "🏔️ 【泰山压顶】{nickname} 的牛牛坚如磐石！+{bonus}硬度！"
   coin_drop:
     - "💰 【金币掉落】{nickname} 打胶时捡到了{coins}金币！"
     - "🪙 【意外收获】{nickname} 发现地上有{coins}金币！"
     - "💎 【天降横财】{nickname} 打胶打出了{coins}金币！"
+    - "🧧 【红包雨】{nickname} 被金币砸中了！+{coins}！"
+    - "🎰 【中奖】{nickname} 的牛牛摇出了{coins}金币！"
+    - "🏆 【奖金】{nickname} 获得了打胶奖励金{coins}！"
+    - "💵 【捡钱】{nickname} 的牛牛踢到了钱包！{coins}金币！"
+    - "🎁 【盲盒】{nickname} 开出了{coins}金币！"
   time_warp:
     - "⏰ 【时间扭曲】{nickname} 触发了时空裂缝！冷却时间重置！"
     - "🌀 【时光倒流】{nickname} 的牛牛穿越了！可以立即再次打胶！"
     - "⚡ 【时间加速】{nickname} 进入了贤者时间的贤者时间！CD清零！"
+    - "🕐 【时停】{nickname} 学会了时停！CD归零！"
+    - "🔄 【重置】{nickname} 按下了刷新键！冷却消失！"
+    - "⏳ 【沙漏】{nickname} 翻转了时间沙漏！"
+    - "🌌 【虫洞】{nickname} 穿越了虫洞！时间重置！"
   inspiration:
     - "✨ 【灵感迸发】{nickname} 获得了神秘灵感！下次打胶必定成功！"
     - "🌟 【天启】{nickname} 被神眷顾了！下次打胶稳赢！"
     - "💫 【开悟】{nickname} 悟了！下次打胶100%增长！"
+    - "🧠 【顿悟】{nickname} 突然开窍了！下次必成！"
+    - "📖 【秘籍】{nickname} 获得了打胶秘籍！下次稳了！"
+    - "🎓 【毕业】{nickname} 从打胶学院毕业了！下次必涨！"
+    - "🔮 【预言】水晶球显示{nickname}下次会成功！"
   audience_effect:
     - "👥 【观众效应】{nickname} 和 {other} 产生了共鸣！双方各+1cm！"
     - "🤝 【同步】{nickname} 与 {other} 心有灵犀！各获得1cm！"
     - "🎭 【群体狂欢】{nickname} 和 {other} 一起成长！+1cm！"
+    - "🎪 【马戏团】{nickname} 和 {other} 组成了表演搭档！各+1cm！"
+    - "🎵 【合唱】{nickname} 和 {other} 唱起了二重奏！各+1cm！"
+    - "🤜🤛 【击掌】{nickname} 和 {other} 击掌庆祝！各+1cm！"
   mysterious_force:
     - "🌀 【神秘力量】{nickname} 被神秘力量笼罩！长度{change}cm！"
     - "👻 【命运之手】{nickname} 的牛牛被命运摆弄！{change}cm！"
     - "🎲 【混沌】{nickname} 触发了随机事件！长度变化{change}cm！"
+    - "🔮 【占卜】塔罗牌显示：{nickname} {change}cm！"
+    - "👽 【外星科技】{nickname} 被外星人改造了！{change}cm！"
+    - "🌌 【宇宙射线】{nickname} 被射线照射！{change}cm！"
+    - "🎭 【命运轮盘】轮盘转动...{nickname} {change}cm！"
+    - "🃏 【小丑牌】{nickname} 抽到了命运之牌！{change}cm！"
   # 连击系统
   combo_3:
     - "🔥 【3连击】{nickname} 手感不错！额外+{bonus}cm！"
     - "⚡ 【连击x3】{nickname} 保持状态！奖励{bonus}cm！"
+    - "🎯 【三连】{nickname} 稳定输出！+{bonus}cm！"
+    - "🏃 【连续作战】{nickname} 越战越勇！+{bonus}cm！"
   combo_5:
     - "🔥🔥 【5连击】{nickname} 状态火热！+{length_bonus}cm，+{coin_bonus}金币！"
     - "⚡⚡ 【连击x5】{nickname} 势不可挡！奖励{length_bonus}cm和{coin_bonus}金币！"
+    - "🌟 【五连绝世】{nickname} 打出了五连！豪华奖励！"
+    - "🎖️ 【五星好评】{nickname} 获得五星评价！双倍奖励！"
   combo_10:
     - "🔥🔥🔥 【10连击】{nickname} 已入化境！+{length_bonus}cm，+{coin_bonus}金币，+{hardness_bonus}硬度！"
     - "👑 【完美连击】{nickname} 达成10连！超级奖励！"
+    - "🏆 【传奇】{nickname} 创造了传奇！全属性提升！"
+    - "🌈 【十全十美】{nickname} 达成完美成就！"
   combo_break:
     - "💔 {nickname} 的连击中断了...（之前{count}连）"
     - "😢 {nickname} 打断了{count}连击..."
+    - "🫠 {nickname} 的{count}连击断了，可惜..."
+    - "😵 {nickname} 功亏一篑！{count}连击终结..."
   # 每日首次
   daily_first:
     - "🌅 【每日首胶】{nickname} 今天第一次打胶！额外+{bonus}cm！"
     - "☀️ 【晨间福利】{nickname} 开启新的一天！奖励{bonus}cm！"
     - "🎁 【签到奖励】{nickname} 今日首次打胶！+{bonus}cm！"
+    - "🌄 【早起的牛】{nickname} 勤劳打胶！+{bonus}cm！"
+    - "🐓 【闻鸡起舞】{nickname} 今日首打！+{bonus}cm！"
+    - "📅 【打卡成功】{nickname} 每日打胶任务完成！+{bonus}cm！"
   # 时段感知
   time_period:
     morning_glory:

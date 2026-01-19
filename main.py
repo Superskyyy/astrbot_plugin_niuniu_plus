@@ -677,12 +677,32 @@ class NiuniuPlugin(Star):
         # ===== 生成基础消息 =====
         if change > 0:
             template = random.choice(self.niuniu_texts['dajiao']['increase'])
+            base_text = template.format(nickname=nickname, change=abs(change))
         elif change < 0:
             template = decrease_template or random.choice(self.niuniu_texts['dajiao']['decrease'])
+            base_text = template.format(nickname=nickname, change=abs(change))
         else:
-            template = random.choice(self.niuniu_texts['dajiao']['no_effect'])
+            # 无效果时触发安慰奖彩蛋
+            no_effect_template = random.choice(self.niuniu_texts['dajiao']['no_effect'])
+            base_text = no_effect_template.format(nickname=nickname)
 
-        base_text = template.format(nickname=nickname, change=abs(change))
+            # 50%概率获得小长度，50%概率获得金币
+            easter_egg_texts = self.niuniu_texts['dajiao'].get('no_effect_easter_egg', {})
+            if random.random() < 0.5:
+                # 获得小长度 1~3cm
+                reward = random.randint(1, 3)
+                user_data = self.get_user_data(group_id, user_id)
+                self.update_user_data(group_id, user_id, {'length': user_data['length'] + reward})
+                if easter_egg_texts.get('length'):
+                    egg_template = random.choice(easter_egg_texts['length'])
+                    result_msgs.append(egg_template.format(nickname=nickname, reward=reward))
+            else:
+                # 获得金币 5~20
+                reward = random.randint(5, 20)
+                self.games.update_user_coins(group_id, user_id, reward)
+                if easter_egg_texts.get('coins'):
+                    egg_template = random.choice(easter_egg_texts['coins'])
+                    result_msgs.append(egg_template.format(nickname=nickname, reward=reward))
 
         # 合并效果消息（道具效果）
         if ctx.messages:

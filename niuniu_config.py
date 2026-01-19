@@ -25,7 +25,7 @@ TIMEZONE = 'Asia/Shanghai'
 # =============================================================================
 class Cooldowns:
     DAJIAO_COOLDOWN = 600          # 10 minutes - dajiao cooldown
-    DAJIAO_BONUS_THRESHOLD = 1800  # 30 minutes - after this, better rewards
+    DAJIAO_BONUS_THRESHOLD = 1200  # 20 minutes - after this, better rewards
     COMPARE_COOLDOWN = 600         # 10 minutes - compare cooldown per target
     COMPARE_LIMIT_WINDOW = 600     # 10 minutes - window for compare count limit
     COMPARE_LIMIT_COUNT = 3        # Max compares within window
@@ -391,7 +391,7 @@ DEFAULT_SHOP_ITEMS = [
         'type': 'passive',
         'max': 20,
         'quantity': 5,
-        'desc': "短时间内多次打胶或比划，同时不受30分钟内连续打胶的debuff",
+        'desc': "短时间内多次打胶或比划，同时不受20分钟内连续打胶的debuff",
         'price': 100
     },
     {
