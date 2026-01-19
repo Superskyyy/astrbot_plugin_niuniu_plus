@@ -45,8 +45,8 @@ class NiuniuShop:
         return list(config_map.values())
 
     def get_shop_items(self) -> List[Dict[str, Any]]:
-        """获取商城商品列表"""
-        return self._load_shop_config()
+        """获取商城商品列表 - 直接使用代码中的配置，避免遗留文件问题"""
+        return copy.deepcopy(DEFAULT_SHOP_ITEMS)
 
     async def show_shop(self, event: AstrMessageEvent):
         """显示商城"""
