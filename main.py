@@ -186,6 +186,179 @@ class NiuniuPlugin(Star):
             return f"{length/100:.2f}m"
         return f"{length}cm"
 
+    def _process_delegated_chaos_storm(self, ctx, group_id):
+        """处理夺牛魔委托的混沌风暴效果"""
+        chaos_storm = ctx.extra['chaos_storm']
+        niuniu_data = self._load_niuniu_data()
+        group_data = niuniu_data.setdefault(group_id, {})
+
+        # 应用所有人的长度和硬度变化
+        for change in chaos_storm.get('changes', []):
+            uid = change['user_id']
+            if uid not in group_data:
+                continue
+            length_change = change.get('change', 0)
+            hardness_change = change.get('hardness_change', 0)
+
+            if length_change != 0:
+                group_data[uid]['length'] = group_data[uid].get('length', 0) + length_change
+            if hardness_change != 0:
+                old_hardness = group_data[uid].get('hardness', 1)
+                group_data[uid]['hardness'] = max(1, min(100, old_hardness + hardness_change))
+
+        # 处理交换事件
+        for swap in chaos_storm.get('swaps', []):
+            u1_id = swap['user1_id']
+            u2_id = swap['user2_id']
+            if u1_id in group_data and u2_id in group_data:
+                u1_old = swap['user1_old']
+                u2_old = swap['user2_old']
+                group_data[u1_id]['length'] = u2_old
+                group_data[u2_id]['length'] = u1_old
+
+        # 处理金币变化
+        for coin_change in chaos_storm.get('coin_changes', []):
+            uid = coin_change['user_id']
+            amount = coin_change['amount']
+            self.games.update_user_coins(group_id, uid, amount)
+
+        # 处理护盾消耗
+        for shield_info in ctx.extra.get('consume_shields', []):
+            target_id = shield_info['user_id']
+            if target_id in group_data:
+                current = group_data[target_id].get('shield_charges', 0)
+                group_data[target_id]['shield_charges'] = max(0, current - shield_info['amount'])
+
+        # 处理全属性交换
+        for full_swap in chaos_storm.get('full_swaps', []):
+            u1_id = full_swap['user1_id']
+            u2_id = full_swap['user2_id']
+            if u1_id in group_data and u2_id in group_data:
+                # 交换长度
+                group_data[u1_id]['length'] = full_swap['user2_old_len']
+                group_data[u2_id]['length'] = full_swap['user1_old_len']
+                # 交换硬度
+                group_data[u1_id]['hardness'] = full_swap['user2_old_hard']
+                group_data[u2_id]['hardness'] = full_swap['user1_old_hard']
+
+        # 处理冷却重置
+        for uid in chaos_storm.get('cooldown_resets', []):
+            if uid in group_data:
+                group_data[uid]['last_dajiao_time'] = 0
+
+        # 处理幸运祝福
+        for uid in chaos_storm.get('lucky_buffs', []):
+            if uid in group_data:
+                group_data[uid]['next_dajiao_guaranteed'] = True
+
+        # 处理量子纠缠
+        for entangle in chaos_storm.get('quantum_entangles', []):
+            u1_id = entangle['user1_id']
+            u2_id = entangle['user2_id']
+            avg_len = entangle['avg']
+            if u1_id in group_data:
+                group_data[u1_id]['length'] = avg_len
+            if u2_id in group_data:
+                group_data[u2_id]['length'] = avg_len
+
+        # 处理寄生虫
+        for parasite in chaos_storm.get('parasites', []):
+            host_id = parasite['host_id']
+            if host_id in group_data:
+                parasites_list = group_data[host_id].get('parasites', [])
+                parasites_list.append({
+                    'beneficiary_id': parasite['beneficiary_id']
+                })
+                group_data[host_id]['parasites'] = parasites_list
+
+        # 处理全局事件
+        for global_event in chaos_storm.get('global_events', []):
+            event_type = global_event['type']
+            selected_ids = [c['user_id'] for c in chaos_storm.get('changes', [])]
+            for swap in chaos_storm.get('swaps', []):
+                if swap['user1_id'] not in selected_ids:
+                    selected_ids.append(swap['user1_id'])
+                if swap['user2_id'] not in selected_ids:
+                    selected_ids.append(swap['user2_id'])
+            selected_ids = list(set(uid for uid in selected_ids if uid in group_data))
+
+            if event_type == 'doomsday' and len(selected_ids) >= 2:
+                lengths = [(uid, group_data[uid].get('length', 0)) for uid in selected_ids]
+                lengths.sort(key=lambda x: x[1])
+                shortest_uid = lengths[0][0]
+                longest_uid = lengths[-1][0]
+                old_longest = lengths[-1][1]
+                group_data[shortest_uid]['length'] = 0
+                group_data[longest_uid]['length'] = old_longest * 2
+                ctx.messages.append(f"⚖️ 末日审判：{group_data[shortest_uid].get('nickname', shortest_uid)} 归零！{group_data[longest_uid].get('nickname', longest_uid)} 翻倍！")
+
+            elif event_type == 'roulette' and len(selected_ids) >= 2:
+                lengths = [group_data[uid].get('length', 0) for uid in selected_ids]
+                random.shuffle(lengths)
+                for i, uid in enumerate(selected_ids):
+                    group_data[uid]['length'] = lengths[i]
+                ctx.messages.append(f"🎰 轮盘重置：{len(selected_ids)}人的长度已重新洗牌！")
+
+            elif event_type == 'reverse_talent' and len(selected_ids) >= 2:
+                lengths = [(uid, group_data[uid].get('length', 0)) for uid in selected_ids]
+                lengths.sort(key=lambda x: x[1])
+                shortest_uid, shortest_len = lengths[0]
+                longest_uid, longest_len = lengths[-1]
+                group_data[shortest_uid]['length'] = longest_len
+                group_data[longest_uid]['length'] = shortest_len
+                ctx.messages.append(f"🔄 反向天赋：{group_data[shortest_uid].get('nickname', shortest_uid)} 和 {group_data[longest_uid].get('nickname', longest_uid)} 长度互换！")
+
+            elif event_type == 'lottery_bomb':
+                if global_event.get('jackpot'):
+                    for uid in selected_ids:
+                        old_len = group_data[uid].get('length', 0)
+                        group_data[uid]['length'] = old_len * 2
+                    ctx.messages.append(f"🎊 团灭彩票大奖！{len(selected_ids)}人长度全部翻倍！")
+                else:
+                    for uid in selected_ids:
+                        old_len = group_data[uid].get('length', 0)
+                        old_hard = group_data[uid].get('hardness', 1)
+                        len_loss = int(abs(old_len) * 0.5)
+                        hard_loss = int(old_hard * 0.5)
+                        if old_len > 0:
+                            group_data[uid]['length'] = old_len - len_loss
+                        else:
+                            group_data[uid]['length'] = old_len + len_loss
+                        group_data[uid]['hardness'] = max(1, old_hard - hard_loss)
+                    ctx.messages.append(f"💣 团灭彩票未中...{len(selected_ids)}人各-50%长度和硬度！")
+
+        self._save_niuniu_data(niuniu_data)
+
+    def _process_delegated_dazibao(self, ctx, group_id, user_id):
+        """处理夺牛魔委托的大自爆效果"""
+        dazibao = ctx.extra['dazibao']
+        niuniu_data = self._load_niuniu_data()
+        group_data = niuniu_data.setdefault(group_id, {})
+
+        # 自己归零
+        if user_id in group_data:
+            group_data[user_id]['length'] = 0
+            group_data[user_id]['hardness'] = 1
+
+        # 处理护盾消耗
+        for shield_info in ctx.extra.get('consume_shields', []):
+            target_id = shield_info['user_id']
+            if target_id in group_data:
+                current = group_data[target_id].get('shield_charges', 0)
+                group_data[target_id]['shield_charges'] = max(0, current - shield_info['amount'])
+
+        # 扣除受害者的长度和硬度
+        for victim in dazibao.get('victims', []):
+            uid = victim['user_id']
+            if uid not in group_data or victim.get('shielded', False):
+                continue
+            length_damage = victim['length_damage']
+            hardness_damage = victim['hardness_damage']
+            group_data[uid]['length'] = group_data[uid].get('length', 0) - length_damage
+            group_data[uid]['hardness'] = max(1, group_data[uid].get('hardness', 1) - hardness_damage)
+
+        self._save_niuniu_data(niuniu_data)
+
     def check_cooldown(self, last_time, cooldown):
         """检查冷却时间"""
         current = time.time()
@@ -575,12 +748,19 @@ class NiuniuPlugin(Star):
             # 清除灵感状态
             self.update_user_data(group_id, user_id, {'inspiration_active': False})
 
+        # ===== 幸运祝福检查（混沌风暴buff） =====
+        has_lucky_buff = user_data.get('next_dajiao_guaranteed', False)
+        if has_lucky_buff:
+            # 清除幸运祝福状态
+            self.update_user_data(group_id, user_id, {'next_dajiao_guaranteed': False})
+            result_msgs.append("🍀 幸运祝福生效！")
+
         # ===== 计算基础变化 =====
         change = 0
         decrease_template = None
 
-        if has_inspiration:
-            # 灵感迸发：必定成功
+        if has_inspiration or has_lucky_buff:
+            # 灵感迸发/幸运祝福：必定成功
             change = random.randint(3, 6)
         elif elapsed < self.COOLDOWN_30_MIN:  # 10-30分钟
             rand = random.random()
@@ -748,6 +928,24 @@ class NiuniuPlugin(Star):
             updated_data['hardness'] = new_hardness
 
         self.update_user_data(group_id, user_id, updated_data)
+
+        # ===== 寄生虫效果：如果有人在我身上种了寄生虫，他们也获得同等长度 =====
+        parasites = user_data.get('parasites', [])
+        if parasites and total_change > 0:
+            parasite_msgs = []
+            for parasite in parasites:
+                beneficiary_id = parasite['beneficiary_id']
+                beneficiary_name = parasite['beneficiary_name']
+                # 给受益者加长度
+                beneficiary_data = self.get_user_data(group_id, beneficiary_id)
+                if beneficiary_data:
+                    self.update_user_data(group_id, beneficiary_id, {
+                        'length': beneficiary_data['length'] + total_change
+                    })
+                    parasite_msgs.append(f"🦠 {beneficiary_name} 的寄生虫生效！+{total_change}cm")
+            # 清除寄生虫（一次性效果）
+            self.update_user_data(group_id, user_id, {'parasites': []})
+            result_msgs.extend(parasite_msgs)
 
         # 更新金币
         if extra_coins > 0:
@@ -990,7 +1188,8 @@ class NiuniuPlugin(Star):
         old_u_len = u_len
         old_t_len = t_len
 
-        # 创建效果上下文
+        # 创建效果上下文（包含 group_data 供夺牛魔委托效果使用）
+        all_group_data = self._load_niuniu_data().get(group_id, {})
         ctx = EffectContext(
             group_id=group_id,
             user_id=user_id,
@@ -1004,6 +1203,7 @@ class NiuniuPlugin(Star):
             target_length=t_len,
             target_hardness=t_hardness
         )
+        ctx.extra['group_data'] = all_group_data
 
         # 触发 BEFORE_COMPARE 效果（如夺牛魔）
         ctx = self.effects.trigger(EffectTrigger.BEFORE_COMPARE, ctx, user_items, target_items)
@@ -1013,6 +1213,19 @@ class NiuniuPlugin(Star):
 
         # 如果被拦截（如夺牛魔触发），直接返回结果
         if ctx.intercept:
+            # 处理夺牛魔委托的混沌风暴效果
+            if ctx.extra.get('chaos_storm'):
+                self._process_delegated_chaos_storm(ctx, group_id)
+                yield event.plain_result("\n".join(ctx.messages))
+                return
+
+            # 处理夺牛魔委托的大自爆效果
+            if ctx.extra.get('dazibao'):
+                self._process_delegated_dazibao(ctx, group_id, user_id)
+                yield event.plain_result("\n".join(ctx.messages))
+                return
+
+            # 普通夺牛魔效果（steal/self_clear）
             # 应用长度变化
             if ctx.length_change != 0:
                 new_user_len = user_data['length'] + ctx.length_change
@@ -1020,6 +1233,14 @@ class NiuniuPlugin(Star):
             if ctx.target_length_change != 0:
                 new_target_len = target_data['length'] + ctx.target_length_change
                 self.update_user_data(group_id, target_id, {'length': new_target_len})
+
+            # 处理硬度变化（夺牛魔steal）
+            if ctx.hardness_change != 0:
+                new_user_hard = max(1, min(100, user_data['hardness'] + ctx.hardness_change))
+                self.update_user_data(group_id, user_id, {'hardness': new_user_hard})
+            if ctx.extra.get('target_hardness_change', 0) != 0:
+                new_target_hard = max(1, target_data['hardness'] + ctx.extra['target_hardness_change'])
+                self.update_user_data(group_id, target_id, {'hardness': new_target_hard})
 
             # 添加长度变化显示
             user_data = self.get_user_data(group_id, user_id)
@@ -1058,13 +1279,13 @@ class NiuniuPlugin(Star):
         else:
             # 都是正数：正常计算
             length_factor = (u_len - t_len) / max(u_len, t_len, 1) * 0.2
-        hardness_factor = (u_hardness - t_hardness) * 0.08
+        hardness_factor = (ctx.user_hardness - ctx.target_hardness) * 0.08
         # 应用连击加成
         win_prob = min(max(base_win + length_factor + hardness_factor + streak_bonus, 0.15), 0.85)
 
         # 执行判定
         is_win = random.random() < win_prob
-        base_gain = random.randint(0, 3)
+        base_gain = random.randint(1, 5)
         base_loss = random.randint(1, 2)
 
         # ===== 更新连击状态 =====
@@ -1098,7 +1319,7 @@ class NiuniuPlugin(Star):
 
         if is_win:
             # 硬度影响伤害：赢家(user)硬度加成攻击，输家(target)硬度减少损失
-            hardness_bonus = max(0, int((u_hardness - 5) * 0.3))
+            hardness_bonus = max(0, int((u_hardness - 5) * 0.15))
             hardness_defense = max(0, int((t_hardness - 5) * 0.2))
             gain = base_gain + hardness_bonus
             loss = max(1, base_loss - hardness_defense)
@@ -1192,7 +1413,7 @@ class NiuniuPlugin(Star):
                 text += f"\n{self.niuniu_texts['compare']['user_no_increase'].format(nickname=nickname)}"
         else:
             # 硬度影响伤害：赢家(target)硬度加成攻击，输家(user)硬度减少损失
-            hardness_bonus = max(0, int((t_hardness - 5) * 0.3))
+            hardness_bonus = max(0, int((t_hardness - 5) * 0.15))
             hardness_defense = max(0, int((u_hardness - 5) * 0.2))
             gain = base_gain + hardness_bonus
             loss = max(1, base_loss - hardness_defense)
@@ -1656,11 +1877,16 @@ class NiuniuPlugin(Star):
                         participants.append((target_id, target_data.get('nickname', f'用户{target_id}')))
         else:
             # 没@人：全群已注册用户参与
+            # 先确保发起者在参与者列表中
+            participants.append((user_id, nickname))
             data = self._load_niuniu_lengths()
             group_users = data.get(group_id, {})
             for uid, udata in group_users.items():
                 # 跳过非用户数据（如plugin_enabled, _recent_compares等）
                 if uid.startswith('_') or uid == 'plugin_enabled':
+                    continue
+                # 跳过发起者（已添加）
+                if uid == user_id:
                     continue
                 if isinstance(udata, dict) and 'length' in udata:
                     participants.append((uid, udata.get('nickname', f'用户{uid}')))

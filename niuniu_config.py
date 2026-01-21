@@ -45,15 +45,15 @@ class DajiaoConfig:
     EARLY_INCREASE_CHANCE = 0.4    # 40% chance to increase
     EARLY_DECREASE_CHANCE = 0.3    # 30% chance to decrease (0.4 + 0.3 = 0.7)
     EARLY_INCREASE_MIN = 2
-    EARLY_INCREASE_MAX = 5
+    EARLY_INCREASE_MAX = 10
     EARLY_DECREASE_MIN = 1
     EARLY_DECREASE_MAX = 3
 
     # After 30 minute probabilities and ranges
     LATE_INCREASE_CHANCE = 0.7     # 70% chance to increase
     LATE_DECREASE_CHANCE = 0.2     # 20% chance to decrease (0.7 + 0.2 = 0.9)
-    LATE_INCREASE_MIN = 3
-    LATE_INCREASE_MAX = 6
+    LATE_INCREASE_MIN = 4
+    LATE_INCREASE_MAX = 12
     LATE_DECREASE_MIN = 1
     LATE_DECREASE_MAX = 2
     LATE_HARDNESS_INCREASE = 1     # Hardness increase on success
@@ -379,18 +379,11 @@ DEFAULT_SHOP_ITEMS = [
         'id': 1,
         'name': "巴黎牛家",
         'type': 'active',
-        'desc': "立即增加3点硬度",
-        'price': 50
+        'desc': "立即增加10点硬度，但会随机缩短1-10%长度",
+        'price': 200
     },
     {
         'id': 2,
-        'name': "巴适得板生长素",
-        'type': 'active',
-        'desc': "立即增加20cm长度，但会减少2点硬度",
-        'price': 100
-    },
-    {
-        'id': 3,
         'name': "妙脆角",
         'type': 'passive',
         'max': 3,
@@ -398,22 +391,15 @@ DEFAULT_SHOP_ITEMS = [
         'price': 70
     },
     {
-        'id': 4,
+        'id': 3,
         'name': "淬火爪刀",
         'type': 'passive',
         'max': 3,
-        'desc': "触发掠夺时，额外掠夺10%长度",
+        'desc': "触发掠夺时，额外掠夺10%长度和10%硬度",
         'price': 100
     },
     {
-        'id': 6,
-        'name': "不灭之握",
-        'type': 'active',
-        'desc': "直接增加30cm长度",
-        'price': 200
-    },
-    {
-        'id': 7,
+        'id': 4,
         'name': "致命节奏",
         'type': 'passive',
         'max': 20,
@@ -422,90 +408,98 @@ DEFAULT_SHOP_ITEMS = [
         'price': 100
     },
     {
-        'id': 8,
-        'name': "阿姆斯特朗旋风喷射炮",
-        'type': 'active',
-        'desc': "长度直接+1m，硬度+10",
-        'price': 1000
-    },
-    {
-        'id': 9,
+        'id': 5,
         'name': "夺牛魔蝌蚪罐头",
         'type': 'passive',
         'max': 1,
-        'desc': "在比划时，有50%的概率夺取对方全部长度，10%的概率清空自己的长度，40%的概率无效",
+        'desc': "比划时触发：50%夺取全部长度+硬度｜20%混沌风暴｜20%大自爆｜10%自爆归零",
         'price': 600
     },
     {
-        'id': 10,
+        'id': 6,
         'name': "赌徒硬币",
         'type': 'active',
-        'desc': "抛硬币！50%概率长度翻倍，50%概率长度减半",
+        'desc': "抛硬币！50%翻倍/48%减半/1%头等奖(变4倍)/1%霉运(变负2倍)",
         'price': 50
     },
     {
-        'id': 11,
+        'id': 7,
         'name': "劫富济贫",
         'type': 'active',
-        'desc': "从排名第一的牛牛手中抢15%长度，平分给最穷的3人（每天限1次）",
-        'price': 300
+        'desc': "从排名第一的牛牛手中抢50%长度和20%硬度，平分给随机3人（可能包括自己，但不会给首富）",
+        'price': 600
     },
     {
-        'id': 12,
+        'id': 8,
         'name': "混沌风暴",
         'type': 'active',
         'desc': "随机选10人，每人触发一个奇怪事件！",
         'price': 500
     },
     {
-        'id': 13,
+        'id': 9,
         'name': "牛牛盾牌",
         'type': 'active',
-        'desc': "获得3层盾牌：每层消耗后完全免疫劫富济贫/混沌风暴/月牙天冲/被别人大自爆；每层消耗后减免夺牛魔10%伤害",
+        'desc': "⚠️购买后会扣除当前50%长度和硬度！获得3层盾牌：每层消耗后完全免疫劫富济贫/混沌风暴/月牙天冲/被别人大自爆；每层消耗后减免夺牛魔10%伤害",
         'price': 500
     },
     {
-        'id': 14,
+        'id': 10,
         'name': "穷牛一生",
         'type': 'active',
         'desc': "便宜的盲盒！随机改变长度和硬度",
         'price': 25
     },
     {
-        'id': 15,
+        'id': 11,
         'name': "月牙天冲",
         'type': 'active',
         'desc': "随机选一位群友，双方同时损失发起人50%的长度！可把人冲成负数！",
         'price': 300
     },
     {
-        'id': 16,
+        'id': 12,
         'name': "牛牛大自爆",
         'type': 'active',
         'desc': "自己归零，损失的长度/硬度随机扣到top3头上！同归于尽！",
         'price': 250
     },
     {
-        'id': 17,
+        'id': 13,
         'name': "祸水东引",
         'type': 'active',
         'desc': "获得1次转嫁，受到>=50cm长度伤害时转给随机群友！（无法转移夺牛魔）",
         'price': 250
     },
     {
-        'id': 18,
+        'id': 14,
         'name': "上保险",
         'type': 'active',
         'desc': "获得10次理赔机会，损失>=50cm或硬度>=10时赔付200金币！自残类不赔",
         'price': 1000
     },
     {
-        'id': 19,
+        'id': 15,
         'name': "绝对值！",
         'type': 'active',
         'desc': "仅限负数牛牛！花费=|长度|金币，把负数取绝对值翻身！",
         'price': 0,  # 动态定价，实际价格在效果中计算
         'dynamic_price': True
+    },
+    {
+        'id': 16,
+        'name': "小蓝片",
+        'type': 'passive',
+        'max': 5,
+        'desc': "下一次比划时硬度视为100",
+        'price': 200
+    },
+    {
+        'id': 17,
+        'name': "牛牛黑洞",
+        'type': 'active',
+        'desc': "召唤黑洞吸取5-15人各3-10%长度！40%归你/30%喷射路人/20%反噬自己/10%吃撑反喷",
+        'price': 300
     }
 ]
 
@@ -548,10 +542,10 @@ class YueyaTianchongConfig:
     MIN_PLAYERS = 2                    # 最少需要2人（自己+1个目标）
 
 # =============================================================================
-# 保险箱 Configuration
+# 牛牛盾牌 Configuration
 # =============================================================================
-class BaoxianxiangConfig:
-    SHIELD_CHARGES = 3                 # 每个保险箱提供3次防护
+class NiuniuDunpaiConfig:
+    SHIELD_CHARGES = 3                 # 每个牛牛盾牌提供3次护盾
 
 # =============================================================================
 # 穷牛一生 Configuration (期望值略正的赌博道具)
@@ -601,8 +595,9 @@ class QiongniuYishengConfig:
 class HundunFengbaoConfig:
     MAX_TARGETS = 10               # 最多影响10人
     MIN_PLAYERS = 3                # 最少需要3人才能触发
-    # 混沌事件列表 (权重, 事件ID, 事件描述模板)
+    # 混沌事件列表 (权重, 事件ID, 事件描述模板, 参数)
     CHAOS_EVENTS = [
+        # 基础事件
         (15, 'length_up', '长度+{value}cm', {'min': 5, 'max': 20}),
         (15, 'length_down', '长度-{value}cm', {'min': 3, 'max': 15}),
         (10, 'hardness_up', '硬度+{value}', {'min': 1, 'max': 2}),
@@ -619,23 +614,61 @@ class HundunFengbaoConfig:
         (2, 'give_to_random', '送给{target} {value}cm', {'min': 3, 'max': 10}),
         (5, 'nothing', '啥也没发生...', {}),
         (2, 'reverse_sign', '长度正负反转！{old}→{new}cm', {}),
+        # 新增事件
+        (3, 'full_swap', '与{target}交换了全部属性！', {}),  # 长度+硬度互换
+        (2, 'cooldown_reset', '打胶冷却清零！', {}),  # 重置打胶CD
+        (2, 'chaos_chain', '混沌连锁！触发双重事件！', {}),  # 触发2个事件
+        (3, 'hardness_to_length', '硬度转化为长度！{h}硬度→{l}cm', {}),  # 硬度变长度
+        (3, 'length_to_hardness', '长度转化为硬度！{l}cm→{h}硬度', {}),  # 长度变硬度
+        (1, 'chaos_tax', '被混沌收税！-5%长度', {}),  # 交5%给使用者
+        (2, 'clone_length', '克隆了{target}的长度！', {}),  # 复制别人长度
+        (2, 'lucky_buff', '获得幸运祝福！下次打胶必增长！', {}),  # 下次打胶必成功
+        (3, 'length_quake', '长度震荡！{change}cm', {'min': -30, 'max': 30}),  # 大幅随机波动
+        # 更有趣的事件
+        (2, 'quantum_entangle', '与{target}量子纠缠！双方长度平均化！', {}),  # 双方取平均
+        (2, 'dark_sacrifice', '黑暗献祭！牺牲{loss}cm，{target}获得{gain}cm！', {}),  # 牺牲自己给别人×3
+        (3, 'resurrection', '牛牛复活！', {'min': 20, 'max': 50}),  # 负数变正数
+        (1, 'doomsday', '【末日审判】最短归零，最长翻倍！', {}),  # 全局事件
+        (1, 'roulette', '【轮盘重置】所有人长度重新洗牌！', {}),  # 全局事件
+        (1, 'reverse_talent', '【反向天赋】最长和最短互换！', {}),  # 全局事件
+        (1, 'lottery_bomb', '【团灭彩票】5%全体翻倍，95%全体-50%长度和硬度！', {}),  # 全局事件
+        (2, 'parasite', '在{target}身上种下寄生虫！他下次打胶你也+同等！', {}),  # 持久效果
     ]
 
 # =============================================================================
 # 劫富济贫 Configuration
 # =============================================================================
 class JiefuJipinConfig:
-    STEAL_PERCENT = 0.15           # 15% from richest
-    BENEFICIARY_COUNT = 3          # Give to bottom 3
-    DAILY_LIMIT = 1                # Once per day
+    STEAL_LENGTH_PERCENT = 0.50    # 50% length from richest
+    STEAL_HARDNESS_PERCENT = 0.20  # 20% hardness from richest
+    BENEFICIARY_COUNT = 3          # Give to random 3 (excluding richest)
 
 # =============================================================================
 # Duoxinmo Item Probabilities
 # =============================================================================
 class DuoxinmoConfig:
-    STEAL_ALL_CHANCE = 0.5         # 50% chance to steal all
-    SELF_CLEAR_CHANCE = 0.2        # 20% chance to clear self (0.5 + 0.2 = 0.7)
-    # Remaining 30% = no effect
+    STEAL_ALL_CHANCE = 0.5         # 50% chance to steal all length + hardness
+    CHAOS_STORM_CHANCE = 0.2       # 20% chance to trigger chaos storm (0.5 + 0.2 = 0.7)
+    DAZIBAO_CHANCE = 0.2           # 20% chance to trigger dazibao (0.7 + 0.2 = 0.9)
+    SELF_CLEAR_CHANCE = 0.1        # 10% chance to clear self (0.9 + 0.1 = 1.0)
+
+# =============================================================================
+# 牛牛黑洞 Configuration
+# =============================================================================
+class HeidongConfig:
+    MIN_TARGETS = 5                # 最少吸取5人
+    MAX_TARGETS = 15               # 最多吸取15人
+    STEAL_PERCENT_MIN = 0.03       # 每人最少吸3%
+    STEAL_PERCENT_MAX = 0.10       # 每人最多吸10%
+    MIN_PLAYERS = 3                # 最少需要3人才能使用
+
+    # 结果概率
+    RESULT_ALL_TO_USER = 0.40      # 40% 全归使用者
+    RESULT_HALF_SPRAY = 0.30       # 30% 一半喷给路人
+    RESULT_BACKFIRE = 0.20         # 20% 反噬自己
+    RESULT_REVERSE = 0.10          # 10% 吃撑反喷（所有人反而变长）
+
+    BACKFIRE_PERCENT = 0.15        # 反噬损失自身15%长度
 
 # =============================================================================
 # Length Display Thresholds

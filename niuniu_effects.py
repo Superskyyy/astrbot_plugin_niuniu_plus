@@ -161,78 +161,212 @@ class ZhimingJiezouEffect(ItemEffect):
 
 
 class DuoxinmoEffect(ItemEffect):
-    """夺牛魔蝌蚪罐头 - Steal/clear length before compare"""
+    """夺牛魔蝌蚪罐头 - Steal/clear/chaos/explode before compare"""
     name = "夺牛魔蝌蚪罐头"
     triggers = [EffectTrigger.BEFORE_COMPARE]
     consume_on_use = True
 
+    # 夺取成功文案
+    STEAL_TEXTS = [
+        "🎭 罐头打开了...里面是一只愤怒的夺牛魔！",
+        "👹 夺牛魔苏醒了！「你的牛牛现在是我的了！」",
+        "🌀 罐头散发出诡异的光芒...夺取成功！",
+        "⚡ 夺牛魔：「谢谢你的牛牛，很好吃！」",
+        "🔮 蝌蚪化身夺牛魔，疯狂吸收对方精华！",
+    ]
+
+    # 自爆文案
+    SELF_CLEAR_TEXTS = [
+        "💀 罐头里的蝌蚪暴走了...攻击了自己！",
+        "😱 夺牛魔：「搞错了，我是来夺你的！」",
+        "🌑 罐头黑化了...你的牛牛消失在黑暗中",
+        "☠️ 蝌蚪叛变！你被自己的武器背刺了！",
+        "🕳️ 罐头变成黑洞，吞噬了你的一切...",
+    ]
+
+    # 混沌风暴文案
+    CHAOS_TEXTS = [
+        "🌪️ 罐头爆炸了！混沌能量席卷战场！",
+        "🎲 蝌蚪疯狂了！触发了混沌风暴！",
+        "⚡ 罐头不稳定...时空裂缝出现了！",
+        "🌀 「这不是普通的罐头...是混沌之源！」",
+    ]
+
+    # 大自爆文案
+    EXPLODE_TEXTS = [
+        "💥 罐头临界了...同归于尽吧！！！",
+        "🔥 蝌蚪：「我带你们一起走！」",
+        "☢️ 核爆警告！双方都遭殃！",
+        "💣 罐头变成了炸弹...轰！！！",
+    ]
+
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
-        effect_chance = random.random()
+        from niuniu_config import DuoxinmoConfig
+        roll = random.random()
 
-        if effect_chance < 0.5:  # 50% steal all
-            # 检查目标的盾牌减伤（每层护盾抵挡10%，最高100%）
-            target_shield_charges = 0
-            if ctx.target_data:
-                target_shield_charges = ctx.target_data.get('shield_charges', 0)
+        threshold1 = DuoxinmoConfig.STEAL_ALL_CHANCE  # 0.5
+        threshold2 = threshold1 + DuoxinmoConfig.CHAOS_STORM_CHANCE  # 0.7
+        threshold3 = threshold2 + DuoxinmoConfig.DAZIBAO_CHANCE  # 0.9
+        # Remaining = SELF_CLEAR_CHANCE (0.1) -> 1.0
 
-            damage_reduction = min(target_shield_charges * 0.1, 1.0)  # 最高100%减伤
+        if roll < threshold1:  # 50% 夺取全部长度和硬度
+            self._handle_steal(ctx)
 
-            if damage_reduction >= 1.0:
-                # 完全抵挡
-                ctx.extra['duoxinmo_result'] = 'blocked'
-                ctx.messages.extend([
-                    "⚔️ 【牛牛对决结果】 ⚔️",
-                    f"🛡️ {ctx.nickname} 使用夺牛魔蝌蚪罐头！",
-                    f"💫 但 {ctx.target_nickname} 的牛牛盾牌（{target_shield_charges}层）完全抵挡了攻击！",
-                ])
-                ctx.intercept = True
-            else:
-                # 计算实际偷取量
-                base_steal = ctx.target_length
-                actual_steal = int(base_steal * (1 - damage_reduction))
+        elif roll < threshold2:  # 20% 触发原版混沌风暴
+            self._handle_chaos(ctx)
 
-                ctx.extra['duoxinmo_result'] = 'steal'
-                ctx.extra['stolen_length'] = actual_steal
-                ctx.length_change = actual_steal
-                ctx.target_length_change = -actual_steal
+        elif roll < threshold3:  # 20% 触发原版大自爆
+            self._handle_explode(ctx)
 
-                if damage_reduction > 0:
-                    blocked_amount = base_steal - actual_steal
-                    ctx.messages.extend([
-                        "⚔️ 【牛牛对决结果】 ⚔️",
-                        f"🎉 {ctx.nickname} 获得了夺牛魔技能！",
-                        f"🛡️ {ctx.target_nickname} 的牛牛盾牌（{target_shield_charges}层）抵挡了{int(damage_reduction*100)}%伤害！",
-                        f"💥 实际夺取 {actual_steal}cm（抵挡了{blocked_amount}cm）",
-                    ])
-                else:
-                    ctx.messages.extend([
-                        "⚔️ 【牛牛对决结果】 ⚔️",
-                        f"🎉 {ctx.nickname} 获得了夺牛魔技能，夺取了 {ctx.target_nickname} 的全部长度！",
-                    ])
-                ctx.intercept = True
-
-        elif effect_chance < 0.7:  # 20% self clear
-            ctx.extra['duoxinmo_result'] = 'self_clear'
-            ctx.length_change = -ctx.user_length  # Go to 0
-            ctx.messages.extend([
-                "⚔️ 【牛牛对决结果】 ⚔️",
-                f"💔 {ctx.nickname} 使用夺牛魔蝌蚪罐头，牛牛变成了夺牛魔！！！",
-            ])
-            ctx.intercept = True
-
-        else:  # 30% no effect
-            ctx.extra['duoxinmo_result'] = 'no_effect'
-            ctx.messages.extend([
-                "⚔️ 【牛牛对决结果】 ⚔️",
-                f"⚠️ {ctx.nickname} 使用夺牛魔蝌蚪罐头，但是罐头好像坏掉了...",
-            ])
-            ctx.intercept = True
+        else:  # 10% 清空自己长度和硬度
+            self._handle_self_clear(ctx)
 
         return ctx
 
+    def _handle_steal(self, ctx: EffectContext):
+        """50% 夺取对方全部长度和硬度"""
+        target_shield_charges = 0
+        if ctx.target_data:
+            target_shield_charges = ctx.target_data.get('shield_charges', 0)
+
+        damage_reduction = min(target_shield_charges * 0.1, 1.0)
+
+        if damage_reduction >= 1.0:
+            ctx.extra['duoxinmo_result'] = 'blocked'
+            ctx.messages.extend([
+                "🥫 ══ 夺牛魔蝌蚪罐头 ══ 🥫",
+                random.choice(self.STEAL_TEXTS),
+                f"🛡️ 但 {ctx.target_nickname} 的护盾（{target_shield_charges}层）完全抵挡！",
+                "💨 夺牛魔悻悻离去...",
+            ])
+            ctx.intercept = True
+        else:
+            # 夺取长度
+            base_steal_len = ctx.target_length
+            actual_steal_len = int(base_steal_len * (1 - damage_reduction))
+            # 夺取硬度
+            base_steal_hard = ctx.target_hardness - 1  # 保底1点
+            actual_steal_hard = int(base_steal_hard * (1 - damage_reduction))
+
+            ctx.extra['duoxinmo_result'] = 'steal'
+            ctx.extra['stolen_length'] = actual_steal_len
+            ctx.extra['stolen_hardness'] = actual_steal_hard
+            ctx.length_change = actual_steal_len
+            ctx.target_length_change = -actual_steal_len
+            ctx.hardness_change = actual_steal_hard
+            ctx.extra['target_hardness_change'] = -actual_steal_hard
+
+            ctx.messages.extend([
+                "🥫 ══ 夺牛魔蝌蚪罐头 ══ 🥫",
+                random.choice(self.STEAL_TEXTS),
+            ])
+            if damage_reduction > 0:
+                ctx.messages.append(f"🛡️ {ctx.target_nickname} 护盾抵挡了{int(damage_reduction*100)}%！")
+            ctx.messages.extend([
+                f"💰 夺取 {actual_steal_len}cm + {actual_steal_hard}点硬度！",
+                f"😭 {ctx.target_nickname} 被掏空了...",
+            ])
+            ctx.intercept = True
+
+    def _handle_chaos(self, ctx: EffectContext):
+        """20% 触发原版混沌风暴效果"""
+        ctx.extra['duoxinmo_result'] = 'chaos'
+
+        # 添加夺牛魔前缀消息
+        ctx.messages.extend([
+            "🥫 ══ 夺牛魔蝌蚪罐头 ══ 🥫",
+            random.choice(self.CHAOS_TEXTS),
+            ""
+        ])
+
+        # 检查是否有 group_data（需要 main.py 传入）
+        group_data = ctx.extra.get('group_data', {})
+        if not group_data:
+            ctx.messages.append("❌ 混沌风暴失败：无法获取群组数据")
+            ctx.intercept = True
+            return
+
+        # 延迟导入避免循环引用（HundunFengbaoEffect 定义在后面）
+        from niuniu_effects import HundunFengbaoEffect
+        chaos_effect = HundunFengbaoEffect()
+        chaos_ctx = EffectContext(
+            group_id=ctx.group_id,
+            user_id=ctx.user_id,
+            nickname=ctx.nickname,
+            user_data=ctx.user_data,
+            user_length=ctx.user_length,
+            user_hardness=ctx.user_hardness
+        )
+        chaos_ctx.extra['group_data'] = group_data
+
+        # 触发混沌风暴
+        chaos_ctx = chaos_effect.on_trigger(EffectTrigger.ON_PURCHASE, chaos_ctx)
+
+        # 合并结果
+        ctx.messages.extend(chaos_ctx.messages)
+        ctx.extra['chaos_storm'] = chaos_ctx.extra.get('chaos_storm', {})
+        ctx.extra['consume_shields'] = chaos_ctx.extra.get('consume_shields', [])
+        ctx.intercept = True
+
+    def _handle_explode(self, ctx: EffectContext):
+        """20% 触发原版大自爆效果"""
+        ctx.extra['duoxinmo_result'] = 'explode'
+
+        # 添加夺牛魔前缀消息
+        ctx.messages.extend([
+            "🥫 ══ 夺牛魔蝌蚪罐头 ══ 🥫",
+            random.choice(self.EXPLODE_TEXTS),
+            ""
+        ])
+
+        # 检查是否有 group_data
+        group_data = ctx.extra.get('group_data', {})
+        if not group_data:
+            ctx.messages.append("❌ 大自爆失败：无法获取群组数据")
+            ctx.intercept = True
+            return
+
+        # 延迟导入避免循环引用（DazibaoEffect 定义在后面）
+        from niuniu_effects import DazibaoEffect
+        dazibao_effect = DazibaoEffect()
+        dazibao_ctx = EffectContext(
+            group_id=ctx.group_id,
+            user_id=ctx.user_id,
+            nickname=ctx.nickname,
+            user_data=ctx.user_data,
+            user_length=ctx.user_length,
+            user_hardness=ctx.user_hardness
+        )
+        dazibao_ctx.extra['group_data'] = group_data
+
+        # 触发大自爆
+        dazibao_ctx = dazibao_effect.on_trigger(EffectTrigger.ON_PURCHASE, dazibao_ctx)
+
+        # 合并结果
+        ctx.messages.extend(dazibao_ctx.messages)
+        ctx.extra['dazibao'] = dazibao_ctx.extra.get('dazibao', {})
+        ctx.extra['consume_shields'] = dazibao_ctx.extra.get('consume_shields', [])
+        ctx.length_change = dazibao_ctx.length_change
+        ctx.hardness_change = dazibao_ctx.hardness_change
+        ctx.intercept = True
+
+    def _handle_self_clear(self, ctx: EffectContext):
+        """10% 清空自己长度和硬度"""
+        ctx.extra['duoxinmo_result'] = 'self_clear'
+        ctx.length_change = -ctx.user_length  # 归零
+        ctx.hardness_change = -(ctx.user_hardness - 1)  # 硬度归1
+
+        ctx.messages.extend([
+            "🥫 ══ 夺牛魔蝌蚪罐头 ══ 🥫",
+            random.choice(self.SELF_CLEAR_TEXTS),
+            f"💀 {ctx.nickname} 长度归零！硬度归1！",
+            "😱 这罐头有毒！！！",
+        ])
+        ctx.intercept = True
+
 
 class CuihuoZhuadaoEffect(ItemEffect):
-    """淬火爪刀 - Extra plunder on win when underdog"""
+    """淬火爪刀 - Extra plunder on win when underdog: +10% length and +10% hardness"""
     name = "淬火爪刀"
     triggers = [EffectTrigger.ON_COMPARE_WIN]
     consume_on_use = True
@@ -245,9 +379,11 @@ class CuihuoZhuadaoEffect(ItemEffect):
         return length_diff > 10 and ctx.user_length < ctx.target_length
 
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
-        extra_loot = int(ctx.target_length * 0.1)
-        ctx.length_change += extra_loot
-        ctx.messages.append(f"🔥 淬火爪刀触发！额外掠夺 {extra_loot}cm！")
+        extra_length = int(ctx.target_length * 0.1)
+        extra_hardness = max(1, int(ctx.target_hardness * 0.1))
+        ctx.length_change += extra_length
+        ctx.hardness_change += extra_hardness
+        ctx.messages.append(f"🔥 淬火爪刀触发！额外掠夺 {extra_length}cm 和 {extra_hardness}点硬度！")
         return ctx
 
 
@@ -277,6 +413,18 @@ class MiaocuijiaoTargetEffect(ItemEffect):
         ctx.target_prevent_halving = True
         ctx.messages.append(f"🛡️ {ctx.target_nickname} 的妙脆角生效，防止了长度减半！")
         ctx.target_items_to_consume.append("妙脆角")
+        return ctx
+
+
+class XiaolanpianEffect(ItemEffect):
+    """小蓝片 - Next compare hardness is 100"""
+    name = "小蓝片"
+    triggers = [EffectTrigger.BEFORE_COMPARE]
+    consume_on_use = True
+
+    def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        ctx.user_hardness = 100
+        ctx.messages.append(f"💊 {ctx.nickname} 的小蓝片生效！硬度暴涨至100！")
         return ctx
 
 
@@ -311,70 +459,168 @@ class ActiveItemEffect(ItemEffect):
         return ctx
 
 
-class BalishijiaEffect(ActiveItemEffect):
-    """巴黎牛家 - +3 hardness"""
+class BalishijiaEffect(ItemEffect):
+    """巴黎牛家 - +10 hardness, but -1~10% length"""
     name = "巴黎牛家"
-    hardness_change = 3
-
-
-class BashideBanEffect(ActiveItemEffect):
-    """巴适得板生长素 - +20 length, -2 hardness"""
-    name = "巴适得板生长素"
-    length_change = 20
-    hardness_change = -2
-
-
-class BumiezhiwoEffect(ActiveItemEffect):
-    """不灭之握 - +30 length"""
-    name = "不灭之握"
-    length_change = 30
-
-
-class AmstlangEffect(ActiveItemEffect):
-    """阿姆斯特朗旋风喷射炮 - +100 length, +10 hardness"""
-    name = "阿姆斯特朗旋风喷射炮"
-    length_change = 100
-    hardness_change = 10
-
-
-class DutuyingbiEffect(ItemEffect):
-    """赌徒硬币 - 50% double length, 50% halve length"""
-    name = "赌徒硬币"
     triggers = [EffectTrigger.ON_PURCHASE]
     consume_on_use = False  # Active item, no inventory
 
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        # +10 硬度
+        ctx.hardness_change = 10
+
+        # 随机降低 1-10% 长度
+        length_percent = random.uniform(0.01, 0.10)
+        length_loss = int(abs(ctx.user_length) * length_percent)
+        if length_loss < 1:
+            length_loss = 1
+        ctx.length_change = -length_loss
+
+        percent_display = f"{length_percent * 100:.1f}%"
+        ctx.messages.extend([
+            "🏠 ══ 巴黎牛家 ══ 🏠",
+            f"💪 {ctx.nickname} 硬度 +10！",
+            f"📉 但是...代价是缩短了 {length_loss}cm（{percent_display}）",
+            "💊 变硬了，但变短了...",
+            "═══════════════════"
+        ])
+
+        return ctx
+
+
+class DutuyingbiEffect(ItemEffect):
+    """赌徒硬币 - 50% double, 48% halve, 1% jackpot (x4), 1% bad luck (x-2)"""
+    name = "赌徒硬币"
+    triggers = [EffectTrigger.ON_PURCHASE]
+    consume_on_use = False  # Active item, no inventory
+
+    # 头等奖文案
+    JACKPOT_TEXTS = [
+        "🎰✨ 硬币在空中炸裂成金光！！！",
+        "🌟 天降祥瑞！硬币化作一道金龙！",
+        "💫 硬币立了起来！传说中的...头等奖！！",
+        "🎇 叮叮叮！恭喜你中了头等奖！",
+        "⭐ 硬币发出耀眼的光芒，你感觉自己被命运眷顾了！"
+    ]
+
+    # 霉运文案
+    BAD_LUCK_TEXTS = [
+        "🎰💀 硬币裂开了...黑雾涌出！",
+        "☠️ 硬币变成了骷髅头！这是...霉运诅咒！",
+        "🌑 硬币坠入深渊，带走了你的一切...",
+        "💔 硬币碎成粉末，厄运降临！",
+        "👻 硬币消失了，取而代之的是一阵阴风..."
+    ]
+
+    # 翻倍文案
+    DOUBLE_TEXTS = [
+        "🎰 硬币正面朝上！长度翻倍！",
+        "🪙 叮！正面！你的牛牛膨胀了！",
+        "✨ 硬币闪闪发光，好运降临！"
+    ]
+
+    # 减半文案
+    HALVE_TEXTS = [
+        "🎰 硬币反面朝上...长度减半！",
+        "🪙 哐当...反面...你的牛牛缩水了",
+        "💨 硬币滚走了，带走了一半的你..."
+    ]
+
+    def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
         current_length = ctx.user_length
-        is_heads = random.random() < 0.5
+        roll = random.random()
+
+        # 概率分布：50% 翻倍, 48% 减半, 1% 头等奖, 1% 霉运
+        if roll < 0.01:
+            # 1% 头等奖：长度 x4
+            self._apply_jackpot(ctx, current_length)
+        elif roll < 0.02:
+            # 1% 霉运：长度变成 -2倍
+            self._apply_bad_luck(ctx, current_length)
+        elif roll < 0.52:
+            # 50% 翻倍
+            self._apply_double(ctx, current_length)
+        else:
+            # 48% 减半
+            self._apply_halve(ctx, current_length)
+
+        return ctx
+
+    def _apply_jackpot(self, ctx: EffectContext, current_length: float):
+        """头等奖：长度变成4倍"""
+        ctx.messages.append(random.choice(self.JACKPOT_TEXTS))
+        ctx.messages.append("🏆 ═══ 头 等 奖 ═══ 🏆")
 
         if current_length > 0:
-            # 正数：正面翻倍(好)，反面减半(坏)
-            if is_heads:
-                ctx.length_change = current_length  # 翻倍
-                ctx.messages.append(f"🎰 硬币正面朝上！长度翻倍！+{current_length}cm")
-            else:
-                loss = current_length // 2
-                ctx.length_change = -loss
-                ctx.messages.append(f"🎰 硬币反面朝上...长度减半！-{loss}cm")
+            gain = current_length * 3
+            ctx.length_change = gain
+            ctx.messages.append(f"💰 长度暴涨！{current_length:.1f}cm → {current_length + gain:.1f}cm (+{gain:.1f}cm)")
         elif current_length < 0:
-            # 负数：正面减半(好，接近0)，反面翻倍(坏，更负)
-            if is_heads:
-                gain = abs(current_length) // 2  # 向0靠近
-                ctx.length_change = gain
-                ctx.messages.append(f"🎰 硬币正面朝上！凹陷减半！+{gain}cm")
-            else:
-                loss = abs(current_length)  # 翻倍负数
-                ctx.length_change = -loss
-                ctx.messages.append(f"🎰 硬币反面朝上...凹得更深了！-{loss}cm")
+            # 负数变成正的4倍绝对值
+            gain = abs(current_length) * 4
+            ctx.length_change = gain
+            ctx.messages.append(f"💰 逆天改命！{current_length:.1f}cm → {current_length + gain:.1f}cm (+{gain:.1f}cm)")
         else:
-            # 长度为0：随机±10
-            change = random.randint(-10, 10)
+            gain = 100
+            ctx.length_change = gain
+            ctx.messages.append(f"💰 从零开始的暴富！0cm → {gain}cm")
+
+        ctx.messages.append("🎊 运气爆棚！今天一定要买彩票！")
+
+    def _apply_bad_luck(self, ctx: EffectContext, current_length: float):
+        """霉运：长度变成-2倍"""
+        ctx.messages.append(random.choice(self.BAD_LUCK_TEXTS))
+        ctx.messages.append("💀 ═══ 霉 运 降 临 ═══ 💀")
+
+        if current_length > 0:
+            # 正数变成负2倍
+            loss = current_length * 3
+            ctx.length_change = -loss
+            ctx.messages.append(f"😱 长度暴跌！{current_length:.1f}cm → {current_length - loss:.1f}cm (-{loss:.1f}cm)")
+        elif current_length < 0:
+            # 负数变得更负
+            loss = abs(current_length) * 3
+            ctx.length_change = -loss
+            ctx.messages.append(f"😱 凹到地心！{current_length:.1f}cm → {current_length - loss:.1f}cm (-{loss:.1f}cm)")
+        else:
+            loss = 100
+            ctx.length_change = -loss
+            ctx.messages.append(f"😱 从零坠入深渊！0cm → -{loss}cm")
+
+        ctx.messages.append("🥀 今天不宜出门...")
+
+    def _apply_double(self, ctx: EffectContext, current_length: float):
+        """翻倍"""
+        text = random.choice(self.DOUBLE_TEXTS)
+
+        if current_length > 0:
+            ctx.length_change = current_length
+            ctx.messages.append(f"{text} +{current_length:.1f}cm")
+        elif current_length < 0:
+            gain = abs(current_length) // 2
+            ctx.length_change = gain
+            ctx.messages.append(f"🎰 硬币正面朝上！凹陷减半！+{gain:.1f}cm")
+        else:
+            change = random.randint(5, 15)
             ctx.length_change = change
-            if change >= 0:
-                ctx.messages.append(f"🎰 硬币在空中悬停...从虚无中获得了{change}cm！")
-            else:
-                ctx.messages.append(f"🎰 硬币落入虚空...凹进去了{-change}cm！")
-        return ctx
+            ctx.messages.append(f"🎰 硬币悬浮！从虚无中获得了{change}cm！")
+
+    def _apply_halve(self, ctx: EffectContext, current_length: float):
+        """减半"""
+        text = random.choice(self.HALVE_TEXTS)
+
+        if current_length > 0:
+            loss = current_length / 2
+            ctx.length_change = -loss
+            ctx.messages.append(f"{text} -{loss:.1f}cm")
+        elif current_length < 0:
+            loss = abs(current_length)
+            ctx.length_change = -loss
+            ctx.messages.append(f"🎰 硬币反面朝上...凹得更深了！-{loss:.1f}cm")
+        else:
+            change = random.randint(-15, -5)
+            ctx.length_change = change
+            ctx.messages.append(f"🎰 硬币落入虚空...凹进去了{-change}cm！")
 
 
 # =============================================================================
@@ -382,33 +628,14 @@ class DutuyingbiEffect(ItemEffect):
 # =============================================================================
 
 class JiefuJipinEffect(ItemEffect):
-    """劫富济贫 - Robin Hood: steal from richest, give to poorest 3"""
+    """劫富济贫 - Robin Hood: steal 50% length and 20% hardness from richest, give to random 3"""
     name = "劫富济贫"
     triggers = [EffectTrigger.ON_PURCHASE]
     consume_on_use = False  # Active item, no inventory
 
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
-        from datetime import datetime
-        import pytz
-        from niuniu_config import TIMEZONE
-
-        # 检查每日冷却（每天0点重置）
-        tz = pytz.timezone(TIMEZONE)
-        now = datetime.now(tz)
-        today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        today_midnight_ts = today_midnight.timestamp()
-
-        last_use = ctx.user_data.get('last_jiefu_time', 0)
-        if last_use >= today_midnight_ts:  # 今天已经用过
-            # 计算到明天0点的时间
-            tomorrow_midnight = today_midnight_ts + 86400
-            remaining_secs = int(tomorrow_midnight - now.timestamp())
-            remaining_hours = remaining_secs // 3600
-            remaining_mins = (remaining_secs % 3600) // 60
-            ctx.messages.append(f"⏰ 劫富济贫每天只能用一次！明天0点后再来（还需 {remaining_hours}小时{remaining_mins}分钟）")
-            ctx.extra['refund'] = True
-            ctx.intercept = True
-            return ctx
+        import random
+        from niuniu_config import JiefuJipinConfig
 
         # 需要从 extra 获取群组数据
         group_data = ctx.extra.get('group_data', {})
@@ -432,6 +659,7 @@ class JiefuJipinEffect(ItemEffect):
         # 找出首富
         richest_id, richest_data = sorted_users[0]
         richest_length = richest_data.get('length', 0)
+        richest_hardness = richest_data.get('hardness', 1)
         richest_name = richest_data.get('nickname', richest_id)
 
         # 检查自己是不是首富
@@ -448,10 +676,13 @@ class JiefuJipinEffect(ItemEffect):
             ctx.extra['refund'] = True
             return ctx
 
-        # 计算抢夺数量（15%）
-        steal_amount = int(richest_length * 0.15)
-        if steal_amount < 1:
-            steal_amount = 1
+        # 计算抢夺数量（50%长度，20%硬度）
+        steal_length = int(richest_length * JiefuJipinConfig.STEAL_LENGTH_PERCENT)
+        steal_hardness = int(richest_hardness * JiefuJipinConfig.STEAL_HARDNESS_PERCENT)
+        if steal_length < 1:
+            steal_length = 1
+        if steal_hardness < 1:
+            steal_hardness = 1
 
         # 检查首富是否有护盾
         richest_shielded = False
@@ -464,54 +695,62 @@ class JiefuJipinEffect(ItemEffect):
                 'amount': 1
             }
 
-        # 找出最穷的3人（排除首富）
-        poorest_3 = sorted_users[-3:]
+        # 随机选3人（排除首富，可以包括发起人）
+        candidates = [(uid, data) for uid, data in valid_users if uid != richest_id]
 
-        # 检查最穷的人里有没有首富（理论上不会，但防止边界情况）
-        poorest_3 = [(uid, data) for uid, data in poorest_3 if uid != richest_id]
+        if len(candidates) < 3:
+            # 如果候选人不足3人，全部选中
+            lucky_3 = candidates
+        else:
+            lucky_3 = random.sample(candidates, 3)
 
-        if len(poorest_3) == 0:
-            ctx.messages.append("❌ 找不到可以接济的穷人！")
+        if len(lucky_3) == 0:
+            ctx.messages.append("❌ 找不到可以接济的人！")
             ctx.intercept = True
             ctx.extra['refund'] = True
             return ctx
 
-        # 平分给最穷的人
-        share_each = steal_amount // len(poorest_3)
-        remainder = steal_amount % len(poorest_3)
+        # 平分长度和硬度
+        length_share_each = steal_length // len(lucky_3)
+        length_remainder = steal_length % len(lucky_3)
+        hardness_share_each = steal_hardness // len(lucky_3)
+        hardness_remainder = steal_hardness % len(lucky_3)
 
         # 记录需要更新的数据
-        # 如果首富有护盾，不扣他的长度（steal_amount设为0），但穷人照样拿
+        # 如果首富有护盾，不扣他的长度/硬度，但其他人照样拿
         ctx.extra['robin_hood'] = {
             'richest_id': richest_id,
             'richest_name': richest_name,
-            'steal_amount': 0 if richest_shielded else steal_amount,  # 有护盾则不扣
+            'steal_amount': 0 if richest_shielded else steal_length,  # 有护盾则不扣长度
+            'steal_hardness': 0 if richest_shielded else steal_hardness,  # 有护盾则不扣硬度
             'beneficiaries': []
         }
 
-        for i, (uid, data) in enumerate(poorest_3):
+        for i, (uid, data) in enumerate(lucky_3):
             # 第一个人获得余数
-            amount = share_each + (remainder if i == 0 else 0)
-            if amount > 0:
+            length_amount = length_share_each + (length_remainder if i == 0 else 0)
+            hardness_amount = hardness_share_each + (hardness_remainder if i == 0 else 0)
+            if length_amount > 0 or hardness_amount > 0:
                 ctx.extra['robin_hood']['beneficiaries'].append({
                     'user_id': uid,
                     'nickname': data.get('nickname', uid),
-                    'amount': amount
+                    'amount': length_amount,
+                    'hardness': hardness_amount
                 })
 
         # 构建消息
         beneficiary_texts = []
         for b in ctx.extra['robin_hood']['beneficiaries']:
-            beneficiary_texts.append(f"  💰 {b['nickname']} +{b['amount']}cm")
+            beneficiary_texts.append(f"  💰 {b['nickname']} +{b['amount']}cm +{b['hardness']}硬度")
 
         if richest_shielded:
             # 首富有护盾的消息
             ctx.messages.extend([
                 "🦸 ═══ 劫富济贫 ═══ 🦸",
-                f"🎯 目标锁定：{richest_name}（{richest_length}cm）",
+                f"🎯 目标锁定：{richest_name}（{richest_length}cm/{richest_hardness}硬度）",
                 f"🛡️ 但是...{richest_name} 有牛牛盾牌护盾！",
                 f"💫 护盾抵挡了抢劫，但天降横财！",
-                f"🎁 凭空产生 {steal_amount}cm 分给穷人：",
+                f"🎁 凭空产生 {steal_length}cm/{steal_hardness}硬度 分给幸运儿：",
                 *beneficiary_texts,
                 f"📊 {richest_name} 护盾剩余：{richest_shield_charges - 1}次",
                 "══════════════════"
@@ -520,15 +759,12 @@ class JiefuJipinEffect(ItemEffect):
             # 正常抢劫消息
             ctx.messages.extend([
                 "🦸 ═══ 劫富济贫 ═══ 🦸",
-                f"🎯 目标锁定：{richest_name}（{richest_length}cm）",
-                f"💸 抢走了 {steal_amount}cm！",
-                "📦 分发给最穷的群友：",
+                f"🎯 目标锁定：{richest_name}（{richest_length}cm/{richest_hardness}硬度）",
+                f"💸 抢走了 {steal_length}cm 和 {steal_hardness}硬度！",
+                "📦 分发给随机幸运群友：",
                 *beneficiary_texts,
                 "══════════════════"
             ])
-
-        # 标记需要记录使用时间
-        ctx.extra['record_jiefu_time'] = True
 
         return ctx
 
@@ -579,7 +815,12 @@ class HundunFengbaoEffect(ItemEffect):
         selected = random.sample(valid_users, min(len(valid_users), HundunFengbaoConfig.MAX_TARGETS))
 
         # 记录变化
-        ctx.extra['chaos_storm'] = {'changes': [], 'coin_changes': [], 'swaps': []}
+        ctx.extra['chaos_storm'] = {
+            'changes': [],
+            'coin_changes': [],
+            'swaps': [],
+            'all_selected_ids': [uid for uid, _ in selected]  # 跟踪所有被选中的人
+        }
         ctx.extra['consume_shields'] = []
         changes = ctx.extra['chaos_storm']['changes']
         coin_changes = ctx.extra['chaos_storm']['coin_changes']
@@ -599,12 +840,24 @@ class HundunFengbaoEffect(ItemEffect):
             hardness_change = 0
             coin_change = 0
             event_text = ""
-            is_negative = event_id in ['length_down', 'hardness_down', 'coin_lose',
-                                        'length_percent_down', 'halve', 'give_to_random']
+
+            # 静态负面事件列表（护盾可抵挡）
+            # 注意：chaos_tax 不在列表中，因为这是混沌风暴的核心收益机制
+            static_negative_events = [
+                'length_down', 'hardness_down', 'coin_lose',
+                'length_percent_down', 'halve', 'give_to_random',
+                'dark_sacrifice'
+            ]
+
+            # 动态判断是否负面
+            is_negative = event_id in static_negative_events
+            # reverse_sign: 正数变负数是负面
+            if event_id == 'reverse_sign' and old_length > 0:
+                is_negative = True
 
             # 负面事件检查护盾
             if is_negative and shield_charges > 0:
-                event_text = f"🛡️ {nickname}: 护盾抵挡！（剩余{shield_charges - 1}次）"
+                event_text = f"🛡️ {nickname}: 护盾抵挡了【{template.split('！')[0] if '！' in template else event_id}】！（剩余{shield_charges - 1}次）"
                 ctx.extra['consume_shields'].append({'user_id': uid, 'amount': 1})
                 event_lines.append(event_text)
                 continue
@@ -728,6 +981,242 @@ class HundunFengbaoEffect(ItemEffect):
                 length_change = new_len - old_length
                 event_text = f"🔀 {nickname}: {template.format(old=old_length, new=new_len)}"
 
+            elif event_id == 'full_swap':
+                # 全属性互换（长度+硬度）
+                others = [u for u in valid_users if u[0] != uid]
+                if others:
+                    target_uid, target_data = random.choice(others)
+                    target_name = target_data.get('nickname', target_uid)
+                    target_len = target_data.get('length', 0)
+                    target_hard = target_data.get('hardness', 1)
+                    # 记录全属性交换
+                    ctx.extra['chaos_storm'].setdefault('full_swaps', []).append({
+                        'user1_id': uid, 'user1_old_len': old_length, 'user1_old_hard': old_hardness,
+                        'user2_id': target_uid, 'user2_old_len': target_len, 'user2_old_hard': target_hard
+                    })
+                    event_text = f"🔄 {nickname}: 与{target_name}交换全部属性！（{old_length}cm/{old_hardness}硬 ↔ {target_len}cm/{target_hard}硬）"
+                else:
+                    event_text = f"🤷 {nickname}: 没人可以交换..."
+
+            elif event_id == 'cooldown_reset':
+                # 打胶冷却清零
+                ctx.extra['chaos_storm'].setdefault('cooldown_resets', []).append(uid)
+                event_text = f"⏰ {nickname}: 打胶冷却清零！"
+
+            elif event_id == 'chaos_chain':
+                # 混沌连锁：触发2个简单数值事件
+                # 只筛选简单数值事件，避免复杂事件导致 ???
+                simple_events = [
+                    'length_up', 'length_down', 'hardness_up', 'hardness_down',
+                    'coin_gain', 'coin_lose', 'length_percent_up', 'length_percent_down'
+                ]
+                chain_events = [e for e in HundunFengbaoConfig.CHAOS_EVENTS if e[1] in simple_events]
+                chain_results = []
+                for _ in range(2):
+                    chain_event_id, chain_template, chain_params = self._pick_event(chain_events)
+                    if chain_event_id == 'length_up':
+                        val = random.randint(chain_params['min'], chain_params['max'])
+                        length_change += val
+                        chain_results.append(f"+{val}cm")
+                    elif chain_event_id == 'length_down':
+                        val = random.randint(chain_params['min'], chain_params['max'])
+                        length_change -= val
+                        chain_results.append(f"-{val}cm")
+                    elif chain_event_id == 'hardness_up':
+                        val = random.randint(chain_params['min'], chain_params['max'])
+                        hardness_change += val
+                        chain_results.append(f"+{val}硬度")
+                    elif chain_event_id == 'hardness_down':
+                        val = random.randint(chain_params['min'], chain_params['max'])
+                        hardness_change -= val
+                        chain_results.append(f"-{val}硬度")
+                    elif chain_event_id == 'coin_gain':
+                        val = random.randint(chain_params['min'], chain_params['max'])
+                        coin_change += val
+                        chain_results.append(f"+{val}金币")
+                    elif chain_event_id == 'coin_lose':
+                        val = random.randint(chain_params['min'], chain_params['max'])
+                        coin_change -= val
+                        chain_results.append(f"-{val}金币")
+                    elif chain_event_id == 'length_percent_up':
+                        val = random.randint(chain_params['min'], chain_params['max'])
+                        change = int(abs(old_length) * val / 100)
+                        length_change += change
+                        chain_results.append(f"+{val}%长度(+{change}cm)")
+                    elif chain_event_id == 'length_percent_down':
+                        val = random.randint(chain_params['min'], chain_params['max'])
+                        change = int(abs(old_length) * val / 100)
+                        length_change -= change
+                        chain_results.append(f"-{val}%长度(-{change}cm)")
+                event_text = f"⚡ {nickname}: 混沌连锁！{' & '.join(chain_results)}"
+
+            elif event_id == 'hardness_to_length':
+                # 硬度转长度：消耗一半硬度（保底剩1），获得长度
+                max_convert = max(0, old_hardness - 1)  # 至少保留1点硬度
+                convert_hardness = max(1, max_convert // 2) if max_convert > 0 else 0
+                if convert_hardness > 0:
+                    convert_length = convert_hardness * 3  # 1硬度=3cm
+                    hardness_change = -convert_hardness
+                    length_change = convert_length
+                    event_text = f"🔄 {nickname}: 硬度转长度！-{convert_hardness}硬度 → +{convert_length}cm"
+                else:
+                    event_text = f"😅 {nickname}: 硬度太低，无法转化..."
+
+            elif event_id == 'length_to_hardness':
+                # 长度转硬度：消耗20%长度，获得硬度（不超过100上限）
+                from niuniu_config import DajiaoConfig
+                if old_length > 0:
+                    convert_length = max(1, int(old_length * 0.2))
+                    raw_hardness = max(1, convert_length // 5)  # 5cm=1硬度
+                    # 检查硬度上限
+                    max_gain = DajiaoConfig.MAX_HARDNESS - old_hardness
+                    convert_hardness = min(raw_hardness, max_gain)
+                    if convert_hardness > 0:
+                        length_change = -convert_length
+                        hardness_change = convert_hardness
+                        event_text = f"🔄 {nickname}: 长度转硬度！-{convert_length}cm → +{convert_hardness}硬度"
+                    else:
+                        event_text = f"💯 {nickname}: 硬度已满100，无法转化！"
+                else:
+                    event_text = f"😅 {nickname}: 长度太少，无法转化..."
+
+            elif event_id == 'chaos_tax':
+                # 混沌税：被收5%长度给使用者
+                if old_length > 0:
+                    tax = max(1, int(old_length * 0.05))
+                    length_change = -tax
+                    ctx.extra['chaos_storm'].setdefault('tax_collected', 0)
+                    ctx.extra['chaos_storm']['tax_collected'] += tax
+                    event_text = f"💰 {nickname}: 被混沌收税！-{tax}cm"
+                else:
+                    event_text = f"😅 {nickname}: 负数牛牛免税..."
+
+            elif event_id == 'clone_length':
+                # 克隆别人的长度
+                others = [u for u in valid_users if u[0] != uid]
+                if others:
+                    target_uid, target_data = random.choice(others)
+                    target_name = target_data.get('nickname', target_uid)
+                    target_len = target_data.get('length', 0)
+                    length_change = target_len - old_length
+                    event_text = f"🧬 {nickname}: 克隆了{target_name}的长度！{old_length}cm → {target_len}cm"
+                else:
+                    event_text = f"🤷 {nickname}: 没人可以克隆..."
+
+            elif event_id == 'lucky_buff':
+                # 幸运祝福：下次打胶必定成功
+                ctx.extra['chaos_storm'].setdefault('lucky_buffs', []).append(uid)
+                event_text = f"🍀 {nickname}: 获得幸运祝福！下次打胶必增长！"
+
+            elif event_id == 'length_quake':
+                # 长度震荡：大幅随机波动
+                change_val = random.randint(params['min'], params['max'])
+                length_change = change_val
+                if change_val >= 0:
+                    event_text = f"🌋 {nickname}: 长度震荡！+{change_val}cm"
+                else:
+                    event_text = f"🌋 {nickname}: 长度震荡！{change_val}cm"
+
+            elif event_id == 'quantum_entangle':
+                # 量子纠缠：与随机一人双方取平均
+                others = [u for u in valid_users if u[0] != uid]
+                if others:
+                    target_uid, target_data = random.choice(others)
+                    target_name = target_data.get('nickname', target_uid)
+                    target_len = target_data.get('length', 0)
+                    avg_len = (old_length + target_len) // 2
+                    # 记录量子纠缠
+                    ctx.extra['chaos_storm'].setdefault('quantum_entangles', []).append({
+                        'user1_id': uid, 'user1_old': old_length,
+                        'user2_id': target_uid, 'user2_old': target_len,
+                        'avg': avg_len
+                    })
+                    event_text = f"🔮 {nickname}: 与{target_name}量子纠缠！({old_length}+{target_len})/2 = {avg_len}cm"
+                else:
+                    event_text = f"🤷 {nickname}: 没人可以纠缠..."
+
+            elif event_id == 'dark_sacrifice':
+                # 黑暗献祭：牺牲20%长度，×3给随机人
+                others = [u for u in valid_users if u[0] != uid]
+                if others and old_length > 0:
+                    target_uid, target_data = random.choice(others)
+                    target_name = target_data.get('nickname', target_uid)
+                    sacrifice = max(1, int(old_length * 0.2))
+                    gift = sacrifice * 3
+                    length_change = -sacrifice
+                    # 记录受益者
+                    changes.append({
+                        'user_id': target_uid,
+                        'nickname': target_name,
+                        'change': gift,
+                        'hardness_change': 0
+                    })
+                    event_text = f"🖤 {nickname}: 黑暗献祭！-{sacrifice}cm → {target_name} +{gift}cm"
+                else:
+                    event_text = f"😅 {nickname}: 没有足够的长度献祭..."
+
+            elif event_id == 'resurrection':
+                # 牛牛复活：负数变正数
+                if old_length <= 0:
+                    new_len = random.randint(params['min'], params['max'])
+                    length_change = new_len - old_length
+                    event_text = f"✨ {nickname}: 牛牛复活！{old_length}cm → {new_len}cm"
+                else:
+                    event_text = f"😊 {nickname}: 牛牛还活着，不需要复活~"
+
+            elif event_id == 'doomsday':
+                # 末日审判：全局事件，在后处理中执行
+                ctx.extra['chaos_storm'].setdefault('global_events', []).append({
+                    'type': 'doomsday',
+                    'trigger_by': nickname
+                })
+                event_text = f"⚖️ {nickname}: 触发了【末日审判】！"
+
+            elif event_id == 'roulette':
+                # 轮盘重置：全局事件
+                ctx.extra['chaos_storm'].setdefault('global_events', []).append({
+                    'type': 'roulette',
+                    'trigger_by': nickname
+                })
+                event_text = f"🎰 {nickname}: 触发了【轮盘重置】！"
+
+            elif event_id == 'reverse_talent':
+                # 反向天赋：全局事件
+                ctx.extra['chaos_storm'].setdefault('global_events', []).append({
+                    'type': 'reverse_talent',
+                    'trigger_by': nickname
+                })
+                event_text = f"🔄 {nickname}: 触发了【反向天赋】！"
+
+            elif event_id == 'lottery_bomb':
+                # 团灭彩票：全局事件
+                is_jackpot = random.random() < 0.05  # 5%
+                ctx.extra['chaos_storm'].setdefault('global_events', []).append({
+                    'type': 'lottery_bomb',
+                    'trigger_by': nickname,
+                    'jackpot': is_jackpot
+                })
+                if is_jackpot:
+                    event_text = f"🎊 {nickname}: 【团灭彩票】中了！！全体翻倍！"
+                else:
+                    event_text = f"💣 {nickname}: 【团灭彩票】没中...全体-50%长度和硬度！"
+
+            elif event_id == 'parasite':
+                # 寄生虫：在别人身上种下标记
+                others = [u for u in valid_users if u[0] != uid]
+                if others:
+                    target_uid, target_data = random.choice(others)
+                    target_name = target_data.get('nickname', target_uid)
+                    ctx.extra['chaos_storm'].setdefault('parasites', []).append({
+                        'host_id': target_uid,
+                        'host_name': target_name,
+                        'beneficiary_id': uid,
+                        'beneficiary_name': nickname
+                    })
+                    event_text = f"🦠 {nickname}: 在{target_name}身上种下寄生虫！"
+                else:
+                    event_text = f"🤷 {nickname}: 没人可以寄生..."
+
             # 记录变化
             if length_change != 0 or hardness_change != 0:
                 changes.append({
@@ -757,6 +1246,248 @@ class HundunFengbaoEffect(ItemEffect):
 
         ctx.messages.append("")
         ctx.messages.append("═══════════════════")
+
+        return ctx
+
+
+# =============================================================================
+# 牛牛黑洞 Effect
+# =============================================================================
+
+class HeidongEffect(ItemEffect):
+    """牛牛黑洞 - Black Hole: absorb 3-10% length from 5-15 random people"""
+    name = "牛牛黑洞"
+    triggers = [EffectTrigger.ON_PURCHASE]
+    consume_on_use = False  # Active item, no inventory
+
+    # 成功吸取文案
+    SUCCESS_TEXTS = [
+        "🕳️ 虚空之力，为我所用！",
+        "🌌 黑洞：谢谢款待~",
+        "⚫ 无尽深渊已经张开了嘴...",
+        "🔮 时空扭曲！精华归我！",
+        "💀 黑洞：你们的牛牛，我收下了"
+    ]
+
+    # 不稳定喷射文案
+    UNSTABLE_TEXTS = [
+        "⚠️ 黑洞过载！部分能量逃逸！",
+        "💥 黑洞不稳定，发生了霍金辐射！",
+        "🌪️ 时空裂缝！一半被吸到平行宇宙去了！",
+        "🎰 黑洞打了个喷嚏，喷了一地...",
+        "⚡ 能量溢出！无法完全吸收！"
+    ]
+
+    # 反噬文案
+    BACKFIRE_TEXTS = [
+        "💀 黑洞：等等，我好像搞反了方向...",
+        "😱 反噬！召唤师被自己的黑洞吸进去了！",
+        "🌀 黑洞：你以为你在召唤我？其实是我在召唤你！",
+        "☠️ 玩火自焚，玩洞...自吸？",
+        "💫 黑洞坍缩成白矮星，砸在了你头上"
+    ]
+
+    # 吃撑反喷文案
+    REVERSE_TEXTS = [
+        "🤡 黑洞吃撑了！呕————",
+        "🌀 黑洞打了个饱嗝，把所有东西都喷出来了！",
+        "😂 黑洞消化不良，反向喷射！",
+        "🎪 这不是黑洞，这是喷泉！",
+        "💫 黑洞：吃太多了，受不了，还给你们！",
+        "🤮 黑洞食物中毒了！全吐出来了！",
+        "🎭 黑洞：开玩笑的，其实我是白洞~"
+    ]
+
+    def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        from niuniu_config import HeidongConfig
+
+        # 需要从 extra 获取群组数据
+        group_data = ctx.extra.get('group_data', {})
+        if not group_data:
+            ctx.messages.append("❌ 无法获取群组数据")
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        # 过滤有效用户（有长度数据的）
+        valid_users = [(uid, data) for uid, data in group_data.items()
+                       if isinstance(data, dict) and 'length' in data]
+
+        if len(valid_users) < HeidongConfig.MIN_PLAYERS:
+            ctx.messages.append(f"❌ 群里牛牛不足{HeidongConfig.MIN_PLAYERS}人，黑洞无法形成！")
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        # 随机选择5-15人（不排除自己，增加趣味性）
+        num_targets = random.randint(
+            min(HeidongConfig.MIN_TARGETS, len(valid_users)),
+            min(HeidongConfig.MAX_TARGETS, len(valid_users))
+        )
+        selected = random.sample(valid_users, num_targets)
+
+        # 计算每个人被吸取的长度
+        total_stolen = 0
+        victims = []
+        ctx.extra['consume_shields'] = []
+
+        for uid, data in selected:
+            nickname = data.get('nickname', uid)
+            length = data.get('length', 0)
+            shield_charges = data.get('shield_charges', 0)
+
+            # 随机吸取3-10%
+            steal_percent = random.uniform(
+                HeidongConfig.STEAL_PERCENT_MIN,
+                HeidongConfig.STEAL_PERCENT_MAX
+            )
+            steal_amount = int(abs(length) * steal_percent)
+            if steal_amount < 1:
+                steal_amount = 1
+
+            # 检查护盾
+            if shield_charges > 0:
+                victims.append({
+                    'user_id': uid,
+                    'nickname': nickname,
+                    'amount': 0,
+                    'shielded': True,
+                    'shield_remaining': shield_charges - 1
+                })
+                ctx.extra['consume_shields'].append({'user_id': uid, 'amount': 1})
+            else:
+                victims.append({
+                    'user_id': uid,
+                    'nickname': nickname,
+                    'amount': steal_amount,
+                    'shielded': False
+                })
+                total_stolen += steal_amount
+
+        # 决定结果
+        roll = random.random()
+        ctx.extra['black_hole'] = {
+            'victims': victims,
+            'total_stolen': total_stolen,
+            'result': None,
+            'spray_targets': []
+        }
+
+        if roll < HeidongConfig.RESULT_ALL_TO_USER:
+            # 40%: 全部归使用者
+            ctx.extra['black_hole']['result'] = 'all_to_user'
+            ctx.length_change = total_stolen
+            ctx.messages.extend([
+                "🌀 ══ 牛牛黑洞 ══ 🌀",
+                f"🕳️ {ctx.nickname} 召唤了黑洞！",
+                "",
+                random.choice(self.SUCCESS_TEXTS),
+                f"💫 吸取了 {len(victims)} 人的精华！",
+                ""
+            ])
+            for v in victims:
+                if v['shielded']:
+                    ctx.messages.append(f"  🛡️ {v['nickname']} 护盾抵挡！（剩余{v['shield_remaining']}层）")
+                else:
+                    ctx.messages.append(f"  💨 {v['nickname']} -{v['amount']}cm")
+            ctx.messages.extend([
+                "",
+                f"✨ 完美吸收！{ctx.nickname} +{total_stolen}cm",
+                "═══════════════════"
+            ])
+
+        elif roll < HeidongConfig.RESULT_ALL_TO_USER + HeidongConfig.RESULT_HALF_SPRAY:
+            # 30%: 一半喷给路人
+            ctx.extra['black_hole']['result'] = 'half_spray'
+            user_gain = total_stolen // 2
+            spray_amount = total_stolen - user_gain
+            ctx.length_change = user_gain
+
+            # 随机选几个路人获得喷射
+            non_victims = [(uid, data) for uid, data in valid_users
+                          if uid not in [v['user_id'] for v in victims] and uid != ctx.user_id]
+            if non_victims:
+                spray_count = min(3, len(non_victims))
+                spray_targets = random.sample(non_victims, spray_count)
+                spray_each = spray_amount // spray_count
+                for uid, data in spray_targets:
+                    ctx.extra['black_hole']['spray_targets'].append({
+                        'user_id': uid,
+                        'nickname': data.get('nickname', uid),
+                        'amount': spray_each
+                    })
+
+            ctx.messages.extend([
+                "🌀 ══ 牛牛黑洞 ══ 🌀",
+                f"🕳️ {ctx.nickname} 召唤了黑洞！",
+                f"💫 吸取了 {len(victims)} 人的精华！",
+                "",
+                random.choice(self.UNSTABLE_TEXTS),
+                ""
+            ])
+            for v in victims:
+                if v['shielded']:
+                    ctx.messages.append(f"  🛡️ {v['nickname']} 护盾抵挡！（剩余{v['shield_remaining']}层）")
+                else:
+                    ctx.messages.append(f"  💨 {v['nickname']} -{v['amount']}cm")
+            ctx.messages.append("")
+            ctx.messages.append(f"📥 {ctx.nickname} 勉强吸到 +{user_gain}cm")
+            if ctx.extra['black_hole']['spray_targets']:
+                ctx.messages.append("📤 剩下的喷射给了路人：")
+                for t in ctx.extra['black_hole']['spray_targets']:
+                    ctx.messages.append(f"  🎁 {t['nickname']} 捡漏 +{t['amount']}cm")
+            ctx.messages.append("═══════════════════")
+
+        elif roll < HeidongConfig.RESULT_ALL_TO_USER + HeidongConfig.RESULT_HALF_SPRAY + HeidongConfig.RESULT_BACKFIRE:
+            # 20%: 反噬自己
+            ctx.extra['black_hole']['result'] = 'backfire'
+            backfire_loss = int(abs(ctx.user_length) * HeidongConfig.BACKFIRE_PERCENT)
+            ctx.length_change = -backfire_loss
+
+            ctx.messages.extend([
+                "🌀 ══ 牛牛黑洞 ══ 🌀",
+                f"🕳️ {ctx.nickname} 召唤了黑洞！",
+                "",
+                random.choice(self.BACKFIRE_TEXTS),
+                "",
+                f"😱 {ctx.nickname} 被自己的黑洞吞噬！",
+                f"📉 损失 {backfire_loss}cm！",
+                "",
+                "（其他人的牛牛安然无恙，全部消散在虚空中...）",
+                "═══════════════════"
+            ])
+            # 不扣受害者的长度
+            for v in victims:
+                v['amount'] = 0
+
+        else:
+            # 10%: 吃撑反喷
+            ctx.extra['black_hole']['result'] = 'reverse'
+            # 使用者损失，受害者反而获得
+            ctx.length_change = -total_stolen
+
+            ctx.messages.extend([
+                "🌀 ══ 牛牛黑洞 ══ 🌀",
+                f"🕳️ {ctx.nickname} 召唤了黑洞！",
+                "",
+                random.choice(self.REVERSE_TEXTS),
+                "",
+                "🎉 黑洞变成了喷泉！所有人反而变长了！",
+                ""
+            ])
+            for v in victims:
+                if not v['shielded'] and v['amount'] > 0:
+                    # 反转：受害者获得长度而不是失去
+                    v['reverse_gain'] = v['amount']
+                    ctx.messages.append(f"  🎁 {v['nickname']} 白捡 +{v['amount']}cm")
+                    v['amount'] = 0  # 不扣他们的
+            ctx.messages.extend([
+                "",
+                f"💸 而 {ctx.nickname} 作为代价... -{total_stolen}cm",
+                "",
+                "🤡 群友们：谢谢老板！",
+                "═══════════════════"
+            ])
 
         return ctx
 
@@ -1073,30 +1804,48 @@ class ShangbaoxianEffect(ItemEffect):
 # 牛牛盾牌 Effect
 # =============================================================================
 
-class BaoxianxiangEffect(ItemEffect):
+class NiuniuDunpaiEffect(ItemEffect):
     """牛牛盾牌 - Safe Box: grants 3 shield charges to protect against negative effects"""
     name = "牛牛盾牌"
     triggers = [EffectTrigger.ON_PURCHASE]
     consume_on_use = False  # Active item, no inventory
 
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
-        from niuniu_config import BaoxianxiangConfig
+        from niuniu_config import NiuniuDunpaiConfig
+
+        # 扣除50%长度和硬度作为代价
+        old_length = ctx.user_length
+        old_hardness = ctx.user_hardness
+        length_cost = int(abs(old_length) * 0.5)
+        hardness_cost = int(old_hardness * 0.5)
+        if old_length > 0:
+            ctx.length_change = -length_cost
+        else:
+            ctx.length_change = length_cost  # 负数长度：扣代价让它更接近0
+        ctx.hardness_change = -hardness_cost
 
         # 增加护盾次数
         current_charges = ctx.user_data.get('shield_charges', 0)
-        new_charges = current_charges + BaoxianxiangConfig.SHIELD_CHARGES
+        new_charges = current_charges + NiuniuDunpaiConfig.SHIELD_CHARGES
 
-        ctx.extra['add_shield_charges'] = BaoxianxiangConfig.SHIELD_CHARGES
+        ctx.extra['add_shield_charges'] = NiuniuDunpaiConfig.SHIELD_CHARGES
 
         ctx.messages.append("🛡️ ══ 牛牛盾牌 ══ 🛡️")
         ctx.messages.append(f"✨ {ctx.nickname} 购买了牛牛盾牌！")
-        ctx.messages.append(f"🔒 获得 {BaoxianxiangConfig.SHIELD_CHARGES} 次护盾防护")
+        ctx.messages.append(f"⚠️ 代价：长度 {old_length}cm → {old_length + ctx.length_change}cm ({ctx.length_change:+}cm)")
+        ctx.messages.append(f"⚠️ 代价：硬度 {old_hardness} → {old_hardness + ctx.hardness_change} ({ctx.hardness_change:+})")
+        ctx.messages.append(f"🔒 获得 {NiuniuDunpaiConfig.SHIELD_CHARGES} 次护盾防护")
         if current_charges > 0:
             ctx.messages.append(f"📊 当前护盾：{current_charges} → {new_charges}")
         else:
             ctx.messages.append(f"📊 当前护盾：{new_charges}")
         ctx.messages.append("")
-        ctx.messages.append("💡 护盾可抵挡劫富济贫/混沌风暴/月牙天冲/大自爆的负面效果")
+        ctx.messages.append("💡 护盾可抵挡：")
+        ctx.messages.append("  • 劫富济贫（被抢时）")
+        ctx.messages.append("  • 月牙天冲（被冲时）")
+        ctx.messages.append("  • 大自爆（被炸时）")
+        ctx.messages.append("  • 混沌风暴负面事件")
+        ctx.messages.append("  • 夺牛魔（减免10%/层）")
         ctx.messages.append("═══════════════════")
 
         return ctx
@@ -1242,20 +1991,19 @@ def create_effect_manager() -> EffectManager:
     manager.register(DuoxinmoEffect())
     manager.register(CuihuoZhuadaoEffect())
     manager.register(MiaocuijiaoEffect())
+    manager.register(XiaolanpianEffect())
 
     # Register active item effects
     manager.register(BalishijiaEffect())
-    manager.register(BashideBanEffect())
-    manager.register(BumiezhiwoEffect())
-    manager.register(AmstlangEffect())
     manager.register(DutuyingbiEffect())
     manager.register(JiefuJipinEffect())
     manager.register(HundunFengbaoEffect())
+    manager.register(HeidongEffect())
     manager.register(YueyaTianchongEffect())
     manager.register(DazibaoEffect())
     manager.register(HuoshuiDongyinEffect())
     manager.register(ShangbaoxianEffect())
-    manager.register(BaoxianxiangEffect())
+    manager.register(NiuniuDunpaiEffect())
     manager.register(QiongniuYishengEffect())
     manager.register(JueduizhiEffect())
 

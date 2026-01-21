@@ -4,6 +4,8 @@ import copy
 import random
 from typing import Dict, Any, List
 from astrbot.api.all import Context, AstrMessageEvent
+from astrbot.core.message.components import Node, Nodes, Plain
+from astrbot.core.message.message_event_result import MessageEventResult
 from niuniu_config import (
     PLUGIN_DIR, NIUNIU_LENGTHS_FILE, SIGN_DATA_FILE, SHOP_CONFIG_FILE,
     DEFAULT_SHOP_ITEMS
@@ -49,11 +51,58 @@ class NiuniuShop:
         return copy.deepcopy(DEFAULT_SHOP_ITEMS)
 
     async def show_shop(self, event: AstrMessageEvent):
-        """显示商城"""
-        shop_list = ["🛒 牛牛商城", "📝 牛牛购买 编号 [数量] （如：牛牛购买 1 5）"]
+        """显示商城（卡片格式）"""
+        nodes = []
+        bot_id = event.get_self_id() or "0"
+
+        # 道具类型emoji映射
+        type_emoji = {
+            'active': '⚡',   # 主动道具
+            'passive': '🛡️'  # 被动道具
+        }
+
         for item in self.get_shop_items():
-            shop_list.append(f"{item['id']}. {item['name']} - {item['desc']} (价格: {item['price']} 金币)")
-        yield event.plain_result("\n".join(shop_list))
+            item_type = item.get('type', 'active')
+            emoji = type_emoji.get(item_type, '📦')
+            max_count = item.get('max', '')
+            max_str = f"（最多持有{max_count}个）" if max_count else ""
+
+            # 动态定价显示
+            price_str = "动态定价" if item.get('dynamic_price') else f"{item['price']} 💰"
+
+            content_text = (
+                f"{emoji} {item['name']}\n"
+                f"\n"
+                f"📋 {item['desc']}{max_str}\n"
+                f"\n"
+                f"💵 价格: {price_str}"
+            )
+
+            node = Node(
+                content=[Plain(content_text)],
+                uin=str(bot_id),
+                name=f"[{item['id']}] {item['name']}"
+            )
+            nodes.append(node)
+
+        # 添加使用说明
+        usage_node = Node(
+            content=[Plain(
+                "📖 购买方式\n"
+                "\n"
+                "牛牛购买 编号 [数量]\n"
+                "\n"
+                "例: 牛牛购买 1\n"
+                "例: 牛牛购买 1 5"
+            )],
+            uin=str(bot_id),
+            name="📖 使用说明"
+        )
+        nodes.append(usage_node)
+
+        result = MessageEventResult()
+        result.chain = [Nodes(nodes=nodes)]
+        yield result
 
     def _load_niuniu_data(self) -> Dict[str, Any]:
         """加载牛牛核心数据"""
@@ -297,16 +346,23 @@ class NiuniuShop:
     async def handle_buy(self, event: AstrMessageEvent):
         """处理购买命令，支持批量购买"""
         msg_parts = event.message_str.split()
-        if len(msg_parts) < 2 or not msg_parts[1].isdigit():
+
+        # 提取所有数字参数
+        numbers = []
+        for part in msg_parts:
+            if part.isdigit():
+                numbers.append(int(part))
+
+        if len(numbers) < 1:
             yield event.plain_result("❌ 格式：牛牛购买 商品编号 [数量]\n例：牛牛购买 1\n例：牛牛购买 1 5（连续购买5次）")
             return
 
-        item_id = int(msg_parts[1])
+        item_id = numbers[0]
 
         # 解析购买数量（默认为1）
         buy_count = 1
-        if len(msg_parts) >= 3 and msg_parts[2].isdigit():
-            buy_count = int(msg_parts[2])
+        if len(numbers) >= 2:
+            buy_count = numbers[1]
             if buy_count < 1:
                 buy_count = 1
             elif buy_count > 99:
@@ -387,11 +443,11 @@ class NiuniuShop:
 
             elif selected_item['type'] == 'active':
                 # Active items - 区分简单道具和复杂道具
-                from niuniu_config import NiuniuConfig
+                from niuniu_config import DajiaoConfig
                 effect = self.main.effects.effects.get(selected_item['name'])
 
                 # 复杂道具列表（有特殊逻辑，不支持批量购买）
-                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生']
+                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞']
                 is_simple_item = selected_item['name'] not in complex_items
 
                 # 简单道具支持批量购买
@@ -403,11 +459,11 @@ class NiuniuShop:
                     max_buys_by_hardness = buy_count
                     if effect and hasattr(effect, 'hardness_change') and effect.hardness_change > 0:
                         current_hardness = user_data.get('hardness', 1)
-                        if current_hardness >= NiuniuConfig.MAX_HARDNESS:
-                            yield event.plain_result(f"⚠️ 硬度已达上限（{NiuniuConfig.MAX_HARDNESS}），无法购买增加硬度的道具")
+                        if current_hardness >= DajiaoConfig.MAX_HARDNESS:
+                            yield event.plain_result(f"⚠️ 硬度已达上限（{DajiaoConfig.MAX_HARDNESS}），无法购买增加硬度的道具")
                             return
                         # 计算最多能买几次才达到硬度上限
-                        remaining_hardness = NiuniuConfig.MAX_HARDNESS - current_hardness
+                        remaining_hardness = DajiaoConfig.MAX_HARDNESS - current_hardness
                         max_buys_by_hardness = remaining_hardness // effect.hardness_change
                         if max_buys_by_hardness <= 0:
                             max_buys_by_hardness = 1  # 至少能买1次
@@ -427,7 +483,7 @@ class NiuniuShop:
                     old_length = user_data.get('length', 0)
                     old_hardness = user_data.get('hardness', 1)
                     user_data['length'] = old_length + total_length_change
-                    user_data['hardness'] = min(NiuniuConfig.MAX_HARDNESS, max(1, old_hardness + total_hardness_change))
+                    user_data['hardness'] = min(DajiaoConfig.MAX_HARDNESS, max(1, old_hardness + total_hardness_change))
                     self._save_user_data(group_id, user_id, user_data)
 
                     # 生成消息
@@ -463,15 +519,15 @@ class NiuniuShop:
                 # 检查硬度上限 - 如果道具增加硬度且已达上限则拒绝购买
                 if effect and hasattr(effect, 'hardness_change') and effect.hardness_change > 0:
                     current_hardness = user_data.get('hardness', 1)
-                    if current_hardness >= NiuniuConfig.MAX_HARDNESS:
-                        yield event.plain_result(f"⚠️ 硬度已达上限（{NiuniuConfig.MAX_HARDNESS}），无法购买增加硬度的道具")
+                    if current_hardness >= DajiaoConfig.MAX_HARDNESS:
+                        yield event.plain_result(f"⚠️ 硬度已达上限（{DajiaoConfig.MAX_HARDNESS}），无法购买增加硬度的道具")
                         return
 
                 # Active items use effect system
                 extra_data = {'item_name': selected_item['name'], 'user_coins': user_coins}
 
                 # 需要群组数据的道具
-                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆']:
+                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞']:
                     niuniu_data = self._load_niuniu_data()
                     extra_data['group_data'] = niuniu_data.get(group_id, {})
 
@@ -505,9 +561,10 @@ class NiuniuShop:
                         niuniu_data = self._load_niuniu_data()
                         group_data = niuniu_data.setdefault(group_id, {})
 
-                        # 扣除首富的长度（考虑祸水东引）
+                        # 扣除首富的长度和硬度（考虑祸水东引）
                         richest_id = robin_hood['richest_id']
                         steal_amount = robin_hood['steal_amount']
+                        steal_hardness = robin_hood.get('steal_hardness', 0)
 
                         if steal_amount > 0 and richest_id in group_data:
                             # 检查祸水东引（护盾已在效果中检查，这里检查转嫁）
@@ -520,6 +577,7 @@ class NiuniuShop:
                                     # 转嫁成功，扣新受害者
                                     new_victim_id = transfer_info['new_victim_id']
                                     group_data[new_victim_id]['length'] = group_data[new_victim_id].get('length', 0) - steal_amount
+                                    group_data[new_victim_id]['hardness'] = max(1, group_data[new_victim_id].get('hardness', 1) - steal_hardness)
                                     # 消耗转嫁次数
                                     group_data[richest_id]['risk_transfer_charges'] = transfer_info['charges_remaining']
                                     result_msg.append(transfer_info['message'])
@@ -528,8 +586,9 @@ class NiuniuShop:
                                     if insurance_info['triggered']:
                                         result_msg.append(insurance_info['message'])
                                 else:
-                                    # 正常扣除首富
+                                    # 正常扣除首富的长度和硬度
                                     group_data[richest_id]['length'] = group_data[richest_id].get('length', 0) - steal_amount
+                                    group_data[richest_id]['hardness'] = max(1, group_data[richest_id].get('hardness', 1) - steal_hardness)
                                     # 检查首富的保险
                                     insurance_info = self._check_victim_insurance(group_id, group_data, richest_id, steal_amount)
                                     if insurance_info['triggered']:
@@ -538,11 +597,12 @@ class NiuniuShop:
                                 # 有护盾，不扣（已在效果中处理）
                                 pass
 
-                        # 给穷人加长度
+                        # 给幸运儿加长度和硬度
                         for beneficiary in robin_hood['beneficiaries']:
                             uid = beneficiary['user_id']
                             if uid in group_data:
                                 group_data[uid]['length'] = group_data[uid].get('length', 0) + beneficiary['amount']
+                                group_data[uid]['hardness'] = group_data[uid].get('hardness', 1) + beneficiary.get('hardness', 0)
 
                         # 同时处理护盾消耗（劫富济贫单人）
                         if ctx.extra.get('consume_shield'):
@@ -637,6 +697,209 @@ class NiuniuShop:
                             self._update_new_game_coins(group_id, uid, current_coins + amount)
 
                         # 同时处理护盾消耗（混沌风暴多人）
+                        for shield_info in ctx.extra.get('consume_shields', []):
+                            target_id = shield_info['user_id']
+                            if target_id in group_data:
+                                current = group_data[target_id].get('shield_charges', 0)
+                                group_data[target_id]['shield_charges'] = max(0, current - shield_info['amount'])
+
+                        # 处理全属性交换
+                        for full_swap in chaos_storm.get('full_swaps', []):
+                            u1_id = full_swap['user1_id']
+                            u2_id = full_swap['user2_id']
+                            if u1_id in group_data and u2_id in group_data:
+                                # 交换长度
+                                group_data[u1_id]['length'] = full_swap['user2_old_len']
+                                group_data[u2_id]['length'] = full_swap['user1_old_len']
+                                # 交换硬度
+                                group_data[u1_id]['hardness'] = full_swap['user2_old_hard']
+                                group_data[u2_id]['hardness'] = full_swap['user1_old_hard']
+
+                        # 处理冷却重置
+                        for uid in chaos_storm.get('cooldown_resets', []):
+                            if uid in group_data:
+                                group_data[uid]['last_dajiao_time'] = 0
+
+                        # 处理混沌税（给使用者加长度）
+                        tax_collected = chaos_storm.get('tax_collected', 0)
+                        if tax_collected > 0 and user_id in group_data:
+                            group_data[user_id]['length'] = group_data[user_id].get('length', 0) + tax_collected
+                            result_msg.append(f"💰 混沌税收：+{tax_collected}cm")
+
+                        # 处理幸运祝福（设置下次打胶必成功标记）
+                        for uid in chaos_storm.get('lucky_buffs', []):
+                            if uid in group_data:
+                                group_data[uid]['next_dajiao_guaranteed'] = True
+
+                        # 处理量子纠缠（双方取平均）
+                        for entangle in chaos_storm.get('quantum_entangles', []):
+                            u1_id = entangle['user1_id']
+                            u2_id = entangle['user2_id']
+                            avg = entangle['avg']
+                            if u1_id in group_data:
+                                group_data[u1_id]['length'] = avg
+                            if u2_id in group_data:
+                                group_data[u2_id]['length'] = avg
+
+                        # 处理寄生虫标记
+                        for parasite in chaos_storm.get('parasites', []):
+                            host_id = parasite['host_id']
+                            if host_id in group_data:
+                                # 存储寄生虫信息：宿主下次打胶时，受益者也获得同等长度
+                                group_data[host_id].setdefault('parasites', []).append({
+                                    'beneficiary_id': parasite['beneficiary_id'],
+                                    'beneficiary_name': parasite['beneficiary_name']
+                                })
+
+                        # 处理全局事件
+                        for global_event in chaos_storm.get('global_events', []):
+                            event_type = global_event['type']
+                            # 使用预先记录的所有被选中的人（包括触发nothing等无变化事件的人）
+                            selected_ids = chaos_storm.get('all_selected_ids', [])
+                            # 过滤有效用户
+                            selected_ids = [uid for uid in selected_ids if uid in group_data]
+
+                            if event_type == 'doomsday':
+                                # 末日审判：最短归零，最长翻倍
+                                if len(selected_ids) >= 2:
+                                    lengths = [(uid, group_data[uid].get('length', 0)) for uid in selected_ids]
+                                    lengths.sort(key=lambda x: x[1])
+                                    shortest_uid = lengths[0][0]
+                                    longest_uid = lengths[-1][0]
+                                    old_shortest = lengths[0][1]
+                                    old_longest = lengths[-1][1]
+                                    shortest_name = group_data[shortest_uid].get('nickname', shortest_uid)
+                                    longest_name = group_data[longest_uid].get('nickname', longest_uid)
+
+                                    # 最短者检查护盾（归零是负面的）
+                                    shortest_shield = group_data[shortest_uid].get('shield_charges', 0)
+                                    if shortest_shield > 0:
+                                        group_data[shortest_uid]['shield_charges'] = shortest_shield - 1
+                                        result_msg.append(f"⚖️ 末日审判：🛡️ {shortest_name} 护盾抵挡了归零！（剩余{shortest_shield - 1}次）")
+                                    else:
+                                        group_data[shortest_uid]['length'] = 0
+                                        result_msg.append(f"⚖️ 末日审判：{shortest_name} 归零！")
+
+                                    # 最长者翻倍（正面效果，不检查护盾）
+                                    group_data[longest_uid]['length'] = old_longest * 2
+                                    result_msg.append(f"⚖️ 末日审判：{longest_name} 翻倍！")
+
+                            elif event_type == 'roulette':
+                                # 轮盘重置：所有人长度随机重新分配（混乱事件，不检查护盾）
+                                if len(selected_ids) >= 2:
+                                    lengths = [group_data[uid].get('length', 0) for uid in selected_ids]
+                                    random.shuffle(lengths)
+                                    for i, uid in enumerate(selected_ids):
+                                        group_data[uid]['length'] = lengths[i]
+                                    result_msg.append(f"🎰 轮盘重置：{len(selected_ids)}人的长度已重新洗牌！")
+
+                            elif event_type == 'reverse_talent':
+                                # 反向天赋：最长和最短互换
+                                if len(selected_ids) >= 2:
+                                    lengths = [(uid, group_data[uid].get('length', 0)) for uid in selected_ids]
+                                    lengths.sort(key=lambda x: x[1])
+                                    shortest_uid, shortest_len = lengths[0]
+                                    longest_uid, longest_len = lengths[-1]
+                                    shortest_name = group_data[shortest_uid].get('nickname', shortest_uid)
+                                    longest_name = group_data[longest_uid].get('nickname', longest_uid)
+
+                                    # 最长者检查护盾（变短是负面的）
+                                    longest_shield = group_data[longest_uid].get('shield_charges', 0)
+                                    if longest_shield > 0:
+                                        group_data[longest_uid]['shield_charges'] = longest_shield - 1
+                                        result_msg.append(f"🔄 反向天赋：🛡️ {longest_name} 护盾抵挡！（剩余{longest_shield - 1}次）互换取消！")
+                                    else:
+                                        group_data[shortest_uid]['length'] = longest_len
+                                        group_data[longest_uid]['length'] = shortest_len
+                                        result_msg.append(f"🔄 反向天赋：{shortest_name} 和 {longest_name} 长度互换！")
+
+                            elif event_type == 'lottery_bomb':
+                                # 团灭彩票
+                                if global_event.get('jackpot'):
+                                    # 全体翻倍（正面效果，不检查护盾）
+                                    for uid in selected_ids:
+                                        old_len = group_data[uid].get('length', 0)
+                                        group_data[uid]['length'] = old_len * 2
+                                    result_msg.append(f"🎊 团灭彩票大奖！{len(selected_ids)}人长度全部翻倍！")
+                                else:
+                                    # 全体-50%长度和硬度，检查护盾
+                                    affected_count = 0
+                                    shielded_names = []
+                                    for uid in selected_ids:
+                                        shield_charges = group_data[uid].get('shield_charges', 0)
+                                        nickname = group_data[uid].get('nickname', uid)
+                                        if shield_charges > 0:
+                                            # 护盾抵挡
+                                            group_data[uid]['shield_charges'] = shield_charges - 1
+                                            shielded_names.append(f"{nickname}(剩{shield_charges - 1})")
+                                        else:
+                                            # 受到惩罚
+                                            old_len = group_data[uid].get('length', 0)
+                                            old_hard = group_data[uid].get('hardness', 1)
+                                            len_loss = int(abs(old_len) * 0.5)
+                                            hard_loss = int(old_hard * 0.5)
+                                            if old_len > 0:
+                                                group_data[uid]['length'] = old_len - len_loss
+                                            else:
+                                                group_data[uid]['length'] = old_len + len_loss
+                                            group_data[uid]['hardness'] = max(1, old_hard - hard_loss)
+                                            affected_count += 1
+                                    result_msg.append(f"💣 团灭彩票未中...{affected_count}人各-50%长度和硬度！")
+                                    if shielded_names:
+                                        result_msg.append(f"🛡️ 护盾抵挡：{', '.join(shielded_names)}")
+
+                        self._save_niuniu_data(niuniu_data)
+
+                    # 处理牛牛黑洞的特殊逻辑
+                    if ctx.extra.get('black_hole'):
+                        black_hole = ctx.extra['black_hole']
+                        niuniu_data = self._load_niuniu_data()
+                        group_data = niuniu_data.setdefault(group_id, {})
+                        result_type = black_hole.get('result')
+
+                        # 根据结果类型处理
+                        if result_type in ['all_to_user', 'half_spray']:
+                            # 扣除受害者长度
+                            for victim in black_hole.get('victims', []):
+                                uid = victim['user_id']
+                                amount = victim.get('amount', 0)
+                                if uid in group_data and amount > 0 and not victim.get('shielded'):
+                                    # 检查祸水东引
+                                    transfer_info = self._check_risk_transfer(
+                                        group_data, uid, amount, 0, [user_id]
+                                    )
+                                    if transfer_info['transferred']:
+                                        new_victim_id = transfer_info['new_victim_id']
+                                        group_data[new_victim_id]['length'] = group_data[new_victim_id].get('length', 0) - amount
+                                        group_data[uid]['risk_transfer_charges'] = transfer_info['charges_remaining']
+                                        result_msg.append(transfer_info['message'])
+                                        insurance_info = self._check_victim_insurance(group_id, group_data, new_victim_id, amount)
+                                        if insurance_info['triggered']:
+                                            result_msg.append(insurance_info['message'])
+                                    else:
+                                        group_data[uid]['length'] = group_data[uid].get('length', 0) - amount
+                                        insurance_info = self._check_victim_insurance(group_id, group_data, uid, amount)
+                                        if insurance_info['triggered']:
+                                            result_msg.append(insurance_info['message'])
+
+                            # 处理喷射给路人
+                            for spray in black_hole.get('spray_targets', []):
+                                uid = spray['user_id']
+                                amount = spray.get('amount', 0)
+                                if uid in group_data and amount > 0:
+                                    group_data[uid]['length'] = group_data[uid].get('length', 0) + amount
+
+                        elif result_type == 'reverse':
+                            # 吃撑反喷：受害者获得长度
+                            for victim in black_hole.get('victims', []):
+                                uid = victim['user_id']
+                                gain = victim.get('reverse_gain', 0)
+                                if uid in group_data and gain > 0:
+                                    group_data[uid]['length'] = group_data[uid].get('length', 0) + gain
+
+                        # backfire 结果不扣任何人（已在效果中处理）
+
+                        # 消耗护盾
                         for shield_info in ctx.extra.get('consume_shields', []):
                             target_id = shield_info['user_id']
                             if target_id in group_data:
@@ -752,11 +1015,6 @@ class NiuniuShop:
                                 group_data[target_id]['shield_charges'] = max(0, current - shield_info['amount'])
 
                         self._save_niuniu_data(niuniu_data)
-
-                    # 记录劫富济贫使用时间
-                    if ctx.extra.get('record_jiefu_time'):
-                        import time
-                        user_data['last_jiefu_time'] = time.time()
 
                     # 处理牛牛盾牌护盾增加
                     if ctx.extra.get('add_shield_charges'):
