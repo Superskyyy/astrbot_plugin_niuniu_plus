@@ -71,7 +71,7 @@ class NiuniuShop:
             price_str = "动态定价" if item.get('dynamic_price') else f"{item['price']} 💰"
 
             content_text = (
-                f"{emoji} {item['name']}\n"
+                f"{emoji} [{item['id']}] {item['name']}\n"
                 f"\n"
                 f"📋 {item['desc']}{max_str}\n"
                 f"\n"
