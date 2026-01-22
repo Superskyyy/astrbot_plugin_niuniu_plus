@@ -1898,30 +1898,60 @@ class YueyaTianchongEffect(ItemEffect):
 
         # 构建消息
         percent_display = f"{damage_percent*100:.0f}%"
+
+        # 负数牛牛的特殊文案
+        is_negative = user_length < 0
+        negative_flavor_texts = [
+            "🕳️ 从深渊中汲取力量！",
+            "⚫ 负能量爆发！",
+            "🌑 黑暗面的力量觉醒！",
+            "💀 以诅咒之力发动攻击！",
+            "👻 怨念化作了刀刃！",
+            "🦇 从地狱深处发出的一击！",
+            "⬛ 负值也是一种力量！",
+            "🔮 逆转的牛牛，逆转的命运！",
+        ]
+
         if target_shielded:
-            ctx.messages.extend([
+            messages = [
                 "🌙 ══ 月牙天冲 ══ 🌙",
                 f"⚔️ {ctx.nickname} 对 {target_name} 发动了月牙天冲！",
+            ]
+            if is_negative:
+                messages.append(random.choice(negative_flavor_texts))
+            messages.extend([
                 f"💥 伤害：{damage}cm（{percent_display}）",
                 "",
                 f"🛡️ {target_name} 的护盾抵挡了攻击！（剩余{target_shield_charges - 1}次）",
                 f"📉 {ctx.nickname}: {user_length}→{user_length - damage}cm",
                 "",
-                "💀 自损八百！",
-                "═══════════════════"
             ])
+            if is_negative:
+                messages.append("💀 自损八百！负数牛牛越陷越深...")
+            else:
+                messages.append("💀 自损八百！")
+            messages.append("═══════════════════")
+            ctx.messages.extend(messages)
         else:
-            ctx.messages.extend([
+            messages = [
                 "🌙 ══ 月牙天冲 ══ 🌙",
                 f"⚔️ {ctx.nickname} 对 {target_name} 发动了月牙天冲！",
+            ]
+            if is_negative:
+                messages.append(random.choice(negative_flavor_texts))
+            messages.extend([
                 f"💥 伤害：{damage}cm（{percent_display}）",
                 "",
                 f"📉 {target_name}: {target_length}→{target_length - damage}cm",
                 f"📉 {ctx.nickname}: {user_length}→{user_length - damage}cm",
                 "",
-                "💀 同归于尽！",
-                "═══════════════════"
             ])
+            if is_negative:
+                messages.append("💀 同归于尽！以己之负，伤彼之正！")
+            else:
+                messages.append("💀 同归于尽！")
+            messages.append("═══════════════════")
+            ctx.messages.extend(messages)
 
         return ctx
 
@@ -1952,14 +1982,8 @@ class DazibaoEffect(ItemEffect):
         user_hardness = ctx.user_hardness
 
         # 负数或零长度不能自爆（否则就是白嫖归零，绝对值道具没意义了）
-        if user_length <= 0:
-            ctx.messages.append("❌ 负数/零长度的牛牛不能自爆！想归零？去买绝对值吧！")
-            ctx.extra['refund'] = True
-            ctx.intercept = True
-            return ctx
-
-        if user_hardness <= 1:
-            ctx.messages.append("❌ 你的硬度已经是1了，没有可以自爆的资本！")
+        if user_length <= 0 or user_hardness <= 1:
+            ctx.messages.append("❌ 你已经是废牛了，没有可以自爆的资本！")
             ctx.extra['refund'] = True
             ctx.intercept = True
             return ctx

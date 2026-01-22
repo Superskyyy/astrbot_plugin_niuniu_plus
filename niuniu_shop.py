@@ -446,8 +446,8 @@ class NiuniuShop:
                 from niuniu_config import DajiaoConfig
                 effect = self.main.effects.effects.get(selected_item['name'])
 
-                # 复杂道具列表（有特殊逻辑，不支持批量购买）
-                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞']
+                # 复杂道具列表（有特殊逻辑或动态效果，不支持批量购买）
+                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞', '巴黎牛家', '赌徒硬币', '绝对值！']
                 is_simple_item = selected_item['name'] not in complex_items
 
                 # 简单道具支持批量购买
