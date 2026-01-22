@@ -189,7 +189,7 @@ class NiuniuPlugin(Star):
     def _process_delegated_chaos_storm(self, ctx, group_id):
         """处理夺牛魔委托的混沌风暴效果"""
         chaos_storm = ctx.extra['chaos_storm']
-        niuniu_data = self._load_niuniu_data()
+        niuniu_data = self._load_niuniu_lengths()
         group_data = niuniu_data.setdefault(group_id, {})
 
         # 应用所有人的长度和硬度变化
@@ -332,7 +332,7 @@ class NiuniuPlugin(Star):
     def _process_delegated_dazibao(self, ctx, group_id, user_id):
         """处理夺牛魔委托的大自爆效果"""
         dazibao = ctx.extra['dazibao']
-        niuniu_data = self._load_niuniu_data()
+        niuniu_data = self._load_niuniu_lengths()
         group_data = niuniu_data.setdefault(group_id, {})
 
         # 自己归零
@@ -1189,7 +1189,7 @@ class NiuniuPlugin(Star):
         old_t_len = t_len
 
         # 创建效果上下文（包含 group_data 供夺牛魔委托效果使用）
-        all_group_data = self._load_niuniu_data().get(group_id, {})
+        all_group_data = self._load_niuniu_lengths().get(group_id, {})
         ctx = EffectContext(
             group_id=group_id,
             user_id=user_id,
