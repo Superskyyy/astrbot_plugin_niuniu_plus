@@ -351,17 +351,27 @@ class DuoxinmoEffect(ItemEffect):
         ctx.intercept = True
 
     def _handle_self_clear(self, ctx: EffectContext):
-        """10% 清空自己长度和硬度"""
+        """10% 清空自己长度和硬度（负数不受益）"""
         ctx.extra['duoxinmo_result'] = 'self_clear'
-        ctx.length_change = -ctx.user_length  # 归零
-        ctx.hardness_change = -(ctx.user_hardness - 1)  # 硬度归1
 
-        ctx.messages.extend([
-            "🥫 ══ 夺牛魔蝌蚪罐头 ══ 🥫",
-            random.choice(self.SELF_CLEAR_TEXTS),
-            f"💀 {ctx.nickname} 长度归零！硬度归1！",
-            "😱 这罐头有毒！！！",
-        ])
+        # 负数牛牛不能通过自爆获益（变成0），只有正数才归零
+        if ctx.user_length > 0:
+            ctx.length_change = -ctx.user_length  # 正数归零
+            ctx.hardness_change = -(ctx.user_hardness - 1)  # 硬度归1
+            ctx.messages.extend([
+                "🥫 ══ 夺牛魔蝌蚪罐头 ══ 🥫",
+                random.choice(self.SELF_CLEAR_TEXTS),
+                f"💀 {ctx.nickname} 长度归零！硬度归1！",
+                "😱 这罐头有毒！！！",
+            ])
+        else:
+            # 负数牛牛：罐头坏了，啥也没发生
+            ctx.messages.extend([
+                "🥫 ══ 夺牛魔蝌蚪罐头 ══ 🥫",
+                "💨 罐头打开了...里面是空的？",
+                f"😅 {ctx.nickname} 的负数牛牛太臭了，蝌蚪都跑了！",
+                "🎭 什么都没发生...",
+            ])
         ctx.intercept = True
 
 
@@ -1941,8 +1951,15 @@ class DazibaoEffect(ItemEffect):
         user_length = ctx.user_length
         user_hardness = ctx.user_hardness
 
-        if user_length <= 0 and user_hardness <= 1:
-            ctx.messages.append("❌ 你已经是废牛了，没有可以自爆的资本！")
+        # 负数或零长度不能自爆（否则就是白嫖归零，绝对值道具没意义了）
+        if user_length <= 0:
+            ctx.messages.append("❌ 负数/零长度的牛牛不能自爆！想归零？去买绝对值吧！")
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        if user_hardness <= 1:
+            ctx.messages.append("❌ 你的硬度已经是1了，没有可以自爆的资本！")
             ctx.extra['refund'] = True
             ctx.intercept = True
             return ctx
