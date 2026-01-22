@@ -447,7 +447,7 @@ class NiuniuShop:
                 effect = self.main.effects.effects.get(selected_item['name'])
 
                 # 复杂道具列表（有特殊逻辑或动态效果，不支持批量购买）
-                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞', '巴黎牛家', '赌徒硬币', '绝对值！']
+                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞', '巴黎牛家', '赌徒硬币', '绝对值！', '牛牛寄生', '驱牛药']
                 is_simple_item = selected_item['name'] not in complex_items
 
                 # 简单道具支持批量购买
@@ -527,7 +527,7 @@ class NiuniuShop:
                 extra_data = {'item_name': selected_item['name'], 'user_coins': user_coins}
 
                 # 需要群组数据的道具
-                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞']:
+                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生']:
                     niuniu_data = self._load_niuniu_data()
                     extra_data['group_data'] = niuniu_data.get(group_id, {})
 
@@ -741,15 +741,15 @@ class NiuniuShop:
                             if u2_id in group_data:
                                 group_data[u2_id]['length'] = avg
 
-                        # 处理寄生虫标记
-                        for parasite in chaos_storm.get('parasites', []):
-                            host_id = parasite['host_id']
+                        # 处理寄生牛牛标记
+                        for parasite_data in chaos_storm.get('parasites', []):
+                            host_id = parasite_data['host_id']
                             if host_id in group_data:
-                                # 存储寄生虫信息：宿主下次打胶时，受益者也获得同等长度
-                                group_data[host_id].setdefault('parasites', []).append({
-                                    'beneficiary_id': parasite['beneficiary_id'],
-                                    'beneficiary_name': parasite['beneficiary_name']
-                                })
+                                # 使用单一寄生结构（新寄生覆盖旧寄生）
+                                group_data[host_id]['parasite'] = {
+                                    'beneficiary_id': parasite_data['beneficiary_id'],
+                                    'beneficiary_name': parasite_data['beneficiary_name']
+                                }
 
                         # 处理全局事件
                         for global_event in chaos_storm.get('global_events', []):
