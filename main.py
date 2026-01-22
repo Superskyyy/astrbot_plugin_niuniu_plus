@@ -186,6 +186,109 @@ class NiuniuPlugin(Star):
             return f"{length/100:.2f}m"
         return f"{length}cm"
 
+    def _check_and_trigger_parasite(self, group_id: str, host_id: str, gain: float,
+                                     processed_ids: set = None) -> list:
+        """
+        检查并触发寄生牛牛抽取效果（支持链式反应）
+
+        Args:
+            group_id: 群组ID
+            host_id: 宿主ID（获得增益的人）
+            gain: 增益数值
+            processed_ids: 已处理的用户ID集合（防止无限循环）
+
+        Returns:
+            消息列表
+        """
+        from niuniu_config import NiuniuJishengConfig
+
+        if processed_ids is None:
+            processed_ids = set()
+
+        # 防止无限循环
+        if host_id in processed_ids:
+            return []
+        processed_ids.add(host_id)
+
+        messages = []
+        host_data = self.get_user_data(group_id, host_id)
+
+        if not host_data:
+            return messages
+
+        # 检查宿主是否有寄生牛牛
+        parasite = host_data.get('parasite')
+        if not parasite:
+            return messages
+
+        beneficiary_id = parasite.get('beneficiary_id')
+        beneficiary_name = parasite.get('beneficiary_name', '某人')
+
+        if not beneficiary_id:
+            return messages
+
+        # 检查增益是否达到阈值
+        host_length = host_data.get('length', 0)
+        threshold = abs(host_length) * NiuniuJishengConfig.TRIGGER_THRESHOLD
+
+        if gain <= threshold:
+            return messages
+
+        # 触发抽取！
+        host_name = host_data.get('nickname', host_id)
+
+        # 计算抽取量
+        drain_length = int(abs(host_length) * NiuniuJishengConfig.DRAIN_LENGTH_PERCENT)
+        if drain_length < 1:
+            drain_length = 1
+
+        host_hardness = host_data.get('hardness', 1)
+        drain_hardness = int(host_hardness * NiuniuJishengConfig.DRAIN_HARDNESS_PERCENT)
+        # 硬度边界情况：如果硬度为1，抽取到0；如果硬度为0，不抽取
+        if host_hardness == 1:
+            drain_hardness = 1
+        elif host_hardness == 0:
+            drain_hardness = 0
+        elif drain_hardness < 1:
+            drain_hardness = 1
+
+        # 扣除宿主的长度和硬度
+        new_host_length = host_length - drain_length
+        new_host_hardness = max(0, host_hardness - drain_hardness)
+        self.update_user_data(group_id, host_id, {
+            'length': new_host_length,
+            'hardness': new_host_hardness
+        })
+
+        # 给受益者加长度和硬度
+        beneficiary_data = self.get_user_data(group_id, beneficiary_id)
+        if beneficiary_data:
+            new_beneficiary_length = beneficiary_data.get('length', 0) + drain_length
+            new_beneficiary_hardness = min(100, beneficiary_data.get('hardness', 1) + drain_hardness)
+            self.update_user_data(group_id, beneficiary_id, {
+                'length': new_beneficiary_length,
+                'hardness': new_beneficiary_hardness
+            })
+
+            # 生成消息
+            drain_text = random.choice(NiuniuJishengConfig.DRAIN_TEXTS).format(
+                host_name=host_name,
+                gain=gain,
+                beneficiary_name=beneficiary_name,
+                drain_length=drain_length,
+                drain_hardness=drain_hardness
+            )
+            messages.append(drain_text)
+
+            # 链式反应：如果受益者也有寄生牛牛，检查是否触发
+            if drain_length > 0:
+                chain_messages = self._check_and_trigger_parasite(
+                    group_id, beneficiary_id, drain_length, processed_ids
+                )
+                messages.extend(chain_messages)
+
+        return messages
+
     def _process_delegated_chaos_storm(self, ctx, group_id):
         """处理夺牛魔委托的混沌风暴效果"""
         chaos_storm = ctx.extra['chaos_storm']
@@ -261,15 +364,15 @@ class NiuniuPlugin(Star):
             if u2_id in group_data:
                 group_data[u2_id]['length'] = avg_len
 
-        # 处理寄生虫
-        for parasite in chaos_storm.get('parasites', []):
-            host_id = parasite['host_id']
+        # 处理寄生牛牛（使用单一寄生结构）
+        for parasite_data in chaos_storm.get('parasites', []):
+            host_id = parasite_data['host_id']
             if host_id in group_data:
-                parasites_list = group_data[host_id].get('parasites', [])
-                parasites_list.append({
-                    'beneficiary_id': parasite['beneficiary_id']
-                })
-                group_data[host_id]['parasites'] = parasites_list
+                # 单一寄生：新寄生覆盖旧寄生
+                group_data[host_id]['parasite'] = {
+                    'beneficiary_id': parasite_data['beneficiary_id'],
+                    'beneficiary_name': parasite_data.get('beneficiary_name', '某人')
+                }
 
         # 处理全局事件
         for global_event in chaos_storm.get('global_events', []):
@@ -1010,22 +1113,11 @@ class NiuniuPlugin(Star):
 
         self.update_user_data(group_id, user_id, updated_data)
 
-        # ===== 寄生虫效果：如果有人在我身上种了寄生虫，他们也获得同等长度 =====
-        parasites = user_data.get('parasites', [])
-        if parasites and total_change > 0:
-            parasite_msgs = []
-            for parasite in parasites:
-                beneficiary_id = parasite['beneficiary_id']
-                beneficiary_name = parasite['beneficiary_name']
-                # 给受益者加长度
-                beneficiary_data = self.get_user_data(group_id, beneficiary_id)
-                if beneficiary_data:
-                    self.update_user_data(group_id, beneficiary_id, {
-                        'length': beneficiary_data['length'] + total_change
-                    })
-                    parasite_msgs.append(f"🦠 {beneficiary_name} 的寄生虫生效！+{total_change}cm")
-            # 清除寄生虫（一次性效果）
-            self.update_user_data(group_id, user_id, {'parasites': []})
+        # ===== 寄生牛牛效果：如果有人在我身上种了寄生牛牛，检查是否触发抽取 =====
+        if total_change > 0:
+            parasite_msgs = self._check_and_trigger_parasite(
+                group_id, user_id, total_change, processed_ids=set()
+            )
             result_msgs.extend(parasite_msgs)
 
         # 更新金币
@@ -2152,6 +2244,13 @@ class NiuniuPlugin(Star):
             hardness=user_data['hardness'],
             evaluation=evaluation
         )
+
+        # 如果有寄生牛牛，显示寄生信息
+        parasite = user_data.get('parasite')
+        if parasite:
+            beneficiary_name = parasite.get('beneficiary_name', '某人')
+            text += f"\n🦠【寄】寄生牛牛来自：{beneficiary_name}"
+
         yield event.plain_result(text)
 
     async def _show_ranking(self, event):
@@ -2185,8 +2284,10 @@ class NiuniuPlugin(Star):
         top_users = sorted_users[:10]
         for idx, (uid, data) in enumerate(top_users, 1):
             hardness = data.get('hardness', 1)
+            # 检查是否有寄生牛牛
+            parasite_mark = "【寄】" if data.get('parasite') else ""
             ranking.append(
-                f"{idx}. {data['nickname']} ➜ {self.format_length(data['length'])} 💪{hardness}"
+                f"{idx}. {data['nickname']}{parasite_mark} ➜ {self.format_length(data['length'])} 💪{hardness}"
             )
 
         # 如果总人数超过10，显示...和后3名
@@ -2197,8 +2298,10 @@ class NiuniuPlugin(Star):
             bottom_users = sorted_users[bottom_start:]
             for idx, (uid, data) in enumerate(bottom_users, bottom_start + 1):
                 hardness = data.get('hardness', 1)
+                # 检查是否有寄生牛牛
+                parasite_mark = "【寄】" if data.get('parasite') else ""
                 ranking.append(
-                    f"{idx}. {data['nickname']} ➜ {self.format_length(data['length'])} 💪{hardness}"
+                    f"{idx}. {data['nickname']}{parasite_mark} ➜ {self.format_length(data['length'])} 💪{hardness}"
                 )
 
         yield event.plain_result("\n".join(ranking))

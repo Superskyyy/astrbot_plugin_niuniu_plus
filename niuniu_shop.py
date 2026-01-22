@@ -1031,6 +1031,25 @@ class NiuniuShop:
                         add_charges = ctx.extra['add_insurance_charges']
                         user_data['insurance_charges'] = user_data.get('insurance_charges', 0) + add_charges
 
+                    # 处理牛牛寄生：在宿主身上种植寄生牛牛
+                    if ctx.extra.get('parasite'):
+                        parasite_info = ctx.extra['parasite']
+                        host_id = parasite_info['host_id']
+                        niuniu_data = self._load_niuniu_data()
+                        group_data = niuniu_data.setdefault(group_id, {})
+                        if host_id in group_data:
+                            # 设置寄生牛牛（单一寄生，覆盖旧的）
+                            group_data[host_id]['parasite'] = {
+                                'beneficiary_id': parasite_info['beneficiary_id'],
+                                'beneficiary_name': parasite_info['beneficiary_name']
+                            }
+                            self._save_niuniu_data(niuniu_data)
+
+                    # 处理驱牛药：清除自己身上的寄生牛牛
+                    if ctx.extra.get('cure_parasite'):
+                        if 'parasite' in user_data:
+                            del user_data['parasite']
+
                     # Apply changes to current user
                     old_length = user_data.get('length', 0)
                     old_hardness = user_data.get('hardness', 1)
@@ -1148,7 +1167,13 @@ class NiuniuShop:
         if insurance_charges > 0:
             result_list.append(f"📋 上保险：{insurance_charges}次")
 
-        if not items and shield_charges == 0 and risk_transfer_charges == 0 and insurance_charges == 0:
+        # 显示寄生牛牛状态
+        parasite = user_data.get('parasite')
+        if parasite:
+            beneficiary_name = parasite.get('beneficiary_name', '某人')
+            result_list.append(f"🦠【寄】寄生牛牛来自：{beneficiary_name}（使用驱牛药可清除）")
+
+        if not items and shield_charges == 0 and risk_transfer_charges == 0 and insurance_charges == 0 and not parasite:
             result_list.append("🛍️ 你的背包里还没有道具哦~")
 
         # 显示金币总额

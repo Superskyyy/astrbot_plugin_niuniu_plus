@@ -550,6 +550,51 @@ class DutuyingbiEffect(ItemEffect):
         "💨 硬币滚走了，带走了一半的你..."
     ]
 
+    # 负数专属文案
+    NEGATIVE_DOUBLE_TEXTS = [
+        "🎰 硬币正面朝上！凹陷减半！",
+        "🌀 负负...得少负？数学真奇妙！",
+        "🎭 硬币帮你把坑填了一半！",
+        "✨ 正面！凹下去的牛牛回弹了一点！",
+        "🪙 叮！命运垂怜，凹陷修复中...",
+        "🍀 硬币说：「给你减点负担」",
+        "🔧 硬币化身维修工，填坑ing~",
+        "💫 正面朝上！负能量被吸走一半！",
+    ]
+
+    NEGATIVE_HALVE_TEXTS = [
+        "🎰 硬币反面朝上...凹得更深了！",
+        "🕳️ 硬币砸出一个更大的坑！",
+        "💀 反面！深渊在凝视你...",
+        "😱 硬币：「挖呀挖呀挖~」",
+        "🌑 凹陷加倍！地心探险开始！",
+        "☠️ 硬币跳进坑里，还往下挖！",
+        "🔨 硬币化身挖掘机，凹凹凹！",
+        "💔 反面...你和地心更近了一步",
+    ]
+
+    NEGATIVE_JACKPOT_TEXTS = [
+        "🎰✨ 硬币爆发金光！负数牛牛起死回生！",
+        "🌟 天降神迹！从地底飞升天际！",
+        "💫 硬币立起来了！负转正！逆天改命！",
+        "🎇 叮叮叮！从深渊到巅峰！",
+        "⭐ 硬币：「从今天起，你不再是负数！」",
+        "🚀 负数牛牛一飞冲天！！！",
+        "🔮 硬币施展禁术：负数逆转！",
+        "🎊 从欠债到暴富！命运的馈赠！",
+    ]
+
+    NEGATIVE_BADLUCK_TEXTS = [
+        "🎰💀 硬币裂开...负数牛牛坠入深渊！",
+        "☠️ 硬币变成铲子，疯狂往下挖！",
+        "🌑 霉运降临！凹到地心去吧！",
+        "💔 硬币：「让你体验什么叫真正的负」",
+        "👻 负数还能更负？硬币说可以！",
+        "🕳️ 挖穿地球的节奏！凹到极限！",
+        "😈 硬币邪笑：「负无止境~」",
+        "💀 从负数到超级负数！深渊加深！",
+    ]
+
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
         current_length = ctx.user_length
         roll = random.random()
@@ -572,7 +617,10 @@ class DutuyingbiEffect(ItemEffect):
 
     def _apply_jackpot(self, ctx: EffectContext, current_length: float):
         """头等奖：长度变成4倍"""
-        ctx.messages.append(random.choice(self.JACKPOT_TEXTS))
+        if current_length < 0:
+            ctx.messages.append(random.choice(self.NEGATIVE_JACKPOT_TEXTS))
+        else:
+            ctx.messages.append(random.choice(self.JACKPOT_TEXTS))
         ctx.messages.append("🏆 ═══ 头 等 奖 ═══ 🏆")
 
         if current_length > 0:
@@ -584,6 +632,8 @@ class DutuyingbiEffect(ItemEffect):
             gain = abs(current_length) * 4
             ctx.length_change = gain
             ctx.messages.append(f"💰 逆天改命！{current_length:.1f}cm → {current_length + gain:.1f}cm (+{gain:.1f}cm)")
+            ctx.messages.append("🎊 负数牛牛的春天来了！！！")
+            return
         else:
             gain = 100
             ctx.length_change = gain
@@ -593,7 +643,10 @@ class DutuyingbiEffect(ItemEffect):
 
     def _apply_bad_luck(self, ctx: EffectContext, current_length: float):
         """霉运：长度变成-2倍"""
-        ctx.messages.append(random.choice(self.BAD_LUCK_TEXTS))
+        if current_length < 0:
+            ctx.messages.append(random.choice(self.NEGATIVE_BADLUCK_TEXTS))
+        else:
+            ctx.messages.append(random.choice(self.BAD_LUCK_TEXTS))
         ctx.messages.append("💀 ═══ 霉 运 降 临 ═══ 💀")
 
         if current_length > 0:
@@ -606,6 +659,8 @@ class DutuyingbiEffect(ItemEffect):
             loss = abs(current_length) * 3
             ctx.length_change = -loss
             ctx.messages.append(f"😱 凹到地心！{current_length:.1f}cm → {current_length - loss:.1f}cm (-{loss:.1f}cm)")
+            ctx.messages.append("🕳️ 负数牛牛的噩梦...")
+            return
         else:
             loss = 100
             ctx.length_change = -loss
@@ -615,15 +670,16 @@ class DutuyingbiEffect(ItemEffect):
 
     def _apply_double(self, ctx: EffectContext, current_length: float):
         """翻倍"""
-        text = random.choice(self.DOUBLE_TEXTS)
-
         if current_length > 0:
+            text = random.choice(self.DOUBLE_TEXTS)
             ctx.length_change = current_length
             ctx.messages.append(f"{text} +{current_length:.1f}cm")
         elif current_length < 0:
+            text = random.choice(self.NEGATIVE_DOUBLE_TEXTS)
             gain = abs(current_length) // 2
             ctx.length_change = gain
-            ctx.messages.append(f"🎰 硬币正面朝上！凹陷减半！+{gain:.1f}cm")
+            ctx.messages.append(f"{text} +{gain:.1f}cm")
+            ctx.messages.append(f"🍀 {current_length:.1f}cm → {current_length + gain:.1f}cm 往0迈进！")
         else:
             change = random.randint(5, 15)
             ctx.length_change = change
@@ -631,16 +687,17 @@ class DutuyingbiEffect(ItemEffect):
 
     def _apply_halve(self, ctx: EffectContext, current_length: float):
         """减半"""
-        text = random.choice(self.HALVE_TEXTS)
-
         if current_length > 0:
+            text = random.choice(self.HALVE_TEXTS)
             loss = current_length / 2
             ctx.length_change = -loss
             ctx.messages.append(f"{text} -{loss:.1f}cm")
         elif current_length < 0:
+            text = random.choice(self.NEGATIVE_HALVE_TEXTS)
             loss = abs(current_length)
             ctx.length_change = -loss
-            ctx.messages.append(f"🎰 硬币反面朝上...凹得更深了！-{loss:.1f}cm")
+            ctx.messages.append(f"{text} -{loss:.1f}cm")
+            ctx.messages.append(f"💀 {current_length:.1f}cm → {current_length - loss:.1f}cm 更深了...")
         else:
             change = random.randint(-15, -5)
             ctx.length_change = change
@@ -2358,6 +2415,119 @@ class JueduizhiEffect(ItemEffect):
 
 
 # =============================================================================
+# 牛牛寄生 Effect
+# =============================================================================
+class NiuniuJishengEffect(ItemEffect):
+    """牛牛寄生 - Parasite: plant a parasite on a random host"""
+    name = "牛牛寄生"
+    triggers = [EffectTrigger.ON_PURCHASE]
+    consume_on_use = False  # Active item, no inventory
+
+    def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        from niuniu_config import NiuniuJishengConfig
+
+        group_data = ctx.extra.get('group_data', {})
+        user_id = ctx.user_id
+        nickname = ctx.nickname
+
+        # 找到可以被寄生的用户（排除自己）
+        valid_hosts = [
+            (uid, data) for uid, data in group_data.items()
+            if isinstance(data, dict) and 'length' in data
+            and uid != user_id and not uid.startswith('_') and uid != 'plugin_enabled'
+        ]
+
+        if len(valid_hosts) < NiuniuJishengConfig.MIN_PLAYERS - 1:
+            ctx.messages.extend([
+                "❌ ══ 牛牛寄生 ══ ❌",
+                f"⚠️ 群里没有其他人可以被寄生！",
+                f"📊 至少需要{NiuniuJishengConfig.MIN_PLAYERS}人",
+                "═══════════════════"
+            ])
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        # 随机选择一个宿主
+        host_id, host_data = random.choice(valid_hosts)
+        host_name = host_data.get('nickname', host_id)
+
+        # 检查宿主是否已有寄生牛牛
+        old_parasite = host_data.get('parasite')
+        override_msg = None
+        if old_parasite:
+            old_beneficiary_name = old_parasite.get('beneficiary_name', '某人')
+            override_msg = random.choice(NiuniuJishengConfig.OVERRIDE_TEXTS).format(
+                old_beneficiary_name=old_beneficiary_name,
+                host_name=host_name
+            )
+
+        # 设置新的寄生信息（存储到ctx.extra，让shop处理）
+        ctx.extra['parasite'] = {
+            'host_id': host_id,
+            'host_name': host_name,
+            'beneficiary_id': user_id,
+            'beneficiary_name': nickname
+        }
+
+        # 生成消息
+        parasite_text = random.choice(NiuniuJishengConfig.PARASITE_TEXTS).format(
+            host_name=host_name
+        )
+
+        ctx.messages.extend([
+            "🦠 ══ 牛牛寄生 ══ 🦠",
+            f"✨ {parasite_text}",
+        ])
+
+        if override_msg:
+            ctx.messages.append(f"⚔️ {override_msg}")
+
+        ctx.messages.append("═══════════════════")
+
+        return ctx
+
+
+class QuniuyaoEffect(ItemEffect):
+    """驱牛药 - Cure: remove parasite from self"""
+    name = "驱牛药"
+    triggers = [EffectTrigger.ON_PURCHASE]
+    consume_on_use = False  # Active item, no inventory
+
+    def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        from niuniu_config import NiuniuJishengConfig
+
+        # 检查自己是否有寄生牛牛
+        parasite = ctx.user_data.get('parasite')
+
+        if not parasite:
+            ctx.messages.extend([
+                "❌ ══ 驱牛药 ══ ❌",
+                random.choice(NiuniuJishengConfig.NO_PARASITE_TEXTS),
+                "═══════════════════"
+            ])
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        beneficiary_name = parasite.get('beneficiary_name', '某人')
+
+        # 标记需要清除寄生
+        ctx.extra['cure_parasite'] = True
+
+        cure_text = random.choice(NiuniuJishengConfig.CURE_TEXTS)
+
+        ctx.messages.extend([
+            "💊 ══ 驱牛药 ══ 💊",
+            f"✨ {cure_text}",
+            f"🔓 {beneficiary_name} 的寄生牛牛被清除了！",
+            "═══════════════════"
+        ])
+
+        return ctx
+
+
+# =============================================================================
 # Effect Manager Factory
 # =============================================================================
 
@@ -2385,5 +2555,7 @@ def create_effect_manager() -> EffectManager:
     manager.register(NiuniuDunpaiEffect())
     manager.register(QiongniuYishengEffect())
     manager.register(JueduizhiEffect())
+    manager.register(NiuniuJishengEffect())
+    manager.register(QuniuyaoEffect())
 
     return manager

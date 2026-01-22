@@ -500,6 +500,20 @@ DEFAULT_SHOP_ITEMS = [
         'type': 'active',
         'desc': "召唤黑洞吸取5-15人各3-10%长度！40%归你/30%喷射路人/20%反噬自己/10%吃撑反喷",
         'price': 300
+    },
+    {
+        'id': 18,
+        'name': "牛牛寄生",
+        'type': 'active',
+        'desc': "在随机群友身上种下寄生牛牛！宿主每次增长>5%时，抽取5%长度和硬度给你！持续到宿主买驱牛药",
+        'price': 150
+    },
+    {
+        'id': 19,
+        'name': "驱牛药",
+        'type': 'active',
+        'desc': "清除寄生在自己身上的寄生牛牛，重获自由！",
+        'price': 75
     }
 ]
 
@@ -669,6 +683,51 @@ class HeidongConfig:
     RESULT_REVERSE = 0.10          # 10% 吃撑反喷（所有人反而变长）
 
     BACKFIRE_PERCENT = 0.15        # 反噬损失自身15%长度
+
+# =============================================================================
+# 牛牛寄生 Configuration
+# =============================================================================
+class NiuniuJishengConfig:
+    MIN_PLAYERS = 2                    # 最少需要2人（自己+1个宿主）
+    TRIGGER_THRESHOLD = 0.05           # 5% - 宿主增长超过自身绝对值5%时触发
+    DRAIN_LENGTH_PERCENT = 0.05        # 抽取宿主5%绝对值长度
+    DRAIN_HARDNESS_PERCENT = 0.05      # 抽取宿主5%硬度
+
+    # 成功种植文案
+    PARASITE_TEXTS = [
+        "🎯 你在 {host_name} 身上种下了寄生牛牛！每当他增长>5%时，你将吸取他的精华！",
+        "😈 寄生牛牛已潜入 {host_name} 体内！他的每一次成长都将反哺于你！",
+        "🌱 {host_name} 成为了你的宿主！当他茁壮成长时，你也会分一杯羹！",
+        "🔗 你与 {host_name} 建立了寄生连接！他的努力，你的收获！",
+    ]
+
+    # 覆盖旧寄生的文案（把旧寄生牛牛踢走）
+    OVERRIDE_TEXTS = [
+        "⚔️ 你的寄生牛牛把 {old_beneficiary_name} 的寄生牛牛从 {host_name} 身上踢了出去！",
+        "👊 {old_beneficiary_name} 的寄生牛牛被你的寄生牛牛驱逐了！{host_name} 现在是你的宿主！",
+        "🥊 寄生牛牛大战！你成功霸占了 {host_name}，{old_beneficiary_name} 被扫地出门！",
+    ]
+
+    # 抽取触发文案
+    DRAIN_TEXTS = [
+        "🩸 {host_name} 增长了{gain}cm，寄生牛牛生效！{beneficiary_name} 吸取了 {drain_length}cm长度 和 {drain_hardness}硬度！",
+        "😋 {beneficiary_name} 的寄生牛牛从 {host_name} 身上吸取了 {drain_length}cm 和 {drain_hardness}硬度！",
+        "🔋 寄生牛牛充能！{host_name} 被抽取 {drain_length}cm长度、{drain_hardness}硬度 → {beneficiary_name}！",
+    ]
+
+    # 驱牛药成功文案
+    CURE_TEXTS = [
+        "💊 驱牛药生效！寄生在你身上的寄生牛牛被清除了！",
+        "🎉 你成功驱除了寄生牛牛！重获自由！",
+        "✨ 寄生牛牛已被药物清除，你的牛牛恢复了独立！",
+    ]
+
+    # 没有寄生牛牛时使用驱牛药
+    NO_PARASITE_TEXTS = [
+        "❓ 你身上并没有寄生牛牛，不需要使用驱牛药！",
+        "🤷 浪费了！你身上根本没有寄生牛牛！",
+        "💸 钱白花了...你本来就是自由的！",
+    ]
 
 # =============================================================================
 # Length Display Thresholds
