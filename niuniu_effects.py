@@ -1033,22 +1033,7 @@ class HundunFengbaoEffect(ItemEffect):
         "量子转化：痛苦→力量！",
         "黑暗契约：我愿意献出！",
     ]
-    PARASITE_TEXTS = [
-        "混沌寄生虫已植入！",
-        "时空虫卵附着成功！",
-        "「恭喜，你获得了一个寄生者」",
-        "混沌蛔虫：以后打胶我也有份！",
-        "量子寄生体附着！",
-        "平行宇宙虫子入侵！",
-        "「叮！获得被动：吸血鬼」",
-        "混沌之神：给你个小伙伴！",
-        "时空水蛭：我住这了~",
-        "混沌共生体：我们是一体的！",
-        "「系统：检测到寄生程序」",
-        "虫洞虫子：找到宿主了！",
-        "命运共享者：你打胶我收益！",
-        "混沌蚂蝗：嘿嘿，蹭饭！",
-    ]
+    # 混沌风暴使用 NiuniuJishengConfig.PARASITE_TEXTS
     GLOBAL_DOOMSDAY_TEXTS = [
         "天崩地裂！末日审判降临！",
         "混沌法官：最弱者，接受制裁！",
@@ -1536,7 +1521,8 @@ class HundunFengbaoEffect(ItemEffect):
                     event_text += " 💀 没中...全员遭殃！-50%！"
 
             elif event_id == 'parasite':
-                # 寄生虫：在别人身上种下标记
+                # 寄生牛牛：调用 NiuniuJishengEffect 的逻辑
+                from niuniu_config import NiuniuJishengConfig
                 others = [u for u in valid_users if u[0] != uid]
                 if others:
                     target_uid, target_data = random.choice(others)
@@ -1547,9 +1533,10 @@ class HundunFengbaoEffect(ItemEffect):
                         'beneficiary_id': uid,
                         'beneficiary_name': nickname
                     })
-                    event_text = f"🦠 {nickname} → {target_name}: {random.choice(self.PARASITE_TEXTS)} 以后{target_name}打胶你也有份！"
+                    parasite_text = random.choice(NiuniuJishengConfig.PARASITE_TEXTS)
+                    event_text = f"🦠 {nickname} → {target_name}: {parasite_text} 以后{target_name}打胶你也有份！"
                 else:
-                    event_text = f"🤷 {nickname}: 寄生虫找不到宿主...孤独地死去了..."
+                    event_text = f"🤷 {nickname}: 寄生牛牛找不到宿主...孤独地消散了..."
 
             # 记录变化
             if length_change != 0 or hardness_change != 0:
@@ -1873,6 +1860,9 @@ class YueyaTianchongEffect(ItemEffect):
         damage = int(abs(user_length) * damage_percent)
         if damage < 1:
             damage = 1
+        # 伤害上限，防止负数牛牛造成过高伤害
+        if damage > YueyaTianchongConfig.MAX_DAMAGE:
+            damage = YueyaTianchongConfig.MAX_DAMAGE
 
         # 检查目标是否有护盾
         target_shielded = False
@@ -2096,6 +2086,187 @@ class DazibaoEffect(ItemEffect):
             "",
             f"📊 {ctx.nickname}: 长度→0cm 硬度→0",
             "🔥 玉石俱焚！",
+            "═══════════════════"
+        ])
+
+        return ctx
+
+
+# =============================================================================
+# 牛牛寄生 Effect
+# =============================================================================
+
+class NiuniuJishengEffect(ItemEffect):
+    """牛牛寄生 - Parasite: plant a parasite on random target, drain their gains"""
+    name = "牛牛寄生"
+    triggers = [EffectTrigger.ON_PURCHASE]
+    consume_on_use = False  # Active item, no inventory
+
+    def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        from niuniu_config import NiuniuJishengConfig
+
+        # 需要从 extra 获取群组数据
+        group_data = ctx.extra.get('group_data', {})
+        if not group_data:
+            ctx.messages.append("❌ 无法获取群组数据")
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        # 过滤有效用户（有长度数据的，排除自己）
+        valid_targets = [(uid, data) for uid, data in group_data.items()
+                         if isinstance(data, dict) and 'length' in data and uid != ctx.user_id]
+
+        if len(valid_targets) < 1:
+            ctx.messages.append("❌ 群里没有其他牛牛可以寄生！")
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        # 随机选择目标
+        target_id, target_data = random.choice(valid_targets)
+        target_name = target_data.get('nickname', target_id)
+
+        # 检查目标身上是否已有寄生（单寄生机制，后来者覆盖）
+        old_parasite = target_data.get('parasite')
+        override_msg = None
+        if old_parasite:
+            old_beneficiary_name = old_parasite.get('beneficiary_name', '某人')
+            # 如果是自己的寄生，不需要覆盖提示
+            if old_parasite.get('beneficiary_id') != ctx.user_id:
+                override_text = random.choice(NiuniuJishengConfig.OVERRIDE_TEXTS)
+                override_msg = override_text.format(old_name=old_beneficiary_name)
+
+        # 记录寄生信息（单个寄生，会覆盖旧的）
+        ctx.extra['parasite'] = {
+            'host_id': target_id,
+            'host_name': target_name,
+            'beneficiary_id': ctx.user_id,
+            'beneficiary_name': ctx.nickname
+        }
+
+        # 随机选择文案
+        parasite_text = random.choice(NiuniuJishengConfig.PARASITE_TEXTS)
+
+        # 构建消息
+        ctx.messages.append("🦠 ══ 牛牛寄生 ══ 🦠")
+        ctx.messages.append(f"🎯 {ctx.nickname} 选中了 {target_name}！")
+        if override_msg:
+            ctx.messages.append(override_msg)
+        ctx.messages.append(parasite_text)
+        ctx.messages.append("")
+        ctx.messages.append("📋 效果说明：")
+        ctx.messages.append(f"   • {target_name} 每次获得 > 5%长度收益时")
+        ctx.messages.append(f"   • {ctx.nickname} 吸取其5%长度和硬度！")
+        ctx.messages.append(f"   • 持续效果，直到宿主购买驱牛药解除")
+        ctx.messages.append("═══════════════════")
+
+        return ctx
+
+    @staticmethod
+    def check_and_trigger_parasite(host_data: dict, gain: int, group_data: dict) -> dict:
+        """
+        检查并触发寄生效果
+        Args:
+            host_data: 宿主的用户数据
+            gain: 本次获得的长度收益
+            group_data: 群组数据（用于更新寄生者数据）
+        Returns:
+            dict: {
+                'triggered': bool,
+                'drain_length': int,
+                'drain_hardness': int,
+                'beneficiary_id': str,
+                'beneficiary_name': str,
+                'message': str
+            }
+        """
+        from niuniu_config import NiuniuJishengConfig
+
+        result = {'triggered': False}
+
+        parasite = host_data.get('parasite')
+        if not parasite:
+            return result
+
+        # 计算触发阈值：收益 > abs(宿主长度) * 5%
+        host_length = host_data.get('length', 0)
+        threshold = abs(host_length) * NiuniuJishengConfig.TRIGGER_THRESHOLD
+
+        if gain <= threshold:
+            return result
+
+        # 触发寄生效果
+        # 计算吸取量：abs(宿主长度) * 5%
+        drain_length = int(abs(host_length) * NiuniuJishengConfig.DRAIN_LENGTH_PERCENT)
+        if drain_length < 1:
+            drain_length = 1
+
+        # 计算硬度吸取：宿主硬度 * 5%（向下取整，最低1）
+        host_hardness = host_data.get('hardness', 1)
+        drain_hardness = int(host_hardness * NiuniuJishengConfig.DRAIN_HARDNESS_PERCENT)
+        if drain_hardness < 1:
+            drain_hardness = 1
+
+        # 处理硬度边界情况
+        # 如果宿主硬度已经是1，扣到0
+        # 如果宿主硬度已经是0，不能再扣
+        if host_hardness <= 0:
+            drain_hardness = 0
+        elif host_hardness == 1:
+            drain_hardness = 1  # 扣到0
+
+        beneficiary_id = parasite.get('beneficiary_id')
+        beneficiary_name = parasite.get('beneficiary_name', '某人')
+
+        # 生成吸血消息
+        drain_text = random.choice(NiuniuJishengConfig.DRAIN_TEXTS)
+        message = drain_text.format(
+            length=drain_length,
+            hardness=drain_hardness,
+            name=beneficiary_name
+        )
+
+        result = {
+            'triggered': True,
+            'drain_length': drain_length,
+            'drain_hardness': drain_hardness,
+            'beneficiary_id': beneficiary_id,
+            'beneficiary_name': beneficiary_name,
+            'message': message
+        }
+
+        return result
+
+
+class QuniuyaoEffect(ItemEffect):
+    """驱牛药 - Cure: remove parasite from self"""
+    name = "驱牛药"
+    triggers = [EffectTrigger.ON_PURCHASE]
+    consume_on_use = False  # Active item, no inventory
+
+    def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        from niuniu_config import NiuniuJishengConfig
+
+        # 检查自己身上是否有寄生
+        parasite = ctx.user_data.get('parasite')
+        if not parasite:
+            ctx.messages.append(random.choice(NiuniuJishengConfig.NO_PARASITE_TEXTS))
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        beneficiary_name = parasite.get('beneficiary_name', '某人')
+
+        # 标记需要清除寄生
+        ctx.extra['cure_parasite'] = True
+
+        # 生成消息
+        cure_text = random.choice(NiuniuJishengConfig.CURE_TEXTS)
+        ctx.messages.extend([
+            "💊 ══ 驱牛药 ══ 💊",
+            cure_text.format(name=beneficiary_name),
+            f"✨ {ctx.nickname} 恢复了自由身！",
             "═══════════════════"
         ])
 
@@ -2366,6 +2537,8 @@ def create_effect_manager() -> EffectManager:
     manager.register(HeidongEffect())
     manager.register(YueyaTianchongEffect())
     manager.register(DazibaoEffect())
+    manager.register(NiuniuJishengEffect())
+    manager.register(QuniuyaoEffect())
     manager.register(HuoshuiDongyinEffect())
     manager.register(ShangbaoxianEffect())
     manager.register(NiuniuDunpaiEffect())
