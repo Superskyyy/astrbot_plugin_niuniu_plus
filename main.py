@@ -1867,6 +1867,20 @@ class NiuniuPlugin(Star):
 
         yield event.plain_result("\n".join(result_msg))
 
+    # 负数牛牛缠绕因祸得福文案
+    NEGATIVE_TANGLE_BLESSING_TEXTS = [
+        "🎭 等等...负数减半是往0靠近？因祸得福！",
+        "🤡 缠绕把负能量甩掉了一半！",
+        "🌀 「负负得...少负？」数学老师哭了",
+        "😂 本想互相伤害，负数却偷偷回血！",
+        "🎪 负数牛牛：谢谢缠绕，拉我一把！",
+        "🃏 命运的玩笑：想减半却加倍快乐！",
+        "✨ 缠绕净化了负能量！",
+        "🦠 软成一团反而把负数挤出去了！",
+        "🎰 缠绕对负数牛牛是buff！",
+        "💫 缠绕：「负数？帮你减负！」",
+    ]
+
     async def _handle_halving_event(self, group_id, user_id, target_id, nickname, target_nickname, user_items, target_items, result_msg):
         """处理减半事件，使用效果系统"""
         user_data = self.get_user_data(group_id, user_id)
@@ -1877,6 +1891,14 @@ class NiuniuPlugin(Star):
         # 先执行减半
         self.update_user_data(group_id, user_id, {'length': original_user_len // 2})
         self.update_user_data(group_id, target_id, {'length': original_target_len // 2})
+
+        # 检查负数牛牛因祸得福
+        if original_user_len < 0:
+            blessing_text = random.choice(self.NEGATIVE_TANGLE_BLESSING_TEXTS)
+            result_msg.append(f"🍀 {nickname}: {blessing_text} ({original_user_len}→{original_user_len // 2}cm)")
+        if original_target_len < 0:
+            blessing_text = random.choice(self.NEGATIVE_TANGLE_BLESSING_TEXTS)
+            result_msg.append(f"🍀 {target_nickname}: {blessing_text} ({original_target_len}→{original_target_len // 2}cm)")
 
         # 检查用户的妙脆角
         ctx_user = EffectContext(
