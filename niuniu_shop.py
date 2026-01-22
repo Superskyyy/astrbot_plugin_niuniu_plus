@@ -4,7 +4,7 @@ import copy
 import random
 from typing import Dict, Any, List
 from astrbot.api.all import Context, AstrMessageEvent
-from astrbot.core.message.components import Node, Nodes, Plain
+from astrbot.core.message.components import Node, Nodes, Plain, At
 from astrbot.core.message.message_event_result import MessageEventResult
 from niuniu_config import (
     PLUGIN_DIR, NIUNIU_LENGTHS_FILE, SIGN_DATA_FILE, SHOP_CONFIG_FILE,
@@ -525,6 +525,22 @@ class NiuniuShop:
 
                 # Active items use effect system
                 extra_data = {'item_name': selected_item['name'], 'user_coins': user_coins}
+
+                # 牛牛寄生需要指定目标
+                if selected_item['name'] == '牛牛寄生':
+                    target_id = None
+                    # 解析@目标
+                    for comp in event.message_obj.message:
+                        if isinstance(comp, At):
+                            target_id = str(comp.qq)
+                            break
+                    if not target_id:
+                        yield event.plain_result("❌ 请指定寄生目标！\n格式：牛牛购买 18 @目标")
+                        return
+                    if target_id == user_id:
+                        yield event.plain_result("❌ 不能寄生自己！")
+                        return
+                    extra_data['target_id'] = target_id
 
                 # 需要群组数据的道具
                 if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生']:

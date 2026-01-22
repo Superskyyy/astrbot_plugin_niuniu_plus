@@ -2524,26 +2524,31 @@ class NiuniuJishengEffect(ItemEffect):
         user_id = ctx.user_id
         nickname = ctx.nickname
 
-        # 找到可以被寄生的用户（排除自己）
-        valid_hosts = [
-            (uid, data) for uid, data in group_data.items()
-            if isinstance(data, dict) and 'length' in data
-            and uid != user_id and not uid.startswith('_') and uid != 'plugin_enabled'
-        ]
-
-        if len(valid_hosts) < NiuniuJishengConfig.MIN_PLAYERS - 1:
+        # 获取指定的目标
+        host_id = ctx.extra.get('target_id')
+        if not host_id:
             ctx.messages.extend([
                 "❌ ══ 牛牛寄生 ══ ❌",
-                f"⚠️ 群里没有其他人可以被寄生！",
-                f"📊 至少需要{NiuniuJishengConfig.MIN_PLAYERS}人",
+                "⚠️ 未指定寄生目标！",
+                "💡 格式：牛牛购买 18 @目标",
                 "═══════════════════"
             ])
             ctx.extra['refund'] = True
             ctx.intercept = True
             return ctx
 
-        # 随机选择一个宿主
-        host_id, host_data = random.choice(valid_hosts)
+        # 检查目标是否存在且已注册
+        host_data = group_data.get(host_id)
+        if not host_data or not isinstance(host_data, dict) or 'length' not in host_data:
+            ctx.messages.extend([
+                "❌ ══ 牛牛寄生 ══ ❌",
+                "⚠️ 目标用户未注册牛牛！",
+                "═══════════════════"
+            ])
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
         host_name = host_data.get('nickname', host_id)
 
         # 检查宿主是否已有寄生牛牛
