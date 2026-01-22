@@ -16,3 +16,32 @@ Use `@/openspec/AGENTS.md` to learn:
 Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
+
+# 开发规范
+
+## 版本号和更新日志
+
+**重要**: 每次修改代码后，必须更新以下内容：
+
+1. **版本号** (`main.py` 第24行的 `@register` 装饰器)
+   - 格式: `major.minor.patch`
+   - 新功能: minor +1
+   - Bug修复/小改动: patch +1
+   - 重大变更: major +1
+
+2. **更新日志** (`CHANGELOG.md`)
+   - 在文件顶部添加新版本条目
+   - 格式: `## [vX.X.X] - YYYY-MM-DD`
+   - 分类: 新增功能、删除功能、道具调整、数值调整、Bug修复、显示优化等
+
+示例:
+```markdown
+## [v2.0.4] - 2026-01-22
+
+### 新增功能
+- **道具名** (价格): 功能描述
+  - 详细说明
+
+### Bug修复
+- 修复xxx问题
+```

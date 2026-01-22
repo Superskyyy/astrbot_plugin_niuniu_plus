@@ -21,7 +21,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "长安某", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.7.2")
+@register("niuniu_plugin", "长安某", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.8.0")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -1956,6 +1956,19 @@ class NiuniuPlugin(Star):
                 self.update_user_data(group_id, target_id, {'insurance_charges': target_insurance - 1})
                 self.games.update_user_coins(group_id, target_id, ShangbaoxianConfig.PAYOUT)
                 result_msg.append(f"📋 {final_target['nickname']} 保险理赔！损失{target_length_loss}cm，赔付{ShangbaoxianConfig.PAYOUT}金币（剩余{target_insurance - 1}次）")
+
+        # ===== 寄生牛牛检查 =====
+        # 检查用户的寄生牛牛触发（用户赢了的情况）
+        user_length_gain = max(0, final_user['length'] - old_u_len)
+        if user_length_gain > 0:
+            parasite_msgs = self._check_and_trigger_parasite(group_id, user_id, user_length_gain, processed_ids=set())
+            result_msg.extend(parasite_msgs)
+
+        # 检查目标的寄生牛牛触发（目标赢了的情况）
+        target_length_gain = max(0, final_target['length'] - old_t_len)
+        if target_length_gain > 0:
+            parasite_msgs = self._check_and_trigger_parasite(group_id, target_id, target_length_gain, processed_ids=set())
+            result_msg.extend(parasite_msgs)
 
         yield event.plain_result("\n".join(result_msg))
 
