@@ -447,7 +447,7 @@ class NiuniuShop:
                 effect = self.main.effects.effects.get(selected_item['name'])
 
                 # 复杂道具列表（有特殊逻辑或动态效果，不支持批量购买）
-                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞', '巴黎牛家', '赌徒硬币', '绝对值！', '牛牛寄生', '驱牛药']
+                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞', '巴黎牛家', '赌徒硬币', '绝对值！']
                 is_simple_item = selected_item['name'] not in complex_items
 
                 # 简单道具支持批量购买
@@ -527,7 +527,7 @@ class NiuniuShop:
                 extra_data = {'item_name': selected_item['name'], 'user_coins': user_coins}
 
                 # 需要群组数据的道具
-                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生']:
+                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞']:
                     niuniu_data = self._load_niuniu_data()
                     extra_data['group_data'] = niuniu_data.get(group_id, {})
 
@@ -598,15 +598,11 @@ class NiuniuShop:
                                 pass
 
                         # 给幸运儿加长度和硬度
-                        beneficiary_gains = []  # 记录受益者的收益用于寄生检查
                         for beneficiary in robin_hood['beneficiaries']:
                             uid = beneficiary['user_id']
                             if uid in group_data:
-                                gain = beneficiary['amount']
-                                group_data[uid]['length'] = group_data[uid].get('length', 0) + gain
+                                group_data[uid]['length'] = group_data[uid].get('length', 0) + beneficiary['amount']
                                 group_data[uid]['hardness'] = group_data[uid].get('hardness', 1) + beneficiary.get('hardness', 0)
-                                if gain > 0:
-                                    beneficiary_gains.append((uid, gain))
 
                         # 同时处理护盾消耗（劫富济贫单人）
                         if ctx.extra.get('consume_shield'):
@@ -617,14 +613,6 @@ class NiuniuShop:
                                 group_data[target_id]['shield_charges'] = max(0, current - shield_info['amount'])
 
                         self._save_niuniu_data(niuniu_data)
-
-                        # 寄生牛牛效果检查（劫富济贫受益者）
-                        for uid, gain in beneficiary_gains:
-                            user_data = self.main.get_user_data(group_id, uid)
-                            if user_data and user_data.get('parasite'):
-                                self.main._check_and_trigger_parasite(
-                                    group_id, uid, user_data, gain, result_msg
-                                )
 
                     # 处理混沌风暴的特殊逻辑（合并护盾消耗+祸水东引）
                     if ctx.extra.get('chaos_storm'):
@@ -753,15 +741,15 @@ class NiuniuShop:
                             if u2_id in group_data:
                                 group_data[u2_id]['length'] = avg
 
-                        # 处理寄生牛牛标记（单寄生机制，新寄生覆盖旧寄生）
+                        # 处理寄生虫标记
                         for parasite in chaos_storm.get('parasites', []):
                             host_id = parasite['host_id']
                             if host_id in group_data:
-                                # 存储寄生信息（单个，覆盖旧的）
-                                group_data[host_id]['parasite'] = {
+                                # 存储寄生虫信息：宿主下次打胶时，受益者也获得同等长度
+                                group_data[host_id].setdefault('parasites', []).append({
                                     'beneficiary_id': parasite['beneficiary_id'],
                                     'beneficiary_name': parasite['beneficiary_name']
-                                }
+                                })
 
                         # 处理全局事件
                         for global_event in chaos_storm.get('global_events', []):
@@ -920,28 +908,6 @@ class NiuniuShop:
 
                         self._save_niuniu_data(niuniu_data)
 
-                        # 寄生牛牛效果检查（黑洞喷射给路人/反喷获得长度的人）
-                        gains_to_check = []
-                        if result_type == 'half_spray':
-                            for spray in black_hole.get('spray_targets', []):
-                                uid = spray['user_id']
-                                amount = spray.get('amount', 0)
-                                if amount > 0:
-                                    gains_to_check.append((uid, amount))
-                        elif result_type == 'reverse':
-                            for victim in black_hole.get('victims', []):
-                                uid = victim['user_id']
-                                gain = victim.get('reverse_gain', 0)
-                                if gain > 0:
-                                    gains_to_check.append((uid, gain))
-
-                        for uid, gain in gains_to_check:
-                            user_data = self.main.get_user_data(group_id, uid)
-                            if user_data and user_data.get('parasite'):
-                                self.main._check_and_trigger_parasite(
-                                    group_id, uid, user_data, gain, result_msg
-                                )
-
                     # 处理月牙天冲的特殊逻辑（合并护盾消耗+祸水东引）
                     if ctx.extra.get('yueya_tianchong'):
                         yueya = ctx.extra['yueya_tianchong']
@@ -1050,27 +1016,6 @@ class NiuniuShop:
 
                         self._save_niuniu_data(niuniu_data)
 
-                    # 处理牛牛寄生的特殊逻辑（单寄生机制，新寄生覆盖旧寄生）
-                    if ctx.extra.get('parasite'):
-                        parasite = ctx.extra['parasite']
-                        niuniu_data = self._load_niuniu_data()
-                        group_data = niuniu_data.setdefault(group_id, {})
-
-                        host_id = parasite['host_id']
-                        if host_id in group_data:
-                            # 存储寄生信息（单个，覆盖旧的）
-                            group_data[host_id]['parasite'] = {
-                                'beneficiary_id': parasite['beneficiary_id'],
-                                'beneficiary_name': parasite['beneficiary_name']
-                            }
-                            self._save_niuniu_data(niuniu_data)
-
-                    # 处理驱牛药的特殊逻辑
-                    if ctx.extra.get('cure_parasite'):
-                        # 清除自己身上的寄生
-                        if 'parasite' in user_data:
-                            del user_data['parasite']
-
                     # 处理牛牛盾牌护盾增加
                     if ctx.extra.get('add_shield_charges'):
                         add_charges = ctx.extra['add_shield_charges']
@@ -1126,14 +1071,6 @@ class NiuniuShop:
                             result_msg.append(f"📋 保险理赔！损失{damage_str}，赔付{ShangbaoxianConfig.PAYOUT}金币（剩余{user_data['insurance_charges']}次）")
 
                     self._save_user_data(group_id, user_id, user_data)
-
-                    # 寄生牛牛效果检查（商城道具购买获得长度收益）
-                    length_gain = max(0, user_data.get('length', 0) - old_length)
-                    if length_gain > 0 and user_data.get('parasite'):
-                        self.main._check_and_trigger_parasite(
-                            group_id, user_id, user_data, length_gain, result_msg
-                        )
-
                     result_msg.extend(ctx.messages)
                 else:
                     self.main.context.logger.error(f"未找到道具效果类: {selected_item['name']}")
@@ -1211,13 +1148,7 @@ class NiuniuShop:
         if insurance_charges > 0:
             result_list.append(f"📋 上保险：{insurance_charges}次")
 
-        # 显示寄生状态
-        parasite = user_data.get('parasite')
-        if parasite:
-            beneficiary_name = parasite.get('beneficiary_name', '某人')
-            result_list.append(f"🦠 【寄】被 {beneficiary_name} 的寄生牛牛附着")
-
-        if not items and shield_charges == 0 and risk_transfer_charges == 0 and insurance_charges == 0 and not parasite:
+        if not items and shield_charges == 0 and risk_transfer_charges == 0 and insurance_charges == 0:
             result_list.append("🛍️ 你的背包里还没有道具哦~")
 
         # 显示金币总额
