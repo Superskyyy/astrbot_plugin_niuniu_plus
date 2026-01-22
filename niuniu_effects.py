@@ -779,6 +779,327 @@ class HundunFengbaoEffect(ItemEffect):
     triggers = [EffectTrigger.ON_PURCHASE]
     consume_on_use = False  # Active item, no inventory
 
+    # 有趣的事件文案
+    LENGTH_UP_TEXTS = [
+        "被混沌之风眷顾，牛牛疯长！",
+        "时空裂缝中飘来一股神秘力量...",
+        "混沌能量注入！膨胀！",
+        "「恭喜你被选中成为混沌的宠儿」",
+        "风暴中捡到了失落的长度！",
+        "混沌龙卷风带来了意外之喜！",
+        "「系统提示：检测到长度异常增长」",
+        "时空碎片融入，牛牛进化了！",
+        "混沌之神微微一笑：赏你！",
+        "虫洞里飘出来一根...等等这是什么？！",
+        "量子涨落导致意外增长！",
+        "平行宇宙的你送来了援助！",
+        "混沌彩票头奖！长度暴涨！",
+        "「叮！您的牛牛已升级」",
+        "被混沌祝福击中！超级加倍！",
+    ]
+    LENGTH_DOWN_TEXTS = [
+        "被混沌漩涡吸走了一截...",
+        "时空乱流撕裂了你的牛牛！",
+        "混沌税收员来了！",
+        "「你的长度已被混沌没收」",
+        "风暴把你的牛牛刮飞了一段！",
+        "混沌黑洞：嗝~吃饱了",
+        "时空裂缝把你的长度吞了！",
+        "「警告：检测到长度异常流失」",
+        "混沌之神皱了皱眉：罚你！",
+        "平行宇宙的你来讨债了！",
+        "量子坍缩导致长度缩水！",
+        "被混沌诅咒击中！缩缩缩！",
+        "混沌小偷：这个我收下了~",
+        "「叮！您的牛牛已被降级」",
+        "虫洞把你的一部分吸到另一个宇宙去了！",
+    ]
+    HARDNESS_UP_TEXTS = [
+        "混沌结晶附着在牛牛上！",
+        "被雷劈了一下，反而更硬了？",
+        "时空碎片嵌入，硬度飙升！",
+        "「混沌祝福：钢铁意志」",
+        "混沌矿石融入！硬度MAX！",
+        "时空压缩：密度增加！",
+        "「叮！获得被动：金刚不坏」",
+        "混沌锻造炉加持！",
+        "被混沌射线照射，硬化了！",
+        "平行宇宙的硬度传送过来了！",
+        "量子强化：结构稳定！",
+        "混沌之神：赐你钢铁之躯！",
+        "「系统提示：硬度突破限制」",
+        "时空晶体附着成功！",
+    ]
+    HARDNESS_DOWN_TEXTS = [
+        "混沌侵蚀了你的硬度...",
+        "被软化射线击中！",
+        "时空扭曲导致结构松散...",
+        "「混沌诅咒：豆腐化」",
+        "混沌酸雨腐蚀！硬度下降！",
+        "时空膨胀：密度降低...",
+        "「叮！失去被动：金刚不坏」",
+        "被混沌虫啃食了！",
+        "平行宇宙的软弱传染过来了！",
+        "量子衰变：结构崩坏！",
+        "混沌之神：收回你的力量！",
+        "「警告：硬度低于安全值」",
+        "时空裂缝带走了你的坚硬！",
+        "被混沌诅咒：软趴趴...",
+    ]
+    COIN_GAIN_TEXTS = [
+        "风暴中飘来一袋金币！",
+        "混沌商人路过，撒了一地钱！",
+        "时空裂缝掉出了财宝！",
+        "「恭喜！混沌彩票中奖」",
+        "混沌银行利息到账！",
+        "平行宇宙的你汇款过来了！",
+        "「叮！收到混沌红包」",
+        "时空走私犯丢下了赃款！",
+        "混沌之神心情好，打赏！",
+        "量子钱包bug：凭空多了钱！",
+        "风暴里捡到了别人的钱包！",
+        "混沌保险理赔到账！",
+        "「系统错误：金币异常增加」",
+        "虫洞吐出一堆金币！",
+    ]
+    COIN_LOSE_TEXTS = [
+        "钱包被混沌漩涡吸走了！",
+        "混沌小偷光顾了你的口袋！",
+        "金币被时空乱流卷走...",
+        "「混沌税：已自动扣款」",
+        "混沌银行：服务费扣除！",
+        "平行宇宙的你来借钱了！",
+        "「叮！混沌红包被抢」",
+        "时空裂缝吞噬了你的财产！",
+        "混沌之神：上供！",
+        "量子钱包bug：钱凭空消失！",
+        "风暴把你的钱吹跑了！",
+        "混沌骗子：这是手续费~",
+        "「警告：金币异常流失」",
+        "虫洞偷走了你的存款！",
+    ]
+    SWAP_TEXTS = [
+        "时空错乱！你俩的牛牛互换了！",
+        "混沌法则：交换命运！",
+        "「灵魂互换术·牛牛版」",
+        "量子纠缠触发！尺寸对调！",
+        "平行宇宙融合：身份互换！",
+        "混沌之神：换着玩玩！",
+        "「叮！检测到非法数据交换」",
+        "时空虫洞：两边各取一个！",
+        "混沌转盘：交换大成功！",
+        "命运交织：你们的牛牛换了！",
+        "「系统混乱：数据互换」",
+        "混沌天平：追求平衡！",
+        "量子叠加态坍缩：互换！",
+        "时空折叠点重合！",
+    ]
+    DOUBLE_TEXTS = [
+        "混沌翻倍术！牛牛暴涨！",
+        "时空复制成功！Double！",
+        "「欧皇附体！翻倍大成功」",
+        "混沌赌场：你赢了！",
+        "量子分裂：一变二！",
+        "平行宇宙的你也加入了！",
+        "「叮！触发隐藏buff：翻倍」",
+        "混沌之神大手一挥：Double！",
+        "时空镜像：复制成功！",
+        "混沌轮盘停在翻倍格！",
+        "「系统异常：长度x2」",
+        "虫洞传来增援！",
+        "量子涨落的奇迹！",
+        "命运眷顾：翻倍快乐！",
+    ]
+    HALVE_TEXTS = [
+        "混沌二分法：一刀两断！",
+        "时空折叠把你的牛牛对折了...",
+        "「很遗憾，你被选中减半」",
+        "混沌剪刀手：咔嚓！",
+        "量子坍缩：只剩一半！",
+        "平行宇宙的你拿走了一半！",
+        "「叮！触发debuff：减半」",
+        "混沌之神无情地比了个剪刀手",
+        "时空裂缝吞掉了一半！",
+        "混沌轮盘停在减半格！",
+        "「系统惩罚：长度÷2」",
+        "虫洞把一半吸走了！",
+        "量子衰变：对半砍！",
+        "命运捉弄：一分为二！",
+    ]
+    STEAL_TEXTS = [
+        "化身混沌盗贼！偷取成功！",
+        "时空扒手出击！得手！",
+        "「你的长度？不，是我的了」",
+        "混沌之手：巧取豪夺！",
+        "量子隧穿：偷渡成功！",
+        "平行宇宙大盗降临！",
+        "「叮！完成成就：神偷」",
+        "混沌忍者：无声偷取！",
+        "时空裂缝传送：得手！",
+        "混沌黑手党出击！",
+        "「系统：检测到非法转移」",
+        "虫洞偷运成功！",
+        "量子小偷：来无影去无踪！",
+        "命运小偷：这个归我了！",
+    ]
+    GIVE_TEXTS = [
+        "被混沌慈善协会强制捐款...",
+        "时空邮递员把你的牛牛寄走了！",
+        "「混沌法则：劫富济贫」",
+        "强制分享！你的长度被转移了！",
+        "混沌税务局：强制转账！",
+        "平行宇宙的你在做慈善！",
+        "「叮！被动触发：乐善好施」",
+        "混沌圣诞老人：礼物送出！",
+        "时空快递：已签收！",
+        "混沌红十字会：感谢捐赠！",
+        "「系统：强制执行转移」",
+        "虫洞传送带启动！",
+        "量子传输：已送达！",
+        "命运安排：你该分享！",
+    ]
+    NOTHING_TEXTS = [
+        "混沌之眼扫过，决定放过你...",
+        "风暴绕开了你，什么都没发生",
+        "「混沌：今天心情好，饶你一次」",
+        "时空护盾自动展开，安全！",
+        "你太普通了，混沌懒得理你...",
+        "混沌打了个哈欠，略过了你",
+        "量子态未坍缩：无事发生",
+        "平行宇宙的你替你挡了一劫",
+        "「叮！触发被动：透明人」",
+        "混沌之神眨了眨眼：下次再说",
+        "时空夹缝中的幸运儿！",
+        "混沌轮盘停在空白格！",
+        "「系统：未检测到变化」",
+        "虫洞绕过了你~",
+        "命运休息中...请稍后再试",
+    ]
+    REVERSE_TEXTS = [
+        "混沌镜像术！正负颠倒！",
+        "时空反转！黑变白，白变黑！",
+        "「物极必反·混沌版」",
+        "平行宇宙的你入侵了！",
+        "量子镜像：正负互换！",
+        "混沌之神：让你尝尝颠倒的滋味！",
+        "「叮！触发反转效果」",
+        "时空倒流：正变负，负变正！",
+        "混沌翻转术：乾坤颠倒！",
+        "命运反转：塞翁失马！",
+        "「系统混乱：符号反转」",
+        "虫洞镜像：你被反过来了！",
+        "量子叠加态反转！",
+        "混沌天平翻转！",
+    ]
+    QUANTUM_TEXTS = [
+        "量子纠缠！命运共享！",
+        "薛定谔的牛牛：取平均值！",
+        "时空同步：你们现在一样长了",
+        "「混沌公平法则：平分秋色」",
+        "量子态坍缩：趋向平均！",
+        "平行宇宙融合：各取一半！",
+        "「叮！触发量子纠缠效果」",
+        "混沌之神：追求平衡！",
+        "时空重叠：取中间值！",
+        "混沌天平：一碗水端平！",
+        "「系统：执行平均化」",
+        "虫洞同步：长度统一！",
+        "命运交织：平分命运！",
+        "混沌公式：(A+B)/2！",
+    ]
+    SACRIFICE_TEXTS = [
+        "黑暗献祭！痛苦转化为力量！",
+        "混沌祭坛：牺牲自己，成全他人",
+        "「献出心脏！...不对，献出牛牛！」",
+        "血祭成功：3倍奉还！",
+        "暗黑仪式启动！",
+        "混沌之神：我要看到诚意！",
+        "「叮！完成献祭仪式」",
+        "时空祭品：已签收！",
+        "混沌邪教：献祭大成功！",
+        "命运代价：牺牲换取力量！",
+        "「系统：检测到能量转换」",
+        "虫洞祭坛：3倍返还！",
+        "量子转化：痛苦→力量！",
+        "黑暗契约：我愿意献出！",
+    ]
+    PARASITE_TEXTS = [
+        "混沌寄生虫已植入！",
+        "时空虫卵附着成功！",
+        "「恭喜，你获得了一个寄生者」",
+        "混沌蛔虫：以后打胶我也有份！",
+        "量子寄生体附着！",
+        "平行宇宙虫子入侵！",
+        "「叮！获得被动：吸血鬼」",
+        "混沌之神：给你个小伙伴！",
+        "时空水蛭：我住这了~",
+        "混沌共生体：我们是一体的！",
+        "「系统：检测到寄生程序」",
+        "虫洞虫子：找到宿主了！",
+        "命运共享者：你打胶我收益！",
+        "混沌蚂蝗：嘿嘿，蹭饭！",
+    ]
+    GLOBAL_DOOMSDAY_TEXTS = [
+        "天崩地裂！末日审判降临！",
+        "混沌法官：最弱者，接受制裁！",
+        "「审判日：适者生存」",
+        "混沌之神宣判：弱者出局！",
+        "时空审判庭开庭！",
+        "「叮！触发全局事件：末日」",
+        "量子审判：最小值归零！",
+        "混沌天平：淘汰最轻的！",
+        "命运裁决：弱肉强食！",
+        "虫洞审判：最短者消失！",
+        "「系统：执行末日协议」",
+        "混沌达尔文：物竞天择！",
+        "时空清洗：清除最弱！",
+    ]
+    GLOBAL_ROULETTE_TEXTS = [
+        "命运轮盘转动！全员大洗牌！",
+        "混沌赌场：重新发牌！",
+        "「时空重置：随机分配」",
+        "混沌之神：换换口味！",
+        "时空搅拌机启动！",
+        "「叮！触发全局事件：洗牌」",
+        "量子随机化：全部打乱！",
+        "混沌轮盘：重新分配！",
+        "命运骰子：重投一次！",
+        "虫洞搅拌：随机重排！",
+        "「系统：执行随机化」",
+        "混沌shuffle：打乱顺序！",
+        "时空重组：随机就是公平！",
+    ]
+    GLOBAL_REVERSE_TEXTS = [
+        "乾坤大挪移！王者与青铜互换！",
+        "混沌天平倾斜！强弱颠倒！",
+        "「反向天赋：第一变倒一」",
+        "混沌之神：让你们换换位置！",
+        "时空颠倒术！",
+        "「叮！触发全局事件：反转」",
+        "量子反转：最大最小互换！",
+        "混沌公平法：让强者体验弱者！",
+        "命运捉弄：风水轮流转！",
+        "虫洞反转：极值互换！",
+        "「系统：执行反转协议」",
+        "混沌恶作剧：第一第倒一换！",
+        "时空翻转：龙头变龙尾！",
+    ]
+    GLOBAL_LOTTERY_TEXTS = [
+        "团灭彩票开奖！全员屏息！",
+        "混沌核弹发射中...祈祷吧！",
+        "「5%的希望 vs 95%的绝望」",
+        "混沌之神：来玩俄罗斯轮盘！",
+        "时空彩票：全员参与！",
+        "「叮！触发全局事件：团灭」",
+        "量子彩票：5%翻倍，95%减半！",
+        "混沌豪赌：要么天堂，要么地狱！",
+        "命运轮盘：生死一线！",
+        "虫洞彩票：开奖中...",
+        "「系统：执行团灭彩票」",
+        "混沌大乐透：全体参与！",
+        "时空赌局：赌上一切！",
+    ]
+
     def _pick_event(self, events):
         """根据权重随机选择事件"""
         total = sum(e[0] for e in events)
@@ -865,42 +1186,42 @@ class HundunFengbaoEffect(ItemEffect):
             if event_id == 'length_up':
                 value = random.randint(params['min'], params['max'])
                 length_change = value
-                event_text = f"📈 {nickname}: {template.format(value=value)}"
+                event_text = f"📈 {nickname}: {random.choice(self.LENGTH_UP_TEXTS)} +{value}cm！"
 
             elif event_id == 'length_down':
                 value = random.randint(params['min'], params['max'])
                 length_change = -value
-                event_text = f"📉 {nickname}: {template.format(value=value)}"
+                event_text = f"📉 {nickname}: {random.choice(self.LENGTH_DOWN_TEXTS)} -{value}cm！"
 
             elif event_id == 'hardness_up':
                 value = random.randint(params['min'], params['max'])
                 hardness_change = value
-                event_text = f"💪 {nickname}: {template.format(value=value)}"
+                event_text = f"💪 {nickname}: {random.choice(self.HARDNESS_UP_TEXTS)} +{value}硬度！"
 
             elif event_id == 'hardness_down':
                 value = random.randint(params['min'], params['max'])
                 hardness_change = -value
-                event_text = f"😵 {nickname}: {template.format(value=value)}"
+                event_text = f"😵 {nickname}: {random.choice(self.HARDNESS_DOWN_TEXTS)} -{value}硬度！"
 
             elif event_id == 'coin_gain':
                 value = random.randint(params['min'], params['max'])
                 coin_change = value
-                event_text = f"💰 {nickname}: {template.format(value=value)}"
+                event_text = f"💰 {nickname}: {random.choice(self.COIN_GAIN_TEXTS)} +{value}金币！"
 
             elif event_id == 'coin_lose':
                 value = random.randint(params['min'], params['max'])
                 coin_change = -value
-                event_text = f"💸 {nickname}: {template.format(value=value)}"
+                event_text = f"💸 {nickname}: {random.choice(self.COIN_LOSE_TEXTS)} -{value}金币！"
 
             elif event_id == 'length_percent_up':
                 value = random.randint(params['min'], params['max'])
                 length_change = int(abs(old_length) * value / 100)
-                event_text = f"🚀 {nickname}: {template.format(value=value)} (+{length_change}cm)"
+                event_text = f"🚀 {nickname}: {random.choice(self.LENGTH_UP_TEXTS)} +{value}%（+{length_change}cm）！"
 
             elif event_id == 'length_percent_down':
                 value = random.randint(params['min'], params['max'])
                 length_change = -int(abs(old_length) * value / 100)
-                event_text = f"📉 {nickname}: {template.format(value=value)} ({length_change}cm)"
+                event_text = f"📉 {nickname}: {random.choice(self.LENGTH_DOWN_TEXTS)} -{value}%（{length_change}cm）！"
 
             elif event_id == 'swap_random':
                 # 随机找一个其他人交换
@@ -914,9 +1235,9 @@ class HundunFengbaoEffect(ItemEffect):
                         'user1_id': uid, 'user1_old': old_length,
                         'user2_id': target_uid, 'user2_old': target_len
                     })
-                    event_text = f"🔄 {nickname}: {template.format(target=target_name)} ({old_length}↔{target_len})"
+                    event_text = f"🔄 {nickname} ↔ {target_name}: {random.choice(self.SWAP_TEXTS)} （{old_length}cm ↔ {target_len}cm）"
                 else:
-                    event_text = f"🤷 {nickname}: 没人可以交换..."
+                    event_text = f"🤷 {nickname}: 混沌想让你交换，但周围空无一人..."
 
             elif event_id == 'double_or_nothing':
                 if old_length > 0:
@@ -925,17 +1246,18 @@ class HundunFengbaoEffect(ItemEffect):
                 else:
                     value = max(old_length, -50)  # 负数也翻倍但限制
                     length_change = value
-                event_text = f"✨ {nickname}: {template.format(value=abs(length_change))}"
+                event_text = f"✨ {nickname}: {random.choice(self.DOUBLE_TEXTS)} +{abs(length_change)}cm！"
 
             elif event_id == 'halve':
                 value = abs(old_length) // 2
                 length_change = -value if old_length > 0 else value
-                event_text = f"💔 {nickname}: {template.format(value=value)}"
+                event_text = f"💔 {nickname}: {random.choice(self.HALVE_TEXTS)} -{value}cm！"
 
             elif event_id == 'hardness_reset':
                 value = random.randint(params['min'], params['max'])
                 hardness_change = value - old_hardness
-                event_text = f"🎲 {nickname}: {template.format(value=value)}"
+                direction = "↑" if hardness_change > 0 else "↓"
+                event_text = f"🎲 {nickname}: 混沌轮盘决定你的硬度！{old_hardness} → {value} {direction}"
 
             elif event_id == 'steal_from_random':
                 others = [u for u in valid_users if u[0] != uid]
@@ -951,9 +1273,9 @@ class HundunFengbaoEffect(ItemEffect):
                         'change': -value,
                         'hardness_change': 0
                     })
-                    event_text = f"🦹 {nickname}: {template.format(target=target_name, value=value)}"
+                    event_text = f"🦹 {nickname} → {target_name}: {random.choice(self.STEAL_TEXTS)} 偷走{value}cm！"
                 else:
-                    event_text = f"🤷 {nickname}: 没人可以偷..."
+                    event_text = f"🤷 {nickname}: 混沌盗贼出击...但周围没人可偷！"
 
             elif event_id == 'give_to_random':
                 others = [u for u in valid_users if u[0] != uid]
@@ -969,17 +1291,17 @@ class HundunFengbaoEffect(ItemEffect):
                         'change': value,
                         'hardness_change': 0
                     })
-                    event_text = f"🎁 {nickname}: {template.format(target=target_name, value=value)}"
+                    event_text = f"🎁 {nickname} → {target_name}: {random.choice(self.GIVE_TEXTS)} 送出{value}cm！"
                 else:
-                    event_text = f"🤷 {nickname}: 没人可以送..."
+                    event_text = f"🤷 {nickname}: 想送人...但周围没人接收！"
 
             elif event_id == 'nothing':
-                event_text = f"😶 {nickname}: {template}"
+                event_text = f"😶 {nickname}: {random.choice(self.NOTHING_TEXTS)}"
 
             elif event_id == 'reverse_sign':
                 new_len = -old_length
                 length_change = new_len - old_length
-                event_text = f"🔀 {nickname}: {template.format(old=old_length, new=new_len)}"
+                event_text = f"🔀 {nickname}: {random.choice(self.REVERSE_TEXTS)} {old_length}cm → {new_len}cm！"
 
             elif event_id == 'full_swap':
                 # 全属性互换（长度+硬度）
@@ -994,14 +1316,14 @@ class HundunFengbaoEffect(ItemEffect):
                         'user1_id': uid, 'user1_old_len': old_length, 'user1_old_hard': old_hardness,
                         'user2_id': target_uid, 'user2_old_len': target_len, 'user2_old_hard': target_hard
                     })
-                    event_text = f"🔄 {nickname}: 与{target_name}交换全部属性！（{old_length}cm/{old_hardness}硬 ↔ {target_len}cm/{target_hard}硬）"
+                    event_text = f"🔄 {nickname} ⇄ {target_name}: 「灵魂互换·完全版」！（{old_length}cm/{old_hardness}硬 ⇄ {target_len}cm/{target_hard}硬）"
                 else:
-                    event_text = f"🤷 {nickname}: 没人可以交换..."
+                    event_text = f"🤷 {nickname}: 想要全属性交换...但没找到对象！"
 
             elif event_id == 'cooldown_reset':
                 # 打胶冷却清零
                 ctx.extra['chaos_storm'].setdefault('cooldown_resets', []).append(uid)
-                event_text = f"⏰ {nickname}: 打胶冷却清零！"
+                event_text = f"⏰ {nickname}: 「时间回溯」！打胶冷却归零，可以立刻再来！"
 
             elif event_id == 'chaos_chain':
                 # 混沌连锁：触发2个简单数值事件
@@ -1048,7 +1370,7 @@ class HundunFengbaoEffect(ItemEffect):
                         change = int(abs(old_length) * val / 100)
                         length_change -= change
                         chain_results.append(f"-{val}%长度(-{change}cm)")
-                event_text = f"⚡ {nickname}: 混沌连锁！{' & '.join(chain_results)}"
+                event_text = f"⚡ {nickname}: 「混沌连锁反应」！双重打击！{' & '.join(chain_results)}"
 
             elif event_id == 'hardness_to_length':
                 # 硬度转长度：消耗一半硬度（保底剩1），获得长度
@@ -1058,9 +1380,9 @@ class HundunFengbaoEffect(ItemEffect):
                     convert_length = convert_hardness * 3  # 1硬度=3cm
                     hardness_change = -convert_hardness
                     length_change = convert_length
-                    event_text = f"🔄 {nickname}: 硬度转长度！-{convert_hardness}硬度 → +{convert_length}cm"
+                    event_text = f"🔄 {nickname}: 「炼金术·硬转长」！燃烧{convert_hardness}点硬度 → 获得{convert_length}cm！"
                 else:
-                    event_text = f"😅 {nickname}: 硬度太低，无法转化..."
+                    event_text = f"😅 {nickname}: 混沌想帮你转化...但你硬度不够啊！"
 
             elif event_id == 'length_to_hardness':
                 # 长度转硬度：消耗20%长度，获得硬度（不超过100上限）
@@ -1074,11 +1396,11 @@ class HundunFengbaoEffect(ItemEffect):
                     if convert_hardness > 0:
                         length_change = -convert_length
                         hardness_change = convert_hardness
-                        event_text = f"🔄 {nickname}: 长度转硬度！-{convert_length}cm → +{convert_hardness}硬度"
+                        event_text = f"🔄 {nickname}: 「炼金术·长转硬」！压缩{convert_length}cm → 获得{convert_hardness}点硬度！"
                     else:
-                        event_text = f"💯 {nickname}: 硬度已满100，无法转化！"
+                        event_text = f"💯 {nickname}: 硬度已达巅峰100！无法再硬了！"
                 else:
-                    event_text = f"😅 {nickname}: 长度太少，无法转化..."
+                    event_text = f"😅 {nickname}: 混沌想帮你转化...但你长度不够啊！"
 
             elif event_id == 'chaos_tax':
                 # 混沌税：被收5%长度给使用者
@@ -1087,9 +1409,9 @@ class HundunFengbaoEffect(ItemEffect):
                     length_change = -tax
                     ctx.extra['chaos_storm'].setdefault('tax_collected', 0)
                     ctx.extra['chaos_storm']['tax_collected'] += tax
-                    event_text = f"💰 {nickname}: 被混沌收税！-{tax}cm"
+                    event_text = f"💰 {nickname}: 「混沌税务局」上门收税！-{tax}cm 上交国库！"
                 else:
-                    event_text = f"😅 {nickname}: 负数牛牛免税..."
+                    event_text = f"😅 {nickname}: 混沌税务局看了一眼负数的你...算了，免税！"
 
             elif event_id == 'clone_length':
                 # 克隆别人的长度
@@ -1099,23 +1421,24 @@ class HundunFengbaoEffect(ItemEffect):
                     target_name = target_data.get('nickname', target_uid)
                     target_len = target_data.get('length', 0)
                     length_change = target_len - old_length
-                    event_text = f"🧬 {nickname}: 克隆了{target_name}的长度！{old_length}cm → {target_len}cm"
+                    direction = "赚了" if length_change > 0 else "亏了"
+                    event_text = f"🧬 {nickname}: 「基因克隆」！复制{target_name}的长度！{old_length}→{target_len}cm，{direction}！"
                 else:
-                    event_text = f"🤷 {nickname}: 没人可以克隆..."
+                    event_text = f"🤷 {nickname}: 混沌克隆仪启动...但找不到DNA样本！"
 
             elif event_id == 'lucky_buff':
                 # 幸运祝福：下次打胶必定成功
                 ctx.extra['chaos_storm'].setdefault('lucky_buffs', []).append(uid)
-                event_text = f"🍀 {nickname}: 获得幸运祝福！下次打胶必增长！"
+                event_text = f"🍀 {nickname}: 「四叶草の祝福」！下次打胶必定增长！欧皇附体！"
 
             elif event_id == 'length_quake':
                 # 长度震荡：大幅随机波动
                 change_val = random.randint(params['min'], params['max'])
                 length_change = change_val
                 if change_val >= 0:
-                    event_text = f"🌋 {nickname}: 长度震荡！+{change_val}cm"
+                    event_text = f"🌋 {nickname}: 「时空震荡」！剧烈波动！+{change_val}cm！"
                 else:
-                    event_text = f"🌋 {nickname}: 长度震荡！{change_val}cm"
+                    event_text = f"🌋 {nickname}: 「时空震荡」！剧烈波动！{change_val}cm！"
 
             elif event_id == 'quantum_entangle':
                 # 量子纠缠：与随机一人双方取平均
@@ -1131,9 +1454,9 @@ class HundunFengbaoEffect(ItemEffect):
                         'user2_id': target_uid, 'user2_old': target_len,
                         'avg': avg_len
                     })
-                    event_text = f"🔮 {nickname}: 与{target_name}量子纠缠！({old_length}+{target_len})/2 = {avg_len}cm"
+                    event_text = f"🔮 {nickname} ⟷ {target_name}: {random.choice(self.QUANTUM_TEXTS)} ({old_length}+{target_len})/2 = {avg_len}cm"
                 else:
-                    event_text = f"🤷 {nickname}: 没人可以纠缠..."
+                    event_text = f"🤷 {nickname}: 量子纠缠失败...周围没有可以纠缠的对象！"
 
             elif event_id == 'dark_sacrifice':
                 # 黑暗献祭：牺牲20%长度，×3给随机人
@@ -1151,18 +1474,18 @@ class HundunFengbaoEffect(ItemEffect):
                         'change': gift,
                         'hardness_change': 0
                     })
-                    event_text = f"🖤 {nickname}: 黑暗献祭！-{sacrifice}cm → {target_name} +{gift}cm"
+                    event_text = f"🖤 {nickname} → {target_name}: {random.choice(self.SACRIFICE_TEXTS)} 献祭{sacrifice}cm，{target_name}获得{gift}cm！"
                 else:
-                    event_text = f"😅 {nickname}: 没有足够的长度献祭..."
+                    event_text = f"😅 {nickname}: 黑暗祭坛拒绝了你...没有可献祭的东西！"
 
             elif event_id == 'resurrection':
                 # 牛牛复活：负数变正数
                 if old_length <= 0:
                     new_len = random.randint(params['min'], params['max'])
                     length_change = new_len - old_length
-                    event_text = f"✨ {nickname}: 牛牛复活！{old_length}cm → {new_len}cm"
+                    event_text = f"✨ {nickname}: 「凤凰涅槃」！牛牛从负数中复活！{old_length}cm → {new_len}cm！重获新生！"
                 else:
-                    event_text = f"😊 {nickname}: 牛牛还活着，不需要复活~"
+                    event_text = f"😊 {nickname}: 混沌想复活你的牛牛...但它还活着呢！白给的buff错过了！"
 
             elif event_id == 'doomsday':
                 # 末日审判：全局事件，在后处理中执行
@@ -1170,7 +1493,7 @@ class HundunFengbaoEffect(ItemEffect):
                     'type': 'doomsday',
                     'trigger_by': nickname
                 })
-                event_text = f"⚖️ {nickname}: 触发了【末日审判】！"
+                event_text = f"⚖️ {nickname}: {random.choice(self.GLOBAL_DOOMSDAY_TEXTS)}"
 
             elif event_id == 'roulette':
                 # 轮盘重置：全局事件
@@ -1178,7 +1501,7 @@ class HundunFengbaoEffect(ItemEffect):
                     'type': 'roulette',
                     'trigger_by': nickname
                 })
-                event_text = f"🎰 {nickname}: 触发了【轮盘重置】！"
+                event_text = f"🎰 {nickname}: {random.choice(self.GLOBAL_ROULETTE_TEXTS)}"
 
             elif event_id == 'reverse_talent':
                 # 反向天赋：全局事件
@@ -1186,7 +1509,7 @@ class HundunFengbaoEffect(ItemEffect):
                     'type': 'reverse_talent',
                     'trigger_by': nickname
                 })
-                event_text = f"🔄 {nickname}: 触发了【反向天赋】！"
+                event_text = f"🔄 {nickname}: {random.choice(self.GLOBAL_REVERSE_TEXTS)}"
 
             elif event_id == 'lottery_bomb':
                 # 团灭彩票：全局事件
@@ -1196,10 +1519,11 @@ class HundunFengbaoEffect(ItemEffect):
                     'trigger_by': nickname,
                     'jackpot': is_jackpot
                 })
+                event_text = f"💣 {nickname}: {random.choice(self.GLOBAL_LOTTERY_TEXTS)}"
                 if is_jackpot:
-                    event_text = f"🎊 {nickname}: 【团灭彩票】中了！！全体翻倍！"
+                    event_text += " 🎊🎊🎊 中了！！！全体翻倍！！！"
                 else:
-                    event_text = f"💣 {nickname}: 【团灭彩票】没中...全体-50%长度和硬度！"
+                    event_text += " 💀 没中...全员遭殃！-50%！"
 
             elif event_id == 'parasite':
                 # 寄生虫：在别人身上种下标记
@@ -1213,9 +1537,9 @@ class HundunFengbaoEffect(ItemEffect):
                         'beneficiary_id': uid,
                         'beneficiary_name': nickname
                     })
-                    event_text = f"🦠 {nickname}: 在{target_name}身上种下寄生虫！"
+                    event_text = f"🦠 {nickname} → {target_name}: {random.choice(self.PARASITE_TEXTS)} 以后{target_name}打胶你也有份！"
                 else:
-                    event_text = f"🤷 {nickname}: 没人可以寄生..."
+                    event_text = f"🤷 {nickname}: 寄生虫找不到宿主...孤独地死去了..."
 
             # 记录变化
             if length_change != 0 or hardness_change != 0:
