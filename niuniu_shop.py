@@ -11,6 +11,7 @@ from niuniu_config import (
     DEFAULT_SHOP_ITEMS
 )
 from niuniu_effects import EffectTrigger, EffectContext
+from niuniu_stock import stock_hook
 
 class NiuniuShop:
     def __init__(self, main_plugin):
@@ -1099,6 +1100,23 @@ class NiuniuShop:
             # 扣除金币（动态定价道具使用效果返回的价格，加上保险理赔）
             target_coins = user_coins - final_price + insurance_payout
             self.update_user_coins(group_id, user_id, target_coins)
+
+            # 股市钩子 - 使用道具的长度/硬度变化
+            item_length_change = ctx.length_change if ctx else 0
+            item_hardness_change = ctx.hardness_change if ctx else 0
+            # 判断是否是混沌/全局事件类道具
+            item_name = selected_item.get('name', '')
+            if '混沌' in item_name or '风暴' in item_name:
+                stock_event_type = "chaos"
+            elif '均富' in item_name or '黑洞' in item_name or '大自爆' in item_name:
+                stock_event_type = "global"
+            else:
+                stock_event_type = "item"
+            stock_msg = stock_hook(group_id, stock_event_type, nickname,
+                                  length_change=item_length_change,
+                                  hardness_change=item_hardness_change)
+            if stock_msg:
+                result_msg.append(stock_msg)
 
             yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
 

@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from niuniu_shop import NiuniuShop
 from niuniu_games import NiuniuGames
 from niuniu_effects import create_effect_manager, EffectTrigger, EffectContext
+from niuniu_stock import NiuniuStock, stock_hook
 from niuniu_config import (
     PLUGIN_DIR, NIUNIU_LENGTHS_FILE, GAME_TEXTS_FILE, LAST_ACTION_FILE,
     DajiaoEvents, DajiaoCombo, DailyBonus, TimePeriod, TIMEZONE,
@@ -22,7 +23,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.8.5")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.9.0")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -621,6 +622,7 @@ class NiuniuPlugin(Star):
                 "牛牛商城": self.shop.show_shop,
                 "牛牛购买": self.shop.handle_buy,
                 "牛牛背包": self.shop.show_items,
+                "牛牛股市": self._niuniu_stock,
                 "重置所有牛牛": self._reset_all_niuniu,
                 "牛牛红包": self._niuniu_hongbao,
                 "牛牛补贴": self._niuniu_butie
@@ -823,6 +825,88 @@ class NiuniuPlugin(Star):
             result_parts.append("（无变化）")
 
         yield event.plain_result("\n".join(result_parts))
+
+    async def _niuniu_stock(self, event):
+        """牛牛股市"""
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+        nickname = event.get_sender_name()
+        msg = event.message_str.strip()
+
+        # 检查是否已注册
+        user_data = self.get_user_data(group_id, user_id)
+        if not user_data or 'length' not in user_data:
+            yield event.plain_result("❌ 请先注册牛牛！")
+            return
+
+        # 负数牛牛禁止使用股市
+        if user_data.get('length', 0) < 0:
+            yield event.plain_result("❌ 负数牛牛禁止进入股市！先把牛牛搞正再来吧~")
+            return
+
+        stock = NiuniuStock.get()
+
+        # 解析子命令
+        parts = msg.replace("牛牛股市", "").strip().split()
+
+        if not parts:
+            # 无参数：显示股市行情
+            yield event.plain_result(stock.format_market(group_id))
+            return
+
+        subcmd = parts[0]
+
+        if subcmd == "购买":
+            # 牛牛股市 购买 <金额>
+            if len(parts) < 2:
+                yield event.plain_result("❌ 格式：牛牛股市 购买 <金额>")
+                return
+
+            try:
+                coins = float(parts[1])
+            except:
+                yield event.plain_result("❌ 请输入有效的金额")
+                return
+
+            user_coins = user_data.get('coins', 0)
+            if coins > user_coins:
+                yield event.plain_result(f"❌ 金币不足！你只有 {user_coins:.0f} 金币")
+                return
+
+            success, message, shares = stock.buy(group_id, user_id, coins)
+            if success:
+                # 扣除金币
+                user_data['coins'] = user_coins - coins
+                self.update_user_data(group_id, user_id, {'coins': user_data['coins']})
+            yield event.plain_result(message)
+
+        elif subcmd == "出售":
+            # 牛牛股市 出售 [数量/全部]
+            shares = None
+            if len(parts) >= 2:
+                if parts[1] == "全部":
+                    shares = None  # 全部卖出
+                else:
+                    try:
+                        shares = float(parts[1])
+                    except:
+                        yield event.plain_result("❌ 请输入有效的数量或"全部"")
+                        return
+
+            success, message, coins = stock.sell(group_id, user_id, shares)
+            if success:
+                # 增加金币
+                user_coins = user_data.get('coins', 0)
+                user_data['coins'] = user_coins + coins
+                self.update_user_data(group_id, user_id, {'coins': user_data['coins']})
+            yield event.plain_result(message)
+
+        elif subcmd == "持仓":
+            # 牛牛股市 持仓
+            yield event.plain_result(stock.format_holdings(group_id, user_id, nickname))
+
+        else:
+            yield event.plain_result("❌ 未知命令\n📌 牛牛股市 购买 <金额>\n📌 牛牛股市 出售 [数量/全部]\n📌 牛牛股市 持仓")
 
     async def _register(self, event):
         """注册牛牛"""
@@ -1304,6 +1388,11 @@ class NiuniuPlugin(Star):
         # 显示连击数（如果有）
         if combo_count >= 2:
             final_text += f"\n🔥 当前连击：{combo_count}"
+
+        # 股市钩子
+        stock_msg = stock_hook(group_id, "dajiao", nickname, length_change=total_change)
+        if stock_msg:
+            final_text += f"\n{stock_msg}"
 
         yield event.plain_result(final_text)
 
@@ -2030,6 +2119,12 @@ class NiuniuPlugin(Star):
         if target_length_gain > 0:
             parasite_msgs = self._check_and_trigger_parasite(group_id, target_id, target_length_gain, processed_ids=set())
             result_msg.extend(parasite_msgs)
+
+        # 股市钩子 - 用赢家的增益作为变化量
+        compare_change = user_length_gain if user_length_gain > 0 else -target_length_gain
+        stock_msg = stock_hook(group_id, "compare", nickname, length_change=compare_change)
+        if stock_msg:
+            result_msg.append(stock_msg)
 
         yield event.plain_result("\n".join(result_msg))
 

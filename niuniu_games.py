@@ -9,6 +9,7 @@ from typing import Dict, Any
 from niuniu_config import (
     TIMEZONE, NIUNIU_LENGTHS_FILE, Cooldowns, FLY_PLANE_EVENTS, RushConfig
 )
+from niuniu_stock import stock_hook
 
 class NiuniuGames:
     def __init__(self, main_plugin):
@@ -194,6 +195,11 @@ class NiuniuGames:
             result_lines.append(bonus_msg)
         result_lines.append(f"📊 总计：{total_coins} 金币")
 
+        # 股市钩子
+        stock_msg = stock_hook(group_id, "dajiao", nickname, coins_change=total_coins)
+        if stock_msg:
+            result_lines.append(stock_msg)
+
         yield event.plain_result("\n".join(result_lines))
         
         # 重置状态
@@ -244,10 +250,18 @@ class NiuniuGames:
         data.setdefault(group_id, {})[user_id] = user_data
         self._save_data(data)
 
+        # 股市钩子
+        stock_msg = stock_hook(group_id, "dajiao", nickname, coins_change=event_coins)
+
         if event_coins >= 0:
-            yield event.plain_result(f"✈️ {nickname} {event_template['desc']}\n💰 获得 {event_coins} 金币！")
+            result = f"✈️ {nickname} {event_template['desc']}\n💰 获得 {event_coins} 金币！"
         else:
-            yield event.plain_result(f"✈️ {nickname} {event_template['desc']}\n💸 损失 {abs(event_coins)} 金币！")
+            result = f"✈️ {nickname} {event_template['desc']}\n💸 损失 {abs(event_coins)} 金币！"
+
+        if stock_msg:
+            result += f"\n{stock_msg}"
+
+        yield event.plain_result(result)
     
     def update_user_coins(self, group_id: str, user_id: str, coins: float):
         """更新用户金币"""
