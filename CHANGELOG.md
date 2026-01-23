@@ -1,5 +1,14 @@
 # Changelog
 
+## [v2.1.9] - 2026-01-23
+
+### 文档
+- **README 重写**: 全新文档结构，更清晰的指令和道具说明
+- **致谢原作者**: 感谢 [zgojin](https://github.com/zgojin/astrbot_plugin_niuniu) 的原始创意
+- **添加 MIT License**
+
+---
+
 ## [v2.1.8] - 2026-01-23
 
 ### 显示优化
