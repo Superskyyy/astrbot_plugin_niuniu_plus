@@ -647,12 +647,10 @@ class NiuniuStock:
                 lines.append(random.choice(StockTaxConfig.EXTREME_TAX_TEXTS))
             elif tax_rate >= 0.30:
                 lines.append(random.choice(StockTaxConfig.HIGH_TAX_TEXTS))
+            elif tax_rate <= 0.10:
+                lines.append(random.choice(StockTaxConfig.LOW_TAX_TEXTS))
 
             lines.append(f"💰 税后到手: {coins_after_tax:.0f}金币")
-        elif profit_or_loss > 0 and avg_coins > 0:
-            lines.append("")
-            lines.append(random.choice(StockTaxConfig.NO_TAX_TEXTS))
-            lines.append(f"💰 实际获得: {coins_after_tax:.0f}金币")
         else:
             lines.append(f"💰 实际获得: {coins_after_tax:.0f}金币")
 
