@@ -367,7 +367,13 @@ class NiuniuShop:
 
         # 检查用户是否有足够的金币（动态定价道具跳过，在效果中检查）
         if not selected_item.get('dynamic_price') and user_coins < selected_item['price']:
-            yield event.plain_result("❌ 金币不足，无法购买")
+            shortfall = selected_item['price'] - user_coins
+            yield event.plain_result(
+                f"❌ 金币不足，无法购买\n"
+                f"📋 需要: {selected_item['price']} 金币\n"
+                f"📊 你有: {int(user_coins)} 金币\n"
+                f"⚠️ 还差: {int(shortfall)} 金币"
+            )
             return
 
         try:
@@ -400,7 +406,13 @@ class NiuniuShop:
 
                 if actual_buy_count <= 0:
                     if max_buys_by_coins <= 0:
-                        yield event.plain_result("❌ 金币不足，无法购买")
+                        shortfall = price_per_buy - user_coins
+                        yield event.plain_result(
+                            f"❌ 金币不足，无法购买\n"
+                            f"📋 需要: {price_per_buy} 金币\n"
+                            f"📊 你有: {int(user_coins)} 金币\n"
+                            f"⚠️ 还差: {int(shortfall)} 金币"
+                        )
                     else:
                         yield event.plain_result(f"⚠️ 购买后会超过上限（当前{current}个，最大{max_count}个）")
                     return
@@ -455,7 +467,13 @@ class NiuniuShop:
                     actual_buy_count = min(buy_count, max_buys_by_coins, max_buys_by_hardness)
 
                     if actual_buy_count <= 0:
-                        yield event.plain_result("❌ 金币不足，无法购买")
+                        shortfall = price_per_buy - user_coins
+                        yield event.plain_result(
+                            f"❌ 金币不足，无法购买\n"
+                            f"📋 需要: {price_per_buy} 金币\n"
+                            f"📊 你有: {int(user_coins)} 金币\n"
+                            f"⚠️ 还差: {int(shortfall)} 金币"
+                        )
                         return
 
                     # 计算总效果
