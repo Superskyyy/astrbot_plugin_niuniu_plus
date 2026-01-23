@@ -639,12 +639,15 @@ EVENT_TYPE_NAMES = {
 }
 
 
-def stock_hook(group_id: str, event_type: str,
+def stock_hook(group_id: str,
                nickname: str = "???",
+               event_type: str = None,
+               item_name: str = None,
                length_change: float = 0,
                hardness_change: int = 0,
                coins_change: float = 0,
-               extra: Dict = None) -> str:
+               volatility: Tuple[float, float] = None,
+               templates: Dict[str, List[str]] = None) -> str:
     """
     股市钩子函数 - 供其他模块调用
 
@@ -652,19 +655,34 @@ def stock_hook(group_id: str, event_type: str,
 
     Args:
         group_id: 群组ID
-        event_type: 事件类型 (dajiao/compare/item/chaos/global)
         nickname: 触发者昵称
+        event_type: 事件类型 (dajiao/compare/chaos/global)，使用内置模板
+        item_name: 道具名称（用于 plain 模板显示）
         length_change: 长度变化量
         hardness_change: 硬度变化量
         coins_change: 金币变化量
-        extra: 额外数据
+        volatility: 波动范围 (min, max)，如果不指定则根据 event_type 自动选择
+        templates: 自定义模板 {"up": [...], "down": [...], "plain": [...]}
+                   如果提供 plain，则使用 plain 模板（不区分涨跌）
+                   如果提供了 templates，则忽略 event_type 的内置模板
 
     Returns:
         股市影响消息，可附加到事件输出末尾
 
     Examples:
-        msg = stock_hook(group_id, "dajiao", "小明", length_change=10)
-        # 返回: "📊 妖牛股 📈+1.5% (98.50→100.00)"
+        # 打胶/比划，使用内置模板
+        msg = stock_hook(group_id, "小明", event_type="dajiao", length_change=10)
+
+        # 普通道具，有专属模板
+        msg = stock_hook(group_id, "小明", item_name="劫富济贫",
+                         length_change=50,
+                         volatility=(0.03, 0.10),
+                         templates={"up": ["劫富成功！牛市狂欢！"], "down": ["劫富翻车！"]})
+
+        # 工具类道具，使用 plain 模板
+        msg = stock_hook(group_id, "小明", item_name="驱牛药",
+                         volatility=(0.001, 0.005),
+                         templates={"plain": ["{nickname} 使用了 {item_name}，股市反应平淡"]})
     """
     try:
         stock = NiuniuStock.get()
@@ -672,8 +690,17 @@ def stock_hook(group_id: str, event_type: str,
         # 获取变化前价格
         old_price = stock.get_price(group_id)
 
+        # 确定波动范围
+        if volatility is None:
+            if event_type and event_type in STOCK_CONFIG["volatility"]:
+                volatility = STOCK_CONFIG["volatility"][event_type]
+            else:
+                volatility = (0.001, 0.005)  # 默认微波动
+
+        min_vol, max_vol = volatility
+
         # 计算方向：正变化=涨，负变化=跌，无变化=随机
-        total_change = length_change + hardness_change * 10
+        total_change = length_change + hardness_change * 10 + coins_change * 0.1
         if total_change > 0:
             direction = 1
         elif total_change < 0:
@@ -689,18 +716,94 @@ def stock_hook(group_id: str, event_type: str,
             direction = 0
             magnitude *= 1.5
 
-        new_price, change_pct, actual_direction = stock._update_price(
-            group_id, event_type, direction, magnitude, nickname, length_change
-        )
+        # 计算波动幅度
+        vol = random.uniform(min_vol, max_vol) * magnitude
 
-        # 格式化股市影响消息
+        # 决定实际方向
+        if direction == 0:
+            actual_direction = random.choice([1, -1])
+        else:
+            actual_direction = direction
+
+        # 计算新价格
+        change_pct = vol * actual_direction
+        data = stock._get_group_data(group_id)
+        current_price = data.get("price", STOCK_CONFIG["base_price"])
+        new_price = current_price * (1 + change_pct)
+
+        # 限制价格范围
+        new_price = max(STOCK_CONFIG["min_price"],
+                       min(STOCK_CONFIG["max_price"], new_price))
+        new_price = round(new_price, 2)
+
+        data["price"] = new_price
+        data["last_update"] = time.time()
+
+        # 生成事件描述
         change_pct_display = abs(change_pct) * 100
         if actual_direction > 0:
-            trend = f"📈+{change_pct_display:.2f}%"
+            trend_emoji = "📈"
+            trend_str = f"+{change_pct_display:.2f}%"
         else:
-            trend = f"📉-{change_pct_display:.2f}%"
+            trend_emoji = "📉"
+            trend_str = f"-{change_pct_display:.2f}%"
 
-        return f"📊 妖牛股 {trend} ({old_price:.2f}→{new_price:.2f})"
+        # 选择模板
+        if templates and "plain" in templates:
+            # 使用 plain 模板（不区分涨跌）
+            template = random.choice(templates["plain"])
+            desc = template.format(
+                nickname=nickname,
+                item_name=item_name or "道具",
+                change=f"{trend_str}"
+            )
+        elif templates:
+            # 使用自定义 up/down 模板
+            template_list = templates.get("up" if actual_direction > 0 else "down", [])
+            if template_list:
+                template = random.choice(template_list)
+                desc = template.format(
+                    nickname=nickname,
+                    item_name=item_name or "道具",
+                    change=abs(length_change)
+                )
+            else:
+                desc = f"{nickname} 的操作影响了股市"
+        elif event_type and event_type in EVENT_TEMPLATES:
+            # 使用内置 event_type 模板
+            builtin_templates = EVENT_TEMPLATES[event_type]
+            template_list = builtin_templates["up"] if actual_direction > 0 else builtin_templates["down"]
+            template = random.choice(template_list)
+            desc = template.format(
+                nickname=nickname,
+                change=abs(length_change)
+            )
+        else:
+            # 无模板，使用简单描述
+            desc = f"{nickname} 的操作影响了股市"
+
+        # 记录事件
+        event = {
+            "time": time.time(),
+            "type": event_type or "item",
+            "nickname": nickname,
+            "direction": actual_direction,
+            "change_pct": abs(change_pct) * 100,
+            "desc": desc,
+        }
+
+        if "events" not in data:
+            data["events"] = []
+        data["events"].append(event)
+
+        # 只保留最近50条
+        if len(data["events"]) > 50:
+            data["events"] = data["events"][-50:]
+
+        stock._save_data()
+
+        # 格式化股市影响消息
+        return f"📊 妖牛股 {trend_emoji}{trend_str} ({old_price:.2f}→{new_price:.2f})"
 
     except Exception as e:
         # 股市更新失败不应影响主流程

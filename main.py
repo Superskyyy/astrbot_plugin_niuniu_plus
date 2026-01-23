@@ -23,7 +23,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.9.0")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.10.0")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -42,7 +42,23 @@ class NiuniuPlugin(Star):
         self.games = NiuniuGames(self)  # 实例化游戏模块
         self.effects = create_effect_manager()  # 实例化效果管理器
         self.effects.set_shop(self.shop)  # 设置商城引用
-    
+
+    async def terminate(self):
+        """插件卸载时清理模块缓存，确保热重载生效"""
+        # 清理本插件相关的模块缓存
+        modules_to_remove = [
+            'niuniu_config',
+            'niuniu_shop',
+            'niuniu_games',
+            'niuniu_effects',
+            'niuniu_stock',
+        ]
+        for module_name in modules_to_remove:
+            if module_name in sys.modules:
+                del sys.modules[module_name]
+                self.context.logger.debug(f"清理模块缓存: {module_name}")
+        self.context.logger.info("牛牛插件已卸载，模块缓存已清理")
+
     # region 数据文件操作
     def _create_niuniu_lengths_file(self):
         """创建数据文件"""
@@ -640,7 +656,7 @@ class NiuniuPlugin(Star):
         niuniu_commands = [
             "牛牛菜单", "牛牛开", "牛牛关", "注册牛牛", "打胶", "我的牛牛",
             "比划比划", "牛牛排行", "牛牛商城", "牛牛购买", "牛牛背包",
-            "开冲", "停止开冲", "飞飞机"  
+            "牛牛股市", "开冲", "停止开冲", "飞飞机"
         ]
         
         if any(msg.startswith(cmd) for cmd in niuniu_commands):
@@ -890,7 +906,7 @@ class NiuniuPlugin(Star):
                     try:
                         shares = float(parts[1])
                     except:
-                        yield event.plain_result("❌ 请输入有效的数量或"全部"")
+                        yield event.plain_result("❌ 请输入有效的数量或「全部」")
                         return
 
             success, message, coins = stock.sell(group_id, user_id, shares)
@@ -1390,7 +1406,7 @@ class NiuniuPlugin(Star):
             final_text += f"\n🔥 当前连击：{combo_count}"
 
         # 股市钩子
-        stock_msg = stock_hook(group_id, "dajiao", nickname, length_change=total_change)
+        stock_msg = stock_hook(group_id, nickname, event_type="dajiao", length_change=total_change)
         if stock_msg:
             final_text += f"\n{stock_msg}"
 
@@ -2122,7 +2138,7 @@ class NiuniuPlugin(Star):
 
         # 股市钩子 - 用赢家的增益作为变化量
         compare_change = user_length_gain if user_length_gain > 0 else -target_length_gain
-        stock_msg = stock_hook(group_id, "compare", nickname, length_change=compare_change)
+        stock_msg = stock_hook(group_id, nickname, event_type="compare", length_change=compare_change)
         if stock_msg:
             result_msg.append(stock_msg)
 

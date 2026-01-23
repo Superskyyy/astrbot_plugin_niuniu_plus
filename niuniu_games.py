@@ -196,7 +196,7 @@ class NiuniuGames:
         result_lines.append(f"📊 总计：{total_coins} 金币")
 
         # 股市钩子
-        stock_msg = stock_hook(group_id, "dajiao", nickname, coins_change=total_coins)
+        stock_msg = stock_hook(group_id, nickname, event_type="dajiao", coins_change=total_coins)
         if stock_msg:
             result_lines.append(stock_msg)
 
@@ -251,7 +251,7 @@ class NiuniuGames:
         self._save_data(data)
 
         # 股市钩子
-        stock_msg = stock_hook(group_id, "dajiao", nickname, coins_change=event_coins)
+        stock_msg = stock_hook(group_id, nickname, event_type="dajiao", coins_change=event_coins)
 
         if event_coins >= 0:
             result = f"✈️ {nickname} {event_template['desc']}\n💰 获得 {event_coins} 金币！"

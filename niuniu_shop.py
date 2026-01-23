@@ -1104,20 +1104,34 @@ class NiuniuShop:
             target_coins = user_coins - final_price + insurance_payout
             self.update_user_coins(group_id, user_id, target_coins)
 
-            # 股市钩子 - 使用道具的长度/硬度变化
+            # 股市钩子 - 使用道具的 stock_config
+            item_name = selected_item.get('name', '')
             item_length_change = ctx.length_change if ctx else 0
             item_hardness_change = ctx.hardness_change if ctx else 0
-            # 判断是否是混沌/全局事件类道具
-            item_name = selected_item.get('name', '')
-            if '混沌' in item_name or '风暴' in item_name:
-                stock_event_type = "chaos"
-            elif '均富' in item_name or '黑洞' in item_name or '大自爆' in item_name:
-                stock_event_type = "global"
+
+            # 从 effect 获取 stock_config
+            effect = self.main.effects.effects.get(item_name)
+            if effect and hasattr(effect, 'stock_config') and effect.stock_config:
+                # 使用道具定义的 stock_config
+                stock_cfg = effect.stock_config
+                stock_msg = stock_hook(
+                    group_id, nickname,
+                    item_name=item_name,
+                    length_change=item_length_change,
+                    hardness_change=item_hardness_change,
+                    volatility=stock_cfg.get('volatility'),
+                    templates=stock_cfg.get('templates')
+                )
             else:
-                stock_event_type = "item"
-            stock_msg = stock_hook(group_id, stock_event_type, nickname,
-                                  length_change=item_length_change,
-                                  hardness_change=item_hardness_change)
+                # 没有 stock_config 的道具，使用默认平淡模板
+                stock_msg = stock_hook(
+                    group_id, nickname,
+                    item_name=item_name,
+                    length_change=item_length_change,
+                    hardness_change=item_hardness_change,
+                    volatility=(0.001, 0.005),
+                    templates={"plain": ["{nickname} 使用了 {item_name}，股市反应平淡 {change}"]}
+                )
             if stock_msg:
                 result_msg.append(stock_msg)
 
