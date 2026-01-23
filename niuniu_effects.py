@@ -2701,22 +2701,35 @@ class JunfukaEffect(ItemEffect):
             return ctx
 
         # 过滤有效用户（有长度数据的）
-        valid_users = [(uid, data) for uid, data in group_data.items()
-                       if isinstance(data, dict) and 'length' in data]
+        all_valid_users = [(uid, data) for uid, data in group_data.items()
+                          if isinstance(data, dict) and 'length' in data]
 
-        if len(valid_users) < JunfukaConfig.MIN_PLAYERS:
+        if len(all_valid_users) < JunfukaConfig.MIN_PLAYERS:
             ctx.messages.append(f"❌ 群里牛牛不足{JunfukaConfig.MIN_PLAYERS}人，无法发动均富！")
             ctx.extra['refund'] = True
             ctx.intercept = True
             return ctx
 
-        # 计算平均长度和平均硬度
+        # 随机漏掉0-10%的人（向下取整）
+        escape_rate = random.uniform(0, 0.10)
+        escape_count = int(len(all_valid_users) * escape_rate)
+
+        escaped_users = []
+        valid_users = all_valid_users[:]
+
+        if escape_count > 0:
+            # 随机选择漏网之鱼
+            escaped_indices = random.sample(range(len(all_valid_users)), escape_count)
+            escaped_users = [all_valid_users[i] for i in escaped_indices]
+            valid_users = [u for i, u in enumerate(all_valid_users) if i not in escaped_indices]
+
+        # 计算平均长度和平均硬度（只计算参与均富的人）
         total_length = sum(data.get('length', 0) for _, data in valid_users)
         total_hardness = sum(data.get('hardness', 1) for _, data in valid_users)
         avg_length = int(total_length / len(valid_users))
         avg_hardness = max(1, int(total_hardness / len(valid_users)))  # 硬度最低为1
 
-        # 记录变化
+        # 记录变化（只有参与均富的人）
         changes = []
         for uid, data in valid_users:
             old_length = data.get('length', 0)
@@ -2753,6 +2766,16 @@ class JunfukaEffect(ItemEffect):
         ctx.messages.append(f"📊 群平均长度：{format_length(avg_length)} | 平均硬度：{avg_hardness}")
         ctx.messages.append(f"👥 参与人数：{len(valid_users)}人")
         ctx.messages.append("")
+
+        # 显示漏网之鱼
+        if escaped_users:
+            ctx.messages.append("🐟 漏网之鱼（意外逃过均富）：")
+            for uid, data in escaped_users:
+                nickname = data.get('nickname', uid)
+                length = data.get('length', 0)
+                hardness = data.get('hardness', 1)
+                ctx.messages.append(f"  🍀 {nickname}: {format_length(length)} 💪{hardness} (保持不变)")
+            ctx.messages.append("")
 
         # 显示变化（最多显示10人，优先显示变化最大的）
         losers = [c for c in changes if c['total_diff'] < 0][:5]
