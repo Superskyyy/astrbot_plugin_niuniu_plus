@@ -2769,7 +2769,7 @@ class JunfukaEffect(ItemEffect):
 
         # 显示漏网之鱼
         if escaped_users:
-            ctx.messages.append("🐂 漏网之牛（意外逃过均富）：")
+            ctx.messages.append("🐂 漏网之牛（意外错过均富）：")
             for uid, data in escaped_users:
                 nickname = data.get('nickname', uid)
                 length = data.get('length', 0)
