@@ -467,22 +467,9 @@ class NiuniuShop:
                     'reflect_count': new_result.get('reflect_count', 0) + 1
                 }
 
-        # 2. 检查护盾
         victim_name = victim_data.get('nickname', victim_id)
-        shield_charges = victim_data.get('shield_charges', 0)
-        if shield_charges > 0:
-            group_data[victim_id]['shield_charges'] = shield_charges - 1
-            messages.append(f"🛡️ {victim_name} 的护盾抵挡了攻击！（剩余{shield_charges - 1}层）")
-            return {
-                'final_victim_id': victim_id,
-                'final_victim_name': victim_name,
-                'messages': messages,
-                'damage_applied': False,
-                'blocked_by_shield': True,
-                'reflect_count': 0
-            }
 
-        # 3. 检查祸水东引
+        # 2. 检查祸水东引（优先于护盾）
         if allow_transfer:
             transfer_info = self._check_risk_transfer(
                 group_data, victim_id, length_damage, hardness_damage,
@@ -514,6 +501,20 @@ class NiuniuShop:
                     'transferred': True,
                     'reflect_count': new_result.get('reflect_count', 0)
                 }
+
+        # 3. 检查护盾
+        shield_charges = victim_data.get('shield_charges', 0)
+        if shield_charges > 0:
+            group_data[victim_id]['shield_charges'] = shield_charges - 1
+            messages.append(f"🛡️ {victim_name} 的护盾抵挡了攻击！（剩余{shield_charges - 1}层）")
+            return {
+                'final_victim_id': victim_id,
+                'final_victim_name': victim_name,
+                'messages': messages,
+                'damage_applied': False,
+                'blocked_by_shield': True,
+                'reflect_count': 0
+            }
 
         # 4. 实际造成伤害
         if length_damage > 0:
