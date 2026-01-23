@@ -519,8 +519,9 @@ DEFAULT_SHOP_ITEMS = [
         'id': 20,
         'name': "牛牛均富/负卡",
         'type': 'active',
-        'desc': "发动共产主义！全群所有牛牛长度和硬度取平均值！大佬哭晕，负数狂喜！",
-        'price': 1888
+        'desc': "发动共产主义！全群所有牛牛长度和硬度取平均值！大佬哭晕，负数狂喜！价格随群内贫富差距浮动",
+        'price': 0,  # 动态定价
+        'dynamic_price': True
     },
     {
         'id': 21,
@@ -754,6 +755,11 @@ class NiuniuJishengConfig:
 # =============================================================================
 class JunfukaConfig:
     MIN_PLAYERS = 3                    # 最少需要3人才能触发
+
+    # 动态定价配置
+    BASE_PRICE = 1888                  # 基础价格
+    TOTAL_DIFF_COEFFICIENT = 0.001    # 总差异系数：价格 = 基础价格 + Σ|长度 - 平均长度| × 系数
+    MIN_PRICE = 1888                   # 最低价格（分布极小时）
 
     # 开场文案
     OPENING_TEXTS = [

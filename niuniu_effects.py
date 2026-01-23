@@ -3029,6 +3029,31 @@ class JunfukaEffect(ItemEffect):
             ctx.intercept = True
             return ctx
 
+        # 计算动态价格：基础价格 + Σ|长度 - 平均长度| × 系数
+        all_lengths = [data.get('length', 0) for _, data in all_valid_users]
+        avg_for_price = sum(all_lengths) / len(all_lengths)
+        total_diff = sum(abs(length - avg_for_price) for length in all_lengths)
+        dynamic_price = int(JunfukaConfig.BASE_PRICE + total_diff * JunfukaConfig.TOTAL_DIFF_COEFFICIENT)
+        dynamic_price = max(JunfukaConfig.MIN_PRICE, dynamic_price)
+        ctx.extra['dynamic_price'] = dynamic_price
+
+        # 检查金币是否足够
+        user_coins = ctx.extra.get('user_coins', 0)
+        if user_coins < dynamic_price:
+            shortfall = dynamic_price - user_coins
+            ctx.messages.extend([
+                "❌ ══ 牛牛均富/负卡 ══ ❌",
+                "💰 金币不足，无法发动均富！",
+                f"📋 需要: {dynamic_price} 金币",
+                f"📊 你有: {user_coins} 金币",
+                f"⚠️ 还差: {shortfall} 金币",
+                f"💡 提示: 群内分布越分散，价格越高哦~",
+                "═══════════════════"
+            ])
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
         # 随机漏掉0-10%的人（向下取整）
         escape_rate = random.uniform(0, 0.10)
         escape_count = int(len(all_valid_users) * escape_rate)
@@ -3082,6 +3107,8 @@ class JunfukaEffect(ItemEffect):
 
         # 构建消息
         ctx.messages.extend(JunfukaConfig.OPENING_TEXTS)
+        ctx.messages.append(f"💰 花费 {dynamic_price} 金币")
+        ctx.messages.append(f"📈 定价 = {JunfukaConfig.BASE_PRICE} + {int(total_diff)}×{JunfukaConfig.TOTAL_DIFF_COEFFICIENT}")
         ctx.messages.append(f"📊 群平均长度：{format_length(avg_length)} | 平均硬度：{avg_hardness}")
         ctx.messages.append(f"👥 参与人数：{len(valid_users)}人")
         ctx.messages.append("")

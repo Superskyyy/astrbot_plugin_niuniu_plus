@@ -83,6 +83,21 @@ class NiuniuShop:
                         price_str = f"{dynamic_price} 💰 (你的价格)"
                     else:
                         price_str = "仅限负数牛牛"
+                # 牛牛均富/负卡的动态价格计算
+                elif item['name'] == '牛牛均富/负卡':
+                    from niuniu_config import JunfukaConfig
+                    niuniu_data = self._load_niuniu_data()
+                    group_data = niuniu_data.get(group_id, {})
+                    all_lengths = [data.get('length', 0) for uid, data in group_data.items()
+                                   if isinstance(data, dict) and 'length' in data]
+                    if len(all_lengths) >= JunfukaConfig.MIN_PLAYERS:
+                        avg_length = sum(all_lengths) / len(all_lengths)
+                        total_diff = sum(abs(length - avg_length) for length in all_lengths)
+                        dynamic_price = int(JunfukaConfig.BASE_PRICE + total_diff * JunfukaConfig.TOTAL_DIFF_COEFFICIENT)
+                        dynamic_price = max(JunfukaConfig.MIN_PRICE, dynamic_price)
+                        price_str = f"{dynamic_price} 💰 (当前群价)"
+                    else:
+                        price_str = f"需≥{JunfukaConfig.MIN_PLAYERS}人"
                 else:
                     price_str = "动态定价"
             else:
