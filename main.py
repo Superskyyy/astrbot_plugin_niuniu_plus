@@ -30,7 +30,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.13.0")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.13.1")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -93,7 +93,7 @@ class NiuniuPlugin(Star):
                     user_data = group_data[user_id]
                     if isinstance(user_data, dict):
                         user_data.setdefault('coins', 0)
-                        user_data.setdefault('items', {}) 
+                        user_data.setdefault('items', {})
             return data
         except Exception as e:
             self.context.logger.error(f"加载数据失败: {str(e)}")
@@ -253,7 +253,7 @@ class NiuniuPlugin(Star):
             # 直接修改 group_data（用于批量操作，稍后统一保存）
             group_data[user_id]['insurance_charges'] = new_charges
             current_coins = group_data[user_id].get('coins', 0)
-            group_data[user_id]['coins'] = current_coins + ShangbaoxianConfig.PAYOUT
+            group_data[user_id]['coins'] = round(current_coins + ShangbaoxianConfig.PAYOUT)
         else:
             # 独立操作，立即保存
             self.update_user_data(group_id, user_id, {'insurance_charges': new_charges})
@@ -758,7 +758,7 @@ class NiuniuPlugin(Star):
             if uid.startswith('_') or uid == 'plugin_enabled':
                 continue
             if isinstance(group_data[uid], dict) and 'length' in group_data[uid]:
-                group_data[uid]['coins'] = group_data[uid].get('coins', 0) + amount
+                group_data[uid]['coins'] = round(group_data[uid].get('coins', 0) + amount)
                 receive_count += 1
 
         data[group_id] = group_data
@@ -820,7 +820,7 @@ class NiuniuPlugin(Star):
         # 应用变化
         new_length = old_length + length_change
         new_hardness = max(0, old_hardness + hardness_change)  # 硬度最低为0
-        new_coins = old_coins + coins_change  # 金币可以为负数（欠账）
+        new_coins = round(old_coins + coins_change)  # 金币可以为负数（欠账）
 
         target_data['length'] = new_length
         target_data['hardness'] = new_hardness
@@ -892,7 +892,7 @@ class NiuniuPlugin(Star):
             success, message, shares = stock.buy(group_id, user_id, coins)
             if success:
                 # 扣除金币
-                user_data['coins'] = user_coins - coins
+                user_data['coins'] = round(user_coins - coins)
                 self.update_user_data(group_id, user_id, {'coins': user_data['coins']})
             yield event.plain_result(message)
 

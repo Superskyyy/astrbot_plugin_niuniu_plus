@@ -172,7 +172,7 @@ class NiuniuShop:
         """更新签到插件的金币"""
         sign_data = self._load_sign_data()
         user_data = sign_data.setdefault(group_id, {}).setdefault(user_id, {})
-        user_data['coins'] = coins
+        user_data['coins'] = round(coins)
         self._save_sign_data(sign_data)
 
     def _get_new_game_coins(self, group_id: str, user_id: str) -> float:
@@ -185,14 +185,14 @@ class NiuniuShop:
         niuniu_data = self._load_niuniu_data()
         group_data = niuniu_data.setdefault(group_id, {})
         user_info = group_data.setdefault(user_id, {})
-        user_info['coins'] = coins
+        user_info['coins'] = round(coins)
         self._save_niuniu_data(niuniu_data)
 
     def get_user_coins(self, group_id: str, user_id: str) -> float:
         """获取总金币"""
         sign_coins = self.get_sign_coins(group_id, user_id)
         game_coins = self._get_new_game_coins(group_id, user_id)
-        return sign_coins + game_coins
+        return round(sign_coins + game_coins)  # 取整避免精度问题
 
     def update_user_coins(self, group_id: str, user_id: str, coins: float):
         """更新总金币"""

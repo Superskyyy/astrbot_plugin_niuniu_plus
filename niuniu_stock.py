@@ -15,9 +15,8 @@ import time
 from typing import Dict, Any, Tuple, List
 from collections import deque
 
-# 数据文件路径
-PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-STOCK_DATA_FILE = os.path.join(PLUGIN_DIR, "niuniu_stock.json")
+# 数据文件路径（和其他数据存在一起，避免重装丢失）
+STOCK_DATA_FILE = 'data/niuniu_stock.json'
 
 # 股票配置
 STOCK_CONFIG = {
@@ -348,7 +347,7 @@ class NiuniuStock:
 
     def _save_data(self):
         """保存股市数据"""
-        os.makedirs(PLUGIN_DIR, exist_ok=True)
+        os.makedirs('data', exist_ok=True)
         with open(STOCK_DATA_FILE, 'w', encoding='utf-8') as f:
             json.dump(self._data, f, ensure_ascii=False, indent=2)
 

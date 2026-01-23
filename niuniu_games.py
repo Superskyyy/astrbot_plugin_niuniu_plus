@@ -179,7 +179,7 @@ class NiuniuGames:
             bonus_msg += f"\n🌟 【超级冲刺王】触发！+{super_bonus}金币！"
 
         total_coins = base_coins + bonus_coins
-        user_data['coins'] = user_data.get('coins', 0) + total_coins
+        user_data['coins'] = round(user_data.get('coins', 0) + total_coins)
 
         # 保存到文件
         data.setdefault(group_id, {})[user_id] = user_data
@@ -243,7 +243,7 @@ class NiuniuGames:
         event_coins = random.randint(event_template["coins_min"], event_template["coins_max"])
 
         # 更新金币和时间
-        user_data['coins'] = user_data.get('coins', 0) + event_coins
+        user_data['coins'] = round(user_data.get('coins', 0) + event_coins)
         user_data['last_fly_time'] = time.time()
         
         # 保存到文件
@@ -267,7 +267,7 @@ class NiuniuGames:
         """更新用户金币"""
         data = self._load_data()
         user_data = data.setdefault(str(group_id), {}).setdefault(str(user_id), {})
-        user_data['coins'] = user_data.get('coins', 0) + coins
+        user_data['coins'] = round(user_data.get('coins', 0) + coins)  # 取整避免精度问题
         data[str(group_id)][str(user_id)] = user_data
         self._save_data(data)
     
