@@ -223,6 +223,18 @@ class DuoxinmoEffect(ItemEffect):
 
         return ctx
 
+    # 夺取负数目标的趣味文案
+    STEAL_NEGATIVE_TARGET_TEXTS = [
+        "🎭 等等...对方是负数牛牛？？",
+        "🤡 夺牛魔：「这负数...我帮你背了！」",
+        "🌀 你主动吸收了对方的负能量债务！",
+        "😱 本想抢劫却背上了债务！",
+        "🕳️ 夺牛魔把对方的负数转移给你了！",
+        "💀 恭喜你接盘了一个负数牛牛！",
+        "🎪 对方的债务现在是你的了！",
+        "🃏 夺牛魔：「负数？照样夺！」",
+    ]
+
     def _handle_steal(self, ctx: EffectContext):
         """50% 夺取对方全部长度和硬度"""
         target_shield_charges = 0
@@ -262,10 +274,20 @@ class DuoxinmoEffect(ItemEffect):
             ])
             if damage_reduction > 0:
                 ctx.messages.append(f"🛡️ {ctx.target_nickname} 护盾抵挡了{int(damage_reduction*100)}%！")
-            ctx.messages.extend([
-                f"💰 夺取 {actual_steal_len}cm + {actual_steal_hard}点硬度！",
-                f"😭 {ctx.target_nickname} 被掏空了...",
-            ])
+
+            # 根据目标长度正负显示不同文案
+            if base_steal_len < 0:
+                # 目标是负数，夺取负数意味着吸收债务
+                ctx.messages.extend([
+                    random.choice(self.STEAL_NEGATIVE_TARGET_TEXTS),
+                    f"💸 你接收了 {abs(actual_steal_len)}cm 的负数债务！",
+                    f"🎉 {ctx.target_nickname} 债务清零，重获新生！",
+                ])
+            else:
+                ctx.messages.extend([
+                    f"💰 夺取 {actual_steal_len}cm + {actual_steal_hard}点硬度！",
+                    f"😭 {ctx.target_nickname} 被掏空了...",
+                ])
             ctx.intercept = True
 
     def _handle_chaos(self, ctx: EffectContext):
@@ -2131,6 +2153,20 @@ class DazibaoEffect(ItemEffect):
     triggers = [EffectTrigger.ON_PURCHASE]
     consume_on_use = False  # Active item, no inventory
 
+    # 负数自爆因祸得福文案
+    NEGATIVE_SELF_DESTRUCT_TEXTS = [
+        "🎭 等等...负数自爆会归零？？因祸得福！",
+        "🤡 本想同归于尽，结果自己反而得救了！",
+        "🌀 炸弹把负能量炸没了！",
+        "😂 自爆失败...不对，是成功？？",
+        "🎪 负数牛牛：「自爆？谢谢，我正需要归零！」",
+        "🃏 命运的玩笑：想死却重生了！",
+        "✨ 爆炸净化了负能量！",
+        "🦠 负数太臭，爆炸后反而清新了！",
+        "🎰 史上最幸运的自爆！",
+        "💫 「系统：检测到负数自爆，自动修正为归零」",
+    ]
+
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
         from niuniu_config import DazibaoConfig
 
@@ -2146,8 +2182,24 @@ class DazibaoEffect(ItemEffect):
         user_length = ctx.user_length
         user_hardness = ctx.user_hardness
 
-        # 负数或零长度不能自爆（否则就是白嫖归零，绝对值道具没意义了）
-        if user_length <= 0 or user_hardness <= 1:
+        # 负数牛牛自爆 - 因祸得福归零！（不造成伤害）
+        if user_length < 0:
+            ctx.length_change = -user_length  # 归零
+            ctx.hardness_change = -(user_hardness - 1)  # 硬度归1
+            ctx.extra['dazibao'] = {'victims': []}  # 无受害者
+            ctx.messages.extend([
+                "💥 ══ 牛牛大自爆 ══ 💥",
+                random.choice(self.NEGATIVE_SELF_DESTRUCT_TEXTS),
+                f"🎊 {ctx.nickname} 从 {user_length}cm 归零了！",
+                f"📊 长度：{user_length}cm → 0cm",
+                f"📊 硬度：{user_hardness} → 1",
+                "🍀 因祸得福！但由于没有正数长度，没有对别人造成伤害！",
+                "═══════════════════"
+            ])
+            return ctx
+
+        # 零长度或硬度为1不能自爆
+        if user_length == 0 or user_hardness <= 1:
             ctx.messages.append("❌ 你已经是废牛了，没有可以自爆的资本！")
             ctx.extra['refund'] = True
             ctx.intercept = True

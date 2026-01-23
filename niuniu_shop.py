@@ -251,9 +251,9 @@ class NiuniuShop:
         # 消耗保险次数
         group_data[victim_id]['insurance_charges'] = new_charges
 
-        # 赔付金币
-        self._update_new_game_coins(group_id, victim_id,
-            self._get_new_game_coins(group_id, victim_id) + ShangbaoxianConfig.PAYOUT)
+        # 赔付金币（直接修改 group_data，避免被后续 _save_niuniu_data 覆盖）
+        current_coins = group_data[victim_id].get('coins', 0)
+        group_data[victim_id]['coins'] = current_coins + ShangbaoxianConfig.PAYOUT
 
         # 构建消息
         damage_parts = []
@@ -393,6 +393,7 @@ class NiuniuShop:
             final_price = selected_item['price']  # 默认价格，动态定价道具会在效果中更新
             total_cost = 0  # 批量购买总花费
             actual_buy_count = 0  # 实际购买次数
+            insurance_payout = 0  # 保险理赔金额（用于购买时受到伤害的情况）
 
             if selected_item['type'] == 'passive':
                 # Passive items go to inventory - 支持批量购买
@@ -1093,9 +1094,8 @@ class NiuniuShop:
                         hardness_triggered = hardness_loss >= ShangbaoxianConfig.HARDNESS_THRESHOLD
                         if length_triggered or hardness_triggered:
                             user_data['insurance_charges'] -= 1
-                            # 赔付金币
-                            self._update_new_game_coins(group_id, user_id,
-                                self._get_new_game_coins(group_id, user_id) + ShangbaoxianConfig.PAYOUT)
+                            # 记录理赔金额（稍后统一处理金币）
+                            insurance_payout = ShangbaoxianConfig.PAYOUT
                             # 构建消息
                             damage_parts = []
                             if length_loss > 0:
@@ -1112,8 +1112,9 @@ class NiuniuShop:
                     yield event.plain_result("⚠️ 道具配置错误，请联系管理员")
                     return
 
-            # 扣除金币（动态定价道具使用效果返回的价格）
-            self.update_user_coins(group_id, user_id, user_coins - final_price)
+            # 扣除金币（动态定价道具使用效果返回的价格，加上保险理赔）
+            target_coins = user_coins - final_price + insurance_payout
+            self.update_user_coins(group_id, user_id, target_coins)
 
             yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
 
