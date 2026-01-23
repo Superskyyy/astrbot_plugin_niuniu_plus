@@ -326,6 +326,214 @@ class NiuniuShop:
             'message': message
         }
 
+    def _check_reflect(self, group_data: Dict[str, Any], victim_id: str,
+                       attacker_id: str, length_damage: int, hardness_damage: int) -> Dict[str, Any]:
+        """
+        检查是否触发牛牛反弹
+
+        Args:
+            group_data: 群组数据
+            victim_id: 受害者ID
+            attacker_id: 攻击者ID
+            length_damage: 长度伤害
+            hardness_damage: 硬度伤害
+
+        Returns:
+            反弹信息字典
+        """
+        from niuniu_config import FantanConfig
+
+        victim_data = group_data.get(victim_id, {})
+        if not isinstance(victim_data, dict):
+            return {'reflected': False}
+
+        # 检查反弹次数
+        reflect_charges = victim_data.get('reflect_charges', 0)
+        if reflect_charges <= 0:
+            return {'reflected': False}
+
+        # 检查长度伤害是否达到阈值
+        if length_damage < FantanConfig.DAMAGE_THRESHOLD:
+            return {'reflected': False}
+
+        # 检查攻击者是否存在
+        attacker_data = group_data.get(attacker_id, {})
+        if not isinstance(attacker_data, dict) or 'length' not in attacker_data:
+            return {'reflected': False}
+
+        victim_name = victim_data.get('nickname', victim_id)
+        attacker_name = attacker_data.get('nickname', attacker_id)
+
+        message = f"🔄⚡ {victim_name} 触发牛牛反弹！{length_damage}cm伤害反弹给 {attacker_name}！以彼之道还施彼身！（剩余{reflect_charges - 1}次）"
+
+        return {
+            'reflected': True,
+            'attacker_id': attacker_id,
+            'attacker_name': attacker_name,
+            'victim_id': victim_id,
+            'victim_name': victim_name,
+            'length_damage': length_damage,
+            'hardness_damage': hardness_damage,
+            'charges_remaining': reflect_charges - 1,
+            'message': message
+        }
+
+    def _apply_damage_with_effects(self, group_id: str, group_data: Dict[str, Any],
+                                   victim_id: str, attacker_id: str,
+                                   length_damage: int, hardness_damage: int = 0,
+                                   excluded_ids: List[str] = None,
+                                   allow_reflect: bool = True,
+                                   allow_transfer: bool = True,
+                                   is_robin_hood: bool = False,
+                                   reflect_depth: int = 0) -> Dict[str, Any]:
+        """
+        统一的伤害处理函数，按优先级处理各种防御效果
+
+        优先级: 反弹 > 护盾 > 祸水东引 > 保险
+
+        Args:
+            group_id: 群组ID
+            group_data: 群组数据
+            victim_id: 受害者ID
+            attacker_id: 攻击者ID（可为空字符串表示无明确攻击者）
+            length_damage: 长度伤害
+            hardness_damage: 硬度伤害
+            excluded_ids: 不能被转嫁到的用户ID列表
+            allow_reflect: 是否允许反弹
+            allow_transfer: 是否允许祸水东引
+            is_robin_hood: 是否来自劫富济贫
+            reflect_depth: 反弹深度（用于生成特殊文案）
+
+        Returns:
+            处理结果字典，包含:
+            - final_victim_id: 最终受害者ID
+            - messages: 效果消息列表
+            - damage_applied: 是否实际造成了伤害
+        """
+        if excluded_ids is None:
+            excluded_ids = []
+
+        messages = []
+        final_victim_id = victim_id
+        victim_data = group_data.get(victim_id, {})
+
+        # 反弹乒乓特殊文案
+        PING_PONG_TEXTS = [
+            "🏓 乒！",
+            "🏓 乓！",
+            "🏓 乒乓乒乓！这是牛牛网球赛吗？！",
+            "🏓 三连弹！观众们都看傻了！",
+            "🏓 四连弹！！这特么是永动机吗？！",
+            "🏓 五连弹！！！宇宙级乒乓对决！双方都没牛牛了还在弹！",
+        ]
+
+        # 1. 检查反弹（优先级最高，最多5次防止无限循环）
+        if allow_reflect and attacker_id and attacker_id != victim_id and reflect_depth < 5:
+            reflect_info = self._check_reflect(group_data, victim_id, attacker_id, length_damage, hardness_damage)
+            if reflect_info['reflected']:
+                # 消耗反弹次数
+                group_data[victim_id]['reflect_charges'] = reflect_info['charges_remaining']
+                messages.append(reflect_info['message'])
+
+                # 添加乒乓特殊文案
+                if reflect_depth > 0:
+                    ping_pong_index = min(reflect_depth, len(PING_PONG_TEXTS) - 1)
+                    messages.append(PING_PONG_TEXTS[ping_pong_index])
+
+                # 反弹后，攻击者变成新的受害者，递归处理（允许继续反弹！）
+                new_result = self._apply_damage_with_effects(
+                    group_id, group_data, attacker_id, victim_id,
+                    length_damage, hardness_damage,
+                    excluded_ids=[victim_id] + excluded_ids,
+                    allow_reflect=True,  # 允许继续反弹，形成乒乓！
+                    allow_transfer=True,
+                    is_robin_hood=False,
+                    reflect_depth=reflect_depth + 1
+                )
+                messages.extend(new_result['messages'])
+
+                # 如果是乒乓结束，添加结算文案
+                if reflect_depth == 0 and new_result.get('reflect_count', 0) > 0:
+                    total_reflects = new_result.get('reflect_count', 0) + 1
+                    if total_reflects >= 3:
+                        messages.append(f"🎾 史诗级{total_reflects}连弹结束！最终受害者：{new_result.get('final_victim_name', '???')}")
+
+                return {
+                    'final_victim_id': new_result['final_victim_id'],
+                    'final_victim_name': new_result.get('final_victim_name'),
+                    'messages': messages,
+                    'damage_applied': new_result['damage_applied'],
+                    'reflected': True,
+                    'reflect_count': new_result.get('reflect_count', 0) + 1
+                }
+
+        # 2. 检查护盾
+        victim_name = victim_data.get('nickname', victim_id)
+        shield_charges = victim_data.get('shield_charges', 0)
+        if shield_charges > 0:
+            group_data[victim_id]['shield_charges'] = shield_charges - 1
+            messages.append(f"🛡️ {victim_name} 的护盾抵挡了攻击！（剩余{shield_charges - 1}层）")
+            return {
+                'final_victim_id': victim_id,
+                'final_victim_name': victim_name,
+                'messages': messages,
+                'damage_applied': False,
+                'blocked_by_shield': True,
+                'reflect_count': 0
+            }
+
+        # 3. 检查祸水东引
+        if allow_transfer:
+            transfer_info = self._check_risk_transfer(
+                group_data, victim_id, length_damage, hardness_damage,
+                [attacker_id] + excluded_ids if attacker_id else excluded_ids,
+                is_robin_hood
+            )
+            if transfer_info['transferred']:
+                # 消耗转嫁次数
+                group_data[victim_id]['risk_transfer_charges'] = transfer_info['charges_remaining']
+                messages.append(transfer_info['message'])
+
+                # 对新受害者造成伤害（不能再转嫁，但可以触发其他效果）
+                new_victim_id = transfer_info['new_victim_id']
+                new_result = self._apply_damage_with_effects(
+                    group_id, group_data, new_victim_id, attacker_id,
+                    length_damage, hardness_damage,
+                    excluded_ids=[victim_id] + excluded_ids,
+                    allow_reflect=True,
+                    allow_transfer=False,  # 转嫁后不能再转嫁
+                    is_robin_hood=False,
+                    reflect_depth=reflect_depth
+                )
+                messages.extend(new_result['messages'])
+                return {
+                    'final_victim_id': new_result['final_victim_id'],
+                    'final_victim_name': new_result.get('final_victim_name'),
+                    'messages': messages,
+                    'damage_applied': new_result['damage_applied'],
+                    'transferred': True,
+                    'reflect_count': new_result.get('reflect_count', 0)
+                }
+
+        # 4. 实际造成伤害
+        if length_damage > 0:
+            group_data[victim_id]['length'] = group_data[victim_id].get('length', 0) - length_damage
+        if hardness_damage > 0:
+            group_data[victim_id]['hardness'] = max(1, group_data[victim_id].get('hardness', 1) - hardness_damage)
+
+        # 5. 检查保险理赔
+        insurance_info = self._check_victim_insurance(group_id, group_data, victim_id, length_damage, hardness_damage)
+        if insurance_info['triggered']:
+            messages.append(insurance_info['message'])
+
+        return {
+            'final_victim_id': victim_id,
+            'final_victim_name': victim_name,
+            'messages': messages,
+            'damage_applied': True,
+            'reflect_count': 0
+        }
+
     async def handle_buy(self, event: AstrMessageEvent):
         """处理购买命令，支持批量购买"""
         msg_parts = event.message_str.split()
@@ -443,7 +651,7 @@ class NiuniuShop:
                 effect = self.main.effects.effects.get(selected_item['name'])
 
                 # 复杂道具列表（有特殊逻辑或动态效果，不支持批量购买）
-                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞', '巴黎牛家', '赌徒硬币', '绝对值！', '牛牛寄生', '驱牛药', '牛牛均富/负卡']
+                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞', '巴黎牛家', '赌徒硬币', '绝对值！', '牛牛寄生', '驱牛药', '牛牛均富/负卡', '牛牛反弹']
                 is_simple_item = selected_item['name'] not in complex_items
 
                 # 简单道具支持批量购买
@@ -1044,6 +1252,11 @@ class NiuniuShop:
                         add_charges = ctx.extra['add_risk_transfer_charges']
                         user_data['risk_transfer_charges'] = user_data.get('risk_transfer_charges', 0) + add_charges
 
+                    # 处理牛牛反弹次数增加
+                    if ctx.extra.get('add_reflect_charges'):
+                        add_charges = ctx.extra['add_reflect_charges']
+                        user_data['reflect_charges'] = user_data.get('reflect_charges', 0) + add_charges
+
                     # 处理上保险次数增加
                     if ctx.extra.get('add_insurance_charges'):
                         add_charges = ctx.extra['add_insurance_charges']
@@ -1233,6 +1446,11 @@ class NiuniuShop:
         if risk_transfer_charges > 0:
             result_list.append(f"🔄 祸水东引：{risk_transfer_charges}次")
 
+        # 显示反弹次数
+        reflect_charges = user_data.get('reflect_charges', 0)
+        if reflect_charges > 0:
+            result_list.append(f"⚡ 牛牛反弹：{reflect_charges}次")
+
         # 显示保险次数
         insurance_charges = user_data.get('insurance_charges', 0)
         if insurance_charges > 0:
@@ -1244,7 +1462,7 @@ class NiuniuShop:
             beneficiary_name = parasite.get('beneficiary_name', '某人')
             result_list.append(f"🦠【寄】寄生牛牛来自：{beneficiary_name}（使用驱牛药可清除）")
 
-        if not items and shield_charges == 0 and risk_transfer_charges == 0 and insurance_charges == 0 and not parasite:
+        if not items and shield_charges == 0 and risk_transfer_charges == 0 and reflect_charges == 0 and insurance_charges == 0 and not parasite:
             result_list.append("🛍️ 你的背包里还没有道具哦~")
 
         # 显示金币总额

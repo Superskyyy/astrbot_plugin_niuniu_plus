@@ -2533,6 +2533,52 @@ class HuoshuiDongyinEffect(ItemEffect):
 
 
 # =============================================================================
+# 牛牛反弹 Effect
+# =============================================================================
+
+class FantanEffect(ItemEffect):
+    """牛牛反弹 - Reflect: reflect damage back to attacker"""
+    name = "牛牛反弹"
+    triggers = [EffectTrigger.ON_PURCHASE]
+    consume_on_use = False  # Active item, no inventory
+
+    # 股市配置
+    stock_config = {
+        "volatility": (0.02, 0.06),
+        "templates": {
+            "up": [
+                "🔄 反弹护盾激活！股市被反弹的气势感染 {change}",
+                "🛡️ {nickname} 开启反弹模式，股市跟着弹了 {change}",
+            ],
+            "down": [
+                "🔄 反弹护盾就位，但股市反向波动 {change}",
+                "🛡️ {nickname} 准备反弹，股市却先跌为敬 {change}",
+            ]
+        }
+    }
+
+    def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        from niuniu_config import FantanConfig
+
+        # 增加反弹次数
+        current_charges = ctx.user_data.get('reflect_charges', 0)
+        new_charges = current_charges + 1
+
+        ctx.extra['add_reflect_charges'] = 1
+
+        ctx.messages.extend([
+            "🔄 ══ 牛牛反弹 ══ 🔄",
+            f"✨ {ctx.nickname} 获得了反弹能力！",
+            f"🎯 下次受到>={FantanConfig.DAMAGE_THRESHOLD}cm长度伤害时，反弹给攻击者！",
+            "⚠️ 无法反弹夺牛魔的伤害",
+            f"📊 当前反弹次数：{new_charges}",
+            "═══════════════════"
+        ])
+
+        return ctx
+
+
+# =============================================================================
 # 上保险 Effect
 # =============================================================================
 
@@ -3110,6 +3156,7 @@ def create_effect_manager() -> EffectManager:
     manager.register(YueyaTianchongEffect())
     manager.register(DazibaoEffect())
     manager.register(HuoshuiDongyinEffect())
+    manager.register(FantanEffect())
     manager.register(ShangbaoxianEffect())
     manager.register(NiuniuDunpaiEffect())
     manager.register(QiongniuYishengEffect())
