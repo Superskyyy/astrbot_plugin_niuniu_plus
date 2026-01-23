@@ -6,6 +6,13 @@ import time
 import json
 import sys
 from astrbot.api.all import *
+
+# 热重载支持：导入前先清理模块缓存
+_plugin_modules = ['niuniu_config', 'niuniu_shop', 'niuniu_games', 'niuniu_effects', 'niuniu_stock']
+for _mod in _plugin_modules:
+    if _mod in sys.modules:
+        del sys.modules[_mod]
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from niuniu_shop import NiuniuShop
 from niuniu_games import NiuniuGames
@@ -56,8 +63,6 @@ class NiuniuPlugin(Star):
         for module_name in modules_to_remove:
             if module_name in sys.modules:
                 del sys.modules[module_name]
-                self.context.logger.debug(f"清理模块缓存: {module_name}")
-        self.context.logger.info("牛牛插件已卸载，模块缓存已清理")
 
     # region 数据文件操作
     def _create_niuniu_lengths_file(self):
