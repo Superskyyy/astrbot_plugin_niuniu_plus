@@ -523,13 +523,50 @@ class NiuniuStock:
             f"📈 成交价 {price:.2f}/股"
         ), shares
 
+    def _calculate_tax(self, profit: float, avg_coins: float) -> Tuple[float, float, str]:
+        """
+        计算阶梯累进税
+        返回: (税额, 有效税率, 税率档位描述)
+        """
+        from niuniu_config import StockTaxConfig
+
+        if profit <= 0 or avg_coins <= 0:
+            return 0, 0, ""
+
+        total_tax = 0
+        prev_threshold = 0
+        bracket_details = []
+
+        for multiplier, rate in StockTaxConfig.TAX_BRACKETS:
+            threshold = avg_coins * multiplier
+            if profit <= prev_threshold:
+                break
+
+            # 本档位的应税金额
+            taxable_in_bracket = min(profit, threshold) - prev_threshold
+            if taxable_in_bracket > 0:
+                tax_in_bracket = taxable_in_bracket * rate
+                total_tax += tax_in_bracket
+                if rate > 0:
+                    bracket_details.append(f"{int(rate*100)}%档:{tax_in_bracket:.0f}")
+
+            prev_threshold = threshold
+
+        effective_rate = total_tax / profit if profit > 0 else 0
+        bracket_str = " + ".join(bracket_details) if bracket_details else "免税"
+
+        return total_tax, effective_rate, bracket_str
+
     def sell(self, group_id: str, user_id: str,
-             shares: float = None) -> Tuple[bool, str, float]:
+             shares: float = None, avg_coins: float = 0) -> Tuple[bool, str, float]:
         """
         卖出股票
         shares=None 表示全部卖出
-        返回: (成功, 消息, 获得金币)
+        avg_coins: 群内金币平均值，用于计算收益税
+        返回: (成功, 消息, 获得金币-税后)
         """
+        from niuniu_config import StockTaxConfig
+
         data = self._get_group_data(group_id)
         user_id_str = str(user_id)
 
@@ -545,7 +582,7 @@ class NiuniuStock:
             return False, "❌ 卖出数量必须大于0", 0
 
         price = data.get("price", STOCK_CONFIG["base_price"])
-        coins = shares * price
+        coins = round(shares * price, 2)  # 避免浮点精度问题
 
         # 计算这部分股票的成本（按比例）
         stats = self._get_user_stats(group_id, user_id)
@@ -553,12 +590,22 @@ class NiuniuStock:
         cost_of_sold = stats["cost_basis"] * sell_ratio
         profit_or_loss = coins - cost_of_sold
 
-        # 更新统计
-        stats["total_withdrawn"] += coins
+        # 计算收益税（仅对正收益征税）
+        tax_amount = 0
+        tax_rate = 0
+        tax_bracket_str = ""
+        if profit_or_loss > 0 and avg_coins > 0:
+            tax_amount, tax_rate, tax_bracket_str = self._calculate_tax(profit_or_loss, avg_coins)
+
+        # 税后实际获得金币
+        coins_after_tax = coins - tax_amount
+
+        # 更新统计（记录税前数据）
+        stats["total_withdrawn"] += coins_after_tax
         stats["cost_basis"] -= cost_of_sold
         stats["sell_count"] += 1
         if profit_or_loss >= 0:
-            stats["total_profit"] += profit_or_loss
+            stats["total_profit"] += (profit_or_loss - tax_amount)
         else:
             stats["total_loss"] += abs(profit_or_loss)
 
@@ -571,20 +618,45 @@ class NiuniuStock:
 
         self._save_data()
 
+        # 构建消息
+        lines = [
+            f"✅ 卖出成功！",
+            f"{STOCK_CONFIG['emoji']} {STOCK_CONFIG['name']}",
+            f"📦 -{shares:.4f}股",
+            f"📉 成交价 {price:.2f}/股",
+            f"💵 卖出总额 {coins:.0f}金币",
+        ]
+
         # 盈亏显示
         if profit_or_loss >= 0:
-            pl_str = f"📈 本次盈利 +{profit_or_loss:.0f}金币"
+            lines.append(f"📈 本次盈利 +{profit_or_loss:.0f}金币")
         else:
-            pl_str = f"📉 本次亏损 {profit_or_loss:.0f}金币"
+            lines.append(f"📉 本次亏损 {profit_or_loss:.0f}金币")
 
-        return True, (
-            f"✅ 卖出成功！\n"
-            f"{STOCK_CONFIG['emoji']} {STOCK_CONFIG['name']}\n"
-            f"📦 -{shares:.4f}股\n"
-            f"💰 获得 {coins:.0f}金币\n"
-            f"📉 成交价 {price:.2f}/股\n"
-            f"{pl_str}"
-        ), coins
+        # 税收显示
+        if tax_amount > 0:
+            lines.append("")
+            lines.append(random.choice(StockTaxConfig.TAX_TEXTS))
+            lines.append(f"📊 群平均财富: {avg_coins:.0f}金币")
+            lines.append(f"📈 收益倍数: {profit_or_loss/avg_coins:.1f}倍")
+            lines.append(f"💸 收益税: -{tax_amount:.0f}金币 ({tax_bracket_str})")
+            lines.append(f"📋 有效税率: {tax_rate*100:.1f}%")
+
+            # 根据税率选择文案
+            if tax_rate >= 0.50:
+                lines.append(random.choice(StockTaxConfig.EXTREME_TAX_TEXTS))
+            elif tax_rate >= 0.30:
+                lines.append(random.choice(StockTaxConfig.HIGH_TAX_TEXTS))
+
+            lines.append(f"💰 税后到手: {coins_after_tax:.0f}金币")
+        elif profit_or_loss > 0 and avg_coins > 0:
+            lines.append("")
+            lines.append(random.choice(StockTaxConfig.NO_TAX_TEXTS))
+            lines.append(f"💰 实际获得: {coins_after_tax:.0f}金币")
+        else:
+            lines.append(f"💰 实际获得: {coins_after_tax:.0f}金币")
+
+        return True, "\n".join(lines), coins_after_tax
 
     # ==================== 显示格式化 ====================
 

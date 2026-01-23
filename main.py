@@ -30,7 +30,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.12.0")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.13.0")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -909,11 +909,18 @@ class NiuniuPlugin(Star):
                         yield event.plain_result("❌ 请输入有效的数量或「全部」")
                         return
 
-            success, message, coins = stock.sell(group_id, user_id, shares)
+            # 计算群内金币平均值（用于收益税计算）
+            niuniu_data = self._load_data()
+            group_niuniu_data = niuniu_data.get(group_id, {})
+            all_coins = [data.get('coins', 0) for uid, data in group_niuniu_data.items()
+                        if isinstance(data, dict) and 'coins' in data and data.get('coins', 0) > 0]
+            avg_coins = sum(all_coins) / len(all_coins) if all_coins else 0
+
+            success, message, coins = stock.sell(group_id, user_id, shares, avg_coins)
             if success:
-                # 增加金币
+                # 增加金币（已是税后金额）
                 user_coins = user_data.get('coins', 0)
-                user_data['coins'] = user_coins + coins
+                user_data['coins'] = round(user_coins + coins)  # 取整避免精度问题
                 self.update_user_data(group_id, user_id, {'coins': user_data['coins']})
             yield event.plain_result(message)
 
