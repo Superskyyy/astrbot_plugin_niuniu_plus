@@ -2746,10 +2746,13 @@ class JueduizhiEffect(ItemEffect):
         # 检查金币是否足够（由商店传入）
         user_coins = ctx.extra.get('user_coins', 0)
         if user_coins < dynamic_price:
+            shortfall = dynamic_price - user_coins
             ctx.messages.extend([
                 "❌ ══ 绝对值！ ══ ❌",
-                f"💰 需要 {dynamic_price} 金币（= |{current_length}| × 0.1）",
-                f"📊 你只有 {user_coins} 金币，不够！",
+                "💰 金币不足，无法购买",
+                f"📋 需要: {dynamic_price} 金币",
+                f"📊 你有: {user_coins} 金币",
+                f"⚠️ 还差: {shortfall} 金币",
                 "═══════════════════"
             ])
             ctx.extra['refund'] = True
