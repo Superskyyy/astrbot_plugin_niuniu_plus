@@ -13,7 +13,8 @@ from niuniu_effects import create_effect_manager, EffectTrigger, EffectContext
 from niuniu_config import (
     PLUGIN_DIR, NIUNIU_LENGTHS_FILE, GAME_TEXTS_FILE, LAST_ACTION_FILE,
     DajiaoEvents, DajiaoCombo, DailyBonus, TimePeriod, TIMEZONE,
-    CompareStreak, CompareBet, CompareAudience
+    CompareStreak, CompareBet, CompareAudience,
+    format_length as config_format_length, format_length_change
 )
 import pytz
 from datetime import datetime
@@ -21,7 +22,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "长安某", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.8.3")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.8.5")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -176,15 +177,80 @@ class NiuniuPlugin(Star):
     # region 工具方法
     def format_length(self, length):
         """格式化长度显示"""
-        if length <= -100:
-            return f"{length/100:.2f}m (凹)"
-        elif length < 0:
-            return f"{length}cm (凹)"
-        elif length == 0:
-            return "0cm (无)"
-        elif length >= 100:
-            return f"{length/100:.2f}m"
-        return f"{length}cm"
+        return config_format_length(length)
+
+    def check_insurance_claim(self, group_id: str, user_id: str, nickname: str,
+                               length_loss: int = 0, hardness_loss: int = 0,
+                               group_data: dict = None) -> dict:
+        """
+        通用保险理赔检查方法
+
+        Args:
+            group_id: 群组ID
+            user_id: 用户ID
+            nickname: 用户昵称
+            length_loss: 长度损失（正数）
+            hardness_loss: 硬度损失（正数）
+            group_data: 可选的群组数据字典，如果提供则直接修改它（用于批量操作）
+
+        Returns:
+            {
+                'triggered': bool,      # 是否触发理赔
+                'payout': int,          # 赔付金额
+                'charges_remaining': int,  # 剩余保险次数
+                'message': str          # 理赔消息
+            }
+        """
+        from niuniu_config import ShangbaoxianConfig
+
+        # 获取用户数据
+        if group_data is not None:
+            user_data = group_data.get(user_id, {})
+            if not isinstance(user_data, dict):
+                return {'triggered': False}
+        else:
+            user_data = self.get_user_data(group_id, user_id)
+
+        # 检查保险次数
+        insurance_charges = user_data.get('insurance_charges', 0)
+        if insurance_charges <= 0:
+            return {'triggered': False}
+
+        # 检查是否达到阈值
+        length_triggered = length_loss >= ShangbaoxianConfig.LENGTH_THRESHOLD
+        hardness_triggered = hardness_loss >= ShangbaoxianConfig.HARDNESS_THRESHOLD
+
+        if not length_triggered and not hardness_triggered:
+            return {'triggered': False}
+
+        # 触发保险理赔
+        new_charges = insurance_charges - 1
+
+        # 更新数据
+        if group_data is not None:
+            # 直接修改 group_data（用于批量操作，稍后统一保存）
+            group_data[user_id]['insurance_charges'] = new_charges
+            current_coins = group_data[user_id].get('coins', 0)
+            group_data[user_id]['coins'] = current_coins + ShangbaoxianConfig.PAYOUT
+        else:
+            # 独立操作，立即保存
+            self.update_user_data(group_id, user_id, {'insurance_charges': new_charges})
+            self.games.update_user_coins(group_id, user_id, ShangbaoxianConfig.PAYOUT)
+
+        # 构建消息
+        damage_parts = []
+        if length_loss > 0:
+            damage_parts.append(f"{length_loss}cm")
+        if hardness_loss > 0:
+            damage_parts.append(f"{hardness_loss}硬度")
+        damage_str = "、".join(damage_parts) if damage_parts else "未知"
+
+        return {
+            'triggered': True,
+            'payout': ShangbaoxianConfig.PAYOUT,
+            'charges_remaining': new_charges,
+            'message': f"📋 {nickname} 保险理赔！损失{damage_str}，赔付{ShangbaoxianConfig.PAYOUT}金币（剩余{new_charges}次）"
+        }
 
     def _check_and_trigger_parasite(self, group_id: str, host_id: str, gain: float,
                                      processed_ids: set = None) -> list:
@@ -1933,29 +1999,24 @@ class NiuniuPlugin(Star):
                 result_msg[3] = f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(final_target['length'])}"
 
         # ===== 保险理赔检查 =====
-        from niuniu_config import ShangbaoxianConfig
         final_user = self.get_user_data(group_id, user_id)
         final_target = self.get_user_data(group_id, target_id)
 
         # 检查用户的保险（用户输了的情况）
         user_length_loss = max(0, old_u_len - final_user['length'])
-        if user_length_loss >= ShangbaoxianConfig.LENGTH_THRESHOLD:
-            user_insurance = final_user.get('insurance_charges', 0)
-            if user_insurance > 0:
-                # 消耗保险并赔付
-                self.update_user_data(group_id, user_id, {'insurance_charges': user_insurance - 1})
-                self.games.update_user_coins(group_id, user_id, ShangbaoxianConfig.PAYOUT)
-                result_msg.append(f"📋 {nickname} 保险理赔！损失{user_length_loss}cm，赔付{ShangbaoxianConfig.PAYOUT}金币（剩余{user_insurance - 1}次）")
+        user_insurance = self.check_insurance_claim(
+            group_id, user_id, nickname, length_loss=user_length_loss
+        )
+        if user_insurance['triggered']:
+            result_msg.append(user_insurance['message'])
 
         # 检查目标的保险（目标输了的情况）
         target_length_loss = max(0, old_t_len - final_target['length'])
-        if target_length_loss >= ShangbaoxianConfig.LENGTH_THRESHOLD:
-            target_insurance = final_target.get('insurance_charges', 0)
-            if target_insurance > 0:
-                # 消耗保险并赔付
-                self.update_user_data(group_id, target_id, {'insurance_charges': target_insurance - 1})
-                self.games.update_user_coins(group_id, target_id, ShangbaoxianConfig.PAYOUT)
-                result_msg.append(f"📋 {final_target['nickname']} 保险理赔！损失{target_length_loss}cm，赔付{ShangbaoxianConfig.PAYOUT}金币（剩余{target_insurance - 1}次）")
+        target_insurance = self.check_insurance_claim(
+            group_id, target_id, final_target['nickname'], length_loss=target_length_loss
+        )
+        if target_insurance['triggered']:
+            result_msg.append(target_insurance['message'])
 
         # ===== 寄生牛牛检查 =====
         # 检查用户的寄生牛牛触发（用户赢了的情况）

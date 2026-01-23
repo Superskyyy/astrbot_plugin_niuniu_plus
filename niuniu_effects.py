@@ -5,6 +5,7 @@ import random
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from niuniu_config import format_length, format_length_change
 
 
 class EffectTrigger(str, Enum):
@@ -648,18 +649,18 @@ class DutuyingbiEffect(ItemEffect):
         if current_length > 0:
             gain = current_length * 3
             ctx.length_change = gain
-            ctx.messages.append(f"💰 长度暴涨！{current_length:.1f}cm → {current_length + gain:.1f}cm (+{gain:.1f}cm)")
+            ctx.messages.append(f"💰 长度暴涨！{format_length(current_length)} → {format_length(current_length + gain)} ({format_length_change(gain)})")
         elif current_length < 0:
             # 负数变成正的4倍绝对值
             gain = abs(current_length) * 4
             ctx.length_change = gain
-            ctx.messages.append(f"💰 逆天改命！{current_length:.1f}cm → {current_length + gain:.1f}cm (+{gain:.1f}cm)")
+            ctx.messages.append(f"💰 逆天改命！{format_length(current_length)} → {format_length(current_length + gain)} ({format_length_change(gain)})")
             ctx.messages.append("🎊 负数牛牛的春天来了！！！")
             return
         else:
             gain = 100
             ctx.length_change = gain
-            ctx.messages.append(f"💰 从零开始的暴富！0cm → {gain}cm")
+            ctx.messages.append(f"💰 从零开始的暴富！0cm → {format_length(gain)}")
 
         ctx.messages.append("🎊 运气爆棚！今天一定要买彩票！")
 
@@ -675,18 +676,18 @@ class DutuyingbiEffect(ItemEffect):
             # 正数变成负2倍
             loss = current_length * 3
             ctx.length_change = -loss
-            ctx.messages.append(f"😱 长度暴跌！{current_length:.1f}cm → {current_length - loss:.1f}cm (-{loss:.1f}cm)")
+            ctx.messages.append(f"😱 长度暴跌！{format_length(current_length)} → {format_length(current_length - loss)} ({format_length_change(-loss)})")
         elif current_length < 0:
             # 负数变得更负
             loss = abs(current_length) * 3
             ctx.length_change = -loss
-            ctx.messages.append(f"😱 凹到地心！{current_length:.1f}cm → {current_length - loss:.1f}cm (-{loss:.1f}cm)")
+            ctx.messages.append(f"😱 凹到地心！{format_length(current_length)} → {format_length(current_length - loss)} ({format_length_change(-loss)})")
             ctx.messages.append("🕳️ 负数牛牛的噩梦...")
             return
         else:
             loss = 100
             ctx.length_change = -loss
-            ctx.messages.append(f"😱 从零坠入深渊！0cm → -{loss}cm")
+            ctx.messages.append(f"😱 从零坠入深渊！0cm → {format_length(-loss)}")
 
         ctx.messages.append("🥀 今天不宜出门...")
 
@@ -695,13 +696,13 @@ class DutuyingbiEffect(ItemEffect):
         if current_length > 0:
             text = random.choice(self.DOUBLE_TEXTS)
             ctx.length_change = current_length
-            ctx.messages.append(f"{text} +{current_length:.1f}cm")
+            ctx.messages.append(f"{text} {format_length_change(current_length)}")
         elif current_length < 0:
             text = random.choice(self.NEGATIVE_DOUBLE_TEXTS)
             gain = abs(current_length) // 2
             ctx.length_change = gain
-            ctx.messages.append(f"{text} +{gain:.1f}cm")
-            ctx.messages.append(f"🍀 {current_length:.1f}cm → {current_length + gain:.1f}cm 往0迈进！")
+            ctx.messages.append(f"{text} {format_length_change(gain)}")
+            ctx.messages.append(f"🍀 {format_length(current_length)} → {format_length(current_length + gain)} 往0迈进！")
         else:
             change = random.randint(5, 15)
             ctx.length_change = change
@@ -713,13 +714,13 @@ class DutuyingbiEffect(ItemEffect):
             text = random.choice(self.HALVE_TEXTS)
             loss = current_length / 2
             ctx.length_change = -loss
-            ctx.messages.append(f"{text} -{loss:.1f}cm")
+            ctx.messages.append(f"{text} {format_length_change(-loss)}")
         elif current_length < 0:
             text = random.choice(self.NEGATIVE_HALVE_TEXTS)
             loss = abs(current_length)
             ctx.length_change = -loss
-            ctx.messages.append(f"{text} -{loss:.1f}cm")
-            ctx.messages.append(f"💀 {current_length:.1f}cm → {current_length - loss:.1f}cm 更深了...")
+            ctx.messages.append(f"{text} {format_length_change(-loss)}")
+            ctx.messages.append(f"💀 {format_length(current_length)} → {format_length(current_length - loss)} 更深了...")
         else:
             change = random.randint(-15, -5)
             ctx.length_change = change
@@ -2107,10 +2108,10 @@ class YueyaTianchongEffect(ItemEffect):
             if is_negative:
                 messages.append(random.choice(negative_flavor_texts))
             messages.extend([
-                f"💥 伤害：{damage}cm（{percent_display}）",
+                f"💥 伤害：{format_length(damage)}（{percent_display}）",
                 "",
                 f"🛡️ {target_name} 的护盾抵挡了攻击！（剩余{target_shield_charges - 1}次）",
-                f"📉 {ctx.nickname}: {user_length}→{user_length - damage}cm",
+                f"📉 {ctx.nickname}: {format_length(user_length)}→{format_length(user_length - damage)}",
                 "",
             ])
             if is_negative:
@@ -2127,10 +2128,10 @@ class YueyaTianchongEffect(ItemEffect):
             if is_negative:
                 messages.append(random.choice(negative_flavor_texts))
             messages.extend([
-                f"💥 伤害：{damage}cm（{percent_display}）",
+                f"💥 伤害：{format_length(damage)}（{percent_display}）",
                 "",
-                f"📉 {target_name}: {target_length}→{target_length - damage}cm",
-                f"📉 {ctx.nickname}: {user_length}→{user_length - damage}cm",
+                f"📉 {target_name}: {format_length(target_length)}→{format_length(target_length - damage)}",
+                f"📉 {ctx.nickname}: {format_length(user_length)}→{format_length(user_length - damage)}",
                 "",
             ])
             if is_negative:
@@ -2679,6 +2680,105 @@ class QuniuyaoEffect(ItemEffect):
 
 
 # =============================================================================
+# 牛牛均富卡 Effect
+# =============================================================================
+
+class JunfukaEffect(ItemEffect):
+    """牛牛均富卡 - Communism Card: all players' lengths become the average"""
+    name = "牛牛均富卡"
+    triggers = [EffectTrigger.ON_PURCHASE]
+    consume_on_use = False  # Active item, no inventory
+
+    def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        from niuniu_config import JunfukaConfig
+
+        # 需要从 extra 获取群组数据
+        group_data = ctx.extra.get('group_data', {})
+        if not group_data:
+            ctx.messages.append("❌ 无法获取群组数据")
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        # 过滤有效用户（有长度数据的）
+        valid_users = [(uid, data) for uid, data in group_data.items()
+                       if isinstance(data, dict) and 'length' in data]
+
+        if len(valid_users) < JunfukaConfig.MIN_PLAYERS:
+            ctx.messages.append(f"❌ 群里牛牛不足{JunfukaConfig.MIN_PLAYERS}人，无法发动均富！")
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        # 计算平均长度
+        total_length = sum(data.get('length', 0) for _, data in valid_users)
+        avg_length = int(total_length / len(valid_users))
+
+        # 记录变化
+        changes = []
+        for uid, data in valid_users:
+            old_length = data.get('length', 0)
+            diff = avg_length - old_length
+            nickname = data.get('nickname', uid)
+            changes.append({
+                'uid': uid,
+                'nickname': nickname,
+                'old': old_length,
+                'new': avg_length,
+                'diff': diff
+            })
+
+        # 按变化量排序（亏最多的在前，赚最多的在后）
+        changes.sort(key=lambda x: x['diff'])
+
+        # 存储变更信息，由 shop 统一处理
+        ctx.extra['junfuka'] = {
+            'avg_length': avg_length,
+            'changes': changes
+        }
+
+        # 构建消息
+        ctx.messages.extend(JunfukaConfig.OPENING_TEXTS)
+        ctx.messages.append(f"📊 群平均长度：{avg_length}cm")
+        ctx.messages.append(f"👥 参与人数：{len(valid_users)}人")
+        ctx.messages.append("")
+
+        # 显示变化（最多显示10人，优先显示变化最大的）
+        # 先显示亏的（前5名），再显示赚的（后5名）
+        losers = [c for c in changes if c['diff'] < 0][:5]
+        winners = [c for c in changes if c['diff'] > 0][-5:]
+        neutrals = [c for c in changes if c['diff'] == 0][:2]
+
+        if losers:
+            ctx.messages.append("📉 大佬们哭晕了：")
+            for c in losers:
+                text = random.choice(JunfukaConfig.LOSER_TEXTS).format(
+                    name=c['nickname'], old=c['old'], new=c['new'], diff=abs(c['diff'])
+                )
+                ctx.messages.append(f"  {text}")
+
+        if winners:
+            ctx.messages.append("📈 小弟们狂喜：")
+            for c in reversed(winners):  # 赚最多的先显示
+                text = random.choice(JunfukaConfig.WINNER_TEXTS).format(
+                    name=c['nickname'], old=c['old'], new=c['new'], diff=c['diff']
+                )
+                ctx.messages.append(f"  {text}")
+
+        if neutrals and not losers and not winners:
+            for c in neutrals:
+                text = random.choice(JunfukaConfig.NEUTRAL_TEXTS).format(
+                    name=c['nickname'], old=c['old'], new=c['new']
+                )
+                ctx.messages.append(f"  {text}")
+
+        ctx.messages.append("")
+        ctx.messages.extend(JunfukaConfig.ENDING_TEXTS)
+
+        return ctx
+
+
+# =============================================================================
 # Effect Manager Factory
 # =============================================================================
 
@@ -2708,5 +2808,6 @@ def create_effect_manager() -> EffectManager:
     manager.register(JueduizhiEffect())
     manager.register(NiuniuJishengEffect())
     manager.register(QuniuyaoEffect())
+    manager.register(JunfukaEffect())
 
     return manager

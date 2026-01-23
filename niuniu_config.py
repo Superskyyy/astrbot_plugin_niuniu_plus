@@ -514,6 +514,13 @@ DEFAULT_SHOP_ITEMS = [
         'type': 'active',
         'desc': "清除寄生在自己身上的寄生牛牛，重获自由！",
         'price': 75
+    },
+    {
+        'id': 20,
+        'name': "牛牛均富卡",
+        'type': 'active',
+        'desc': "发动共产主义！全群所有牛牛长度取平均值！大佬哭晕，负数狂喜！",
+        'price': 888
     }
 ]
 
@@ -730,6 +737,47 @@ class NiuniuJishengConfig:
     ]
 
 # =============================================================================
+# 牛牛均富卡 Configuration
+# =============================================================================
+class JunfukaConfig:
+    MIN_PLAYERS = 3                    # 最少需要3人才能触发
+
+    # 开场文案
+    OPENING_TEXTS = [
+        "☭ ══ 牛牛均富卡 ══ ☭",
+        "🚩 「不患寡而患不均！」",
+        "📢 全群牛牛长度即将重新分配！",
+    ]
+
+    # 大佬受损文案
+    LOSER_TEXTS = [
+        "😭 {name} 从 {old}→{new}，血亏 {diff}！大佬哭晕在厕所！",
+        "💔 {name} 痛失 {diff}！从 {old} 跌落到 {new}！",
+        "🔻 {name} 被均富！{old}→{new}，贡献了 {diff}！",
+        "😱 {name} 哭了！{diff} 的长度被充公！{old}→{new}",
+    ]
+
+    # 负数/小号受益文案
+    WINNER_TEXTS = [
+        "🎉 {name} 从 {old}→{new}，白嫖 {diff}！负数狂喜！",
+        "🚀 {name} 逆袭！从 {old} 飞升到 {new}！+{diff}！",
+        "🔺 {name} 躺赢！{old}→{new}，喜提 {diff}！",
+        "🥳 {name} 笑了！均富后喜获 {diff}！{old}→{new}",
+    ]
+
+    # 不变文案
+    NEUTRAL_TEXTS = [
+        "😐 {name} 纹丝不动...刚好是平均值？",
+        "🤷 {name} 不亏不赚，{old}→{new}",
+    ]
+
+    # 结尾文案
+    ENDING_TEXTS = [
+        "═══════════════════",
+        "☭ 均富完成！今天，牛牛平等！",
+    ]
+
+# =============================================================================
 # Length Display Thresholds
 # =============================================================================
 LENGTH_METER_THRESHOLD = 100       # Display in meters when >= 100cm
@@ -744,3 +792,81 @@ class EvaluationThresholds:
     VERY_LONG = 100
     SUPER_LONG = 200
     # >= SUPER_LONG = ultra_long
+
+
+# =============================================================================
+# Length Formatting Utility
+# =============================================================================
+def format_length(length: float, show_sign: bool = False) -> str:
+    """
+    格式化长度显示，自动转换单位
+
+    Args:
+        length: 长度值（cm）
+        show_sign: 是否显示正号（用于变化量）
+
+    Returns:
+        格式化后的字符串，如 "15cm", "1.50m", "2.30km", "-500m (凹)"
+    """
+    abs_length = abs(length)
+    is_negative = length < 0
+
+    # 确定单位和数值
+    if abs_length >= 100000:  # >= 1km
+        value = abs_length / 100000
+        unit = "km"
+    elif abs_length >= 100:  # >= 1m
+        value = abs_length / 100
+        unit = "m"
+    else:
+        value = abs_length
+        unit = "cm"
+
+    # 格式化数值
+    if unit == "cm":
+        # cm 保持整数或一位小数
+        if value == int(value):
+            num_str = f"{int(value)}"
+        else:
+            num_str = f"{value:.1f}"
+    else:
+        # m/km 保持两位小数
+        num_str = f"{value:.2f}"
+
+    # 构建结果
+    if is_negative:
+        result = f"-{num_str}{unit} (凹)"
+    elif length == 0:
+        result = "0cm (无)"
+    else:
+        if show_sign:
+            result = f"+{num_str}{unit}"
+        else:
+            result = f"{num_str}{unit}"
+
+    return result
+
+
+def format_length_change(change: float) -> str:
+    """
+    格式化长度变化量（总是显示正负号）
+
+    Args:
+        change: 变化量（cm）
+
+    Returns:
+        格式化后的字符串，如 "+15cm", "-1.50m"
+    """
+    if change >= 0:
+        return format_length(change, show_sign=True)
+    else:
+        # 负数变化，format_length会加(凹)，这里我们不需要
+        abs_change = abs(change)
+        if abs_change >= 100000:
+            return f"-{abs_change/100000:.2f}km"
+        elif abs_change >= 100:
+            return f"-{abs_change/100:.2f}m"
+        else:
+            if abs_change == int(abs_change):
+                return f"-{int(abs_change)}cm"
+            return f"-{abs_change:.1f}cm"

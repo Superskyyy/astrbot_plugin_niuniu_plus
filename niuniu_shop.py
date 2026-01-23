@@ -210,7 +210,7 @@ class NiuniuShop:
     def _check_victim_insurance(self, group_id: str, group_data: Dict[str, Any],
                                 victim_id: str, length_damage: int, hardness_damage: int = 0) -> Dict[str, Any]:
         """
-        检查被动受害者的保险理赔
+        检查被动受害者的保险理赔（委托给 main.py 的通用方法）
 
         Args:
             group_id: 群组ID
@@ -220,55 +220,20 @@ class NiuniuShop:
             hardness_damage: 硬度伤害
 
         Returns:
-            保险信息字典，包含:
-            - triggered: 是否触发保险
-            - payout: 赔付金额
-            - charges_remaining: 剩余保险次数
-            - message: 保险消息
+            保险信息字典
         """
-        from niuniu_config import ShangbaoxianConfig
-
         victim_data = group_data.get(victim_id, {})
         if not isinstance(victim_data, dict):
             return {'triggered': False}
 
-        # 检查保险次数
-        insurance_charges = victim_data.get('insurance_charges', 0)
-        if insurance_charges <= 0:
-            return {'triggered': False}
-
-        # 检查是否达到阈值（长度>=50 或 硬度>=10）
-        length_triggered = length_damage >= ShangbaoxianConfig.LENGTH_THRESHOLD
-        hardness_triggered = hardness_damage >= ShangbaoxianConfig.HARDNESS_THRESHOLD
-
-        if not length_triggered and not hardness_triggered:
-            return {'triggered': False}
-
-        # 触发保险理赔
         victim_name = victim_data.get('nickname', victim_id)
-        new_charges = insurance_charges - 1
 
-        # 消耗保险次数
-        group_data[victim_id]['insurance_charges'] = new_charges
-
-        # 赔付金币（直接修改 group_data，避免被后续 _save_niuniu_data 覆盖）
-        current_coins = group_data[victim_id].get('coins', 0)
-        group_data[victim_id]['coins'] = current_coins + ShangbaoxianConfig.PAYOUT
-
-        # 构建消息
-        damage_parts = []
-        if length_damage > 0:
-            damage_parts.append(f"{length_damage}cm长度")
-        if hardness_damage > 0:
-            damage_parts.append(f"{hardness_damage}硬度")
-        damage_str = "、".join(damage_parts)
-
-        return {
-            'triggered': True,
-            'payout': ShangbaoxianConfig.PAYOUT,
-            'charges_remaining': new_charges,
-            'message': f"📋 {victim_name} 触发保险！损失{damage_str}，赔付{ShangbaoxianConfig.PAYOUT}金币（剩余{new_charges}次）"
-        }
+        # 调用 main.py 的通用保险理赔方法
+        return self.main.check_insurance_claim(
+            group_id, victim_id, victim_name,
+            length_loss=length_damage, hardness_loss=hardness_damage,
+            group_data=group_data
+        )
 
     def _check_risk_transfer(self, group_data: Dict[str, Any], victim_id: str,
                              length_damage: int, hardness_damage: int,
@@ -448,7 +413,7 @@ class NiuniuShop:
                 effect = self.main.effects.effects.get(selected_item['name'])
 
                 # 复杂道具列表（有特殊逻辑或动态效果，不支持批量购买）
-                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞', '巴黎牛家', '赌徒硬币', '绝对值！', '牛牛寄生', '驱牛药']
+                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞', '巴黎牛家', '赌徒硬币', '绝对值！', '牛牛寄生', '驱牛药', '牛牛均富卡']
                 is_simple_item = selected_item['name'] not in complex_items
 
                 # 简单道具支持批量购买
@@ -544,7 +509,7 @@ class NiuniuShop:
                     extra_data['target_id'] = target_id
 
                 # 需要群组数据的道具
-                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生']:
+                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生', '牛牛均富卡']:
                     niuniu_data = self._load_niuniu_data()
                     extra_data['group_data'] = niuniu_data.get(group_id, {})
 
@@ -1066,6 +1031,25 @@ class NiuniuShop:
                     if ctx.extra.get('cure_parasite'):
                         if 'parasite' in user_data:
                             del user_data['parasite']
+
+                    # 处理牛牛均富卡：全群长度取平均值
+                    if ctx.extra.get('junfuka'):
+                        junfuka = ctx.extra['junfuka']
+                        niuniu_data = self._load_niuniu_data()
+                        group_data = niuniu_data.setdefault(group_id, {})
+
+                        avg_length = junfuka['avg_length']
+                        for change in junfuka['changes']:
+                            uid = change['uid']
+                            if uid in group_data:
+                                group_data[uid]['length'] = avg_length
+
+                        self._save_niuniu_data(niuniu_data)
+
+                        # 更新当前用户数据（如果在变更列表中）
+                        user_change = next((c for c in junfuka['changes'] if c['uid'] == user_id), None)
+                        if user_change:
+                            user_data['length'] = avg_length
 
                     # Apply changes to current user
                     old_length = user_data.get('length', 0)
