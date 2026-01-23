@@ -23,7 +23,9 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 **重要**: 每次修改代码后，必须更新以下内容：
 
-1. **版本号** (`main.py` 第24行的 `@register` 装饰器)
+1. **版本号** (两处必须同步！)
+   - `main.py` 第33行的 `@register` 装饰器
+   - `metadata.yaml` 的 `version` 字段（格式: `vX.X.X`）
    - 格式: `major.minor.patch`
    - 新功能: minor +1
    - Bug修复/小改动: patch +1
