@@ -860,11 +860,6 @@ class NiuniuPlugin(Star):
             yield event.plain_result("❌ 请先注册牛牛！")
             return
 
-        # 负数牛牛禁止使用股市
-        if user_data.get('length', 0) < 0:
-            yield event.plain_result("❌ 负数牛牛禁止进入股市！先把牛牛搞正再来吧~")
-            return
-
         stock = NiuniuStock.get()
 
         # 解析子命令
