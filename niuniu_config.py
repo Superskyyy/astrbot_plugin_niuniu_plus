@@ -758,7 +758,7 @@ class JunfukaConfig:
 
     # 动态定价配置
     BASE_PRICE = 1888                  # 基础价格
-    TOTAL_DIFF_COEFFICIENT = 0.001    # 总差异系数：价格 = 基础价格 + Σ|长度 - 平均长度| × 系数
+    TOTAL_DIFF_COEFFICIENT = 0.0005   # 总差异系数：价格 = 基础价格 + Σ|长度 - 平均长度| × 系数
     MIN_PRICE = 1888                   # 最低价格（分布极小时）
 
     # 开场文案
