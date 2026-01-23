@@ -2739,8 +2739,8 @@ class JueduizhiEffect(ItemEffect):
             ctx.intercept = True
             return ctx
 
-        # 动态价格 = 长度的绝对值
-        dynamic_price = abs(current_length)
+        # 动态价格 = 长度的绝对值 * 0.1
+        dynamic_price = int(abs(current_length) * 0.1)
         ctx.extra['dynamic_price'] = dynamic_price
 
         # 检查金币是否足够（由商店传入）
@@ -2748,7 +2748,7 @@ class JueduizhiEffect(ItemEffect):
         if user_coins < dynamic_price:
             ctx.messages.extend([
                 "❌ ══ 绝对值！ ══ ❌",
-                f"💰 需要 {dynamic_price} 金币（= |{current_length}|）",
+                f"💰 需要 {dynamic_price} 金币（= |{current_length}| × 0.1）",
                 f"📊 你只有 {user_coins} 金币，不够！",
                 "═══════════════════"
             ])

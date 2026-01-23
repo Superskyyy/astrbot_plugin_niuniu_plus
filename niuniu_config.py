@@ -482,7 +482,7 @@ DEFAULT_SHOP_ITEMS = [
         'id': 15,
         'name': "绝对值！",
         'type': 'active',
-        'desc': "仅限负数牛牛！花费=|长度|金币，把负数取绝对值翻身！",
+        'desc': "仅限负数牛牛！花费=|长度|×0.1金币，把负数取绝对值翻身！",
         'price': 0,  # 动态定价，实际价格在效果中计算
         'dynamic_price': True
     },
