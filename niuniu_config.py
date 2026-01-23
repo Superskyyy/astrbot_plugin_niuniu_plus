@@ -220,7 +220,7 @@ class CompareStreak:
 # =============================================================================
 class CompareBet:
     MIN_BET = 10                   # 最小赌注
-    MAX_BET = 500                  # 最大赌注
+    MAX_BET = 10000                # 最大赌注
     WINNER_MULTIPLIER = 1.8        # 赢家获得1.8倍赌注
     LOSER_REFUND = 0               # 输家不退还
 
