@@ -414,7 +414,7 @@ class NiuniuShop:
                 effect = self.main.effects.effects.get(selected_item['name'])
 
                 # 复杂道具列表（有特殊逻辑或动态效果，不支持批量购买）
-                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞', '巴黎牛家', '赌徒硬币', '绝对值！', '牛牛寄生', '驱牛药', '牛牛均富卡']
+                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞', '巴黎牛家', '赌徒硬币', '绝对值！', '牛牛寄生', '驱牛药', '牛牛均富/负卡']
                 is_simple_item = selected_item['name'] not in complex_items
 
                 # 简单道具支持批量购买
@@ -510,7 +510,7 @@ class NiuniuShop:
                     extra_data['target_id'] = target_id
 
                 # 需要群组数据的道具
-                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生', '牛牛均富卡']:
+                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生', '牛牛均富/负卡']:
                     niuniu_data = self._load_niuniu_data()
                     extra_data['group_data'] = niuniu_data.get(group_id, {})
 
@@ -1033,7 +1033,7 @@ class NiuniuShop:
                         if 'parasite' in user_data:
                             del user_data['parasite']
 
-                    # 处理牛牛均富卡：全群长度取平均值
+                    # 处理牛牛均富/负卡：全群长度取平均值
                     if ctx.extra.get('junfuka'):
                         junfuka = ctx.extra['junfuka']
                         niuniu_data = self._load_niuniu_data()

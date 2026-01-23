@@ -2680,12 +2680,12 @@ class QuniuyaoEffect(ItemEffect):
 
 
 # =============================================================================
-# 牛牛均富卡 Effect
+# 牛牛均富/负卡 Effect
 # =============================================================================
 
 class JunfukaEffect(ItemEffect):
-    """牛牛均富卡 - Communism Card: all players' lengths become the average"""
-    name = "牛牛均富卡"
+    """牛牛均富/负卡 - Communism Card: all players' lengths become the average"""
+    name = "牛牛均富/负卡"
     triggers = [EffectTrigger.ON_PURCHASE]
     consume_on_use = False  # Active item, no inventory
 
