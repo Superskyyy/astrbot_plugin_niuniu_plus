@@ -2342,8 +2342,12 @@ class NiuniuPlugin(Star):
 
             # 判定
             p1_wins = random.random() < win_prob
-            gain = random.randint(1, 3)
-            loss = random.randint(1, 2)
+
+            # 按双方长度绝对值计算涨跌幅度（3%-8%获胜，2%-5%失败）
+            avg_abs_len = (abs(p1_len) + abs(p2_len)) / 2
+            base_change = max(5, int(avg_abs_len * random.uniform(0.03, 0.08)))  # 最少5cm
+            gain = base_change
+            loss = max(3, int(avg_abs_len * random.uniform(0.02, 0.05)))  # 最少3cm
 
             if p1_wins:
                 wins[p1_id] += 1
@@ -2351,14 +2355,14 @@ class NiuniuPlugin(Star):
                 length_changes[p2_id] -= loss
                 self.update_user_data(group_id, p1_id, {'length': p1_data['length'] + gain})
                 self.update_user_data(group_id, p2_id, {'length': p2_data['length'] - loss})
-                result_msgs.append(f"⚔️ {p1_name} 🆚 {p2_name} → 🏆 {p1_name} (+{gain}cm)")
+                result_msgs.append(f"⚔️ {p1_name} 🆚 {p2_name} → 🏆 {p1_name} (+{self.format_length(gain)})")
             else:
                 wins[p2_id] += 1
                 length_changes[p2_id] += gain
                 length_changes[p1_id] -= loss
                 self.update_user_data(group_id, p1_id, {'length': p1_data['length'] - loss})
                 self.update_user_data(group_id, p2_id, {'length': p2_data['length'] + gain})
-                result_msgs.append(f"⚔️ {p1_name} 🆚 {p2_name} → 🏆 {p2_name} (+{gain}cm)")
+                result_msgs.append(f"⚔️ {p1_name} 🆚 {p2_name} → 🏆 {p2_name} (+{self.format_length(gain)})")
 
             battle_count += 1
 
