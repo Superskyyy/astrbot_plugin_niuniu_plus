@@ -1033,17 +1033,19 @@ class NiuniuShop:
                         if 'parasite' in user_data:
                             del user_data['parasite']
 
-                    # 处理牛牛均富/负卡：全群长度取平均值
+                    # 处理牛牛均富/负卡：全群长度和硬度取平均值
                     if ctx.extra.get('junfuka'):
                         junfuka = ctx.extra['junfuka']
                         niuniu_data = self._load_niuniu_data()
                         group_data = niuniu_data.setdefault(group_id, {})
 
                         avg_length = junfuka['avg_length']
+                        avg_hardness = junfuka['avg_hardness']
                         for change in junfuka['changes']:
                             uid = change['uid']
                             if uid in group_data:
                                 group_data[uid]['length'] = avg_length
+                                group_data[uid]['hardness'] = avg_hardness
 
                         self._save_niuniu_data(niuniu_data)
 
@@ -1051,6 +1053,7 @@ class NiuniuShop:
                         user_change = next((c for c in junfuka['changes'] if c['uid'] == user_id), None)
                         if user_change:
                             user_data['length'] = avg_length
+                            user_data['hardness'] = avg_hardness
 
                     # Apply changes to current user
                     old_length = user_data.get('length', 0)

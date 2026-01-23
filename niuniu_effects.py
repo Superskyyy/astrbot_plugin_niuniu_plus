@@ -2710,67 +2710,79 @@ class JunfukaEffect(ItemEffect):
             ctx.intercept = True
             return ctx
 
-        # 计算平均长度
+        # 计算平均长度和平均硬度
         total_length = sum(data.get('length', 0) for _, data in valid_users)
+        total_hardness = sum(data.get('hardness', 1) for _, data in valid_users)
         avg_length = int(total_length / len(valid_users))
+        avg_hardness = max(1, int(total_hardness / len(valid_users)))  # 硬度最低为1
 
         # 记录变化
         changes = []
         for uid, data in valid_users:
             old_length = data.get('length', 0)
-            diff = avg_length - old_length
+            old_hardness = data.get('hardness', 1)
+            length_diff = avg_length - old_length
+            hardness_diff = avg_hardness - old_hardness
+            # 综合变化：长度变化 + 硬度变化*10（硬度权重更高）
+            total_diff = length_diff + hardness_diff * 10
             nickname = data.get('nickname', uid)
             changes.append({
                 'uid': uid,
                 'nickname': nickname,
-                'old': old_length,
-                'new': avg_length,
-                'diff': diff
+                'old_length': old_length,
+                'old_hardness': old_hardness,
+                'new_length': avg_length,
+                'new_hardness': avg_hardness,
+                'length_diff': length_diff,
+                'hardness_diff': hardness_diff,
+                'total_diff': total_diff
             })
 
-        # 按变化量排序（亏最多的在前，赚最多的在后）
-        changes.sort(key=lambda x: x['diff'])
+        # 按综合变化量排序（亏最多的在前，赚最多的在后）
+        changes.sort(key=lambda x: x['total_diff'])
 
         # 存储变更信息，由 shop 统一处理
         ctx.extra['junfuka'] = {
             'avg_length': avg_length,
+            'avg_hardness': avg_hardness,
             'changes': changes
         }
 
         # 构建消息
         ctx.messages.extend(JunfukaConfig.OPENING_TEXTS)
-        ctx.messages.append(f"📊 群平均长度：{avg_length}cm")
+        ctx.messages.append(f"📊 群平均长度：{format_length(avg_length)} | 平均硬度：{avg_hardness}")
         ctx.messages.append(f"👥 参与人数：{len(valid_users)}人")
         ctx.messages.append("")
 
         # 显示变化（最多显示10人，优先显示变化最大的）
-        # 先显示亏的（前5名），再显示赚的（后5名）
-        losers = [c for c in changes if c['diff'] < 0][:5]
-        winners = [c for c in changes if c['diff'] > 0][-5:]
-        neutrals = [c for c in changes if c['diff'] == 0][:2]
+        losers = [c for c in changes if c['total_diff'] < 0][:5]
+        winners = [c for c in changes if c['total_diff'] > 0][-5:]
 
         if losers:
             ctx.messages.append("📉 大佬们哭晕了：")
             for c in losers:
-                text = random.choice(JunfukaConfig.LOSER_TEXTS).format(
-                    name=c['nickname'], old=c['old'], new=c['new'], diff=abs(c['diff'])
-                )
-                ctx.messages.append(f"  {text}")
+                length_str = f"{format_length(c['old_length'])}→{format_length(c['new_length'])}"
+                hardness_str = f"{c['old_hardness']}→{c['new_hardness']}硬"
+                diff_parts = []
+                if c['length_diff'] != 0:
+                    diff_parts.append(f"{format_length_change(c['length_diff'])}")
+                if c['hardness_diff'] != 0:
+                    diff_parts.append(f"{c['hardness_diff']:+}硬")
+                diff_str = " ".join(diff_parts) if diff_parts else "无变化"
+                ctx.messages.append(f"  😭 {c['nickname']}: {length_str} {hardness_str} ({diff_str})")
 
         if winners:
             ctx.messages.append("📈 小弟们狂喜：")
-            for c in reversed(winners):  # 赚最多的先显示
-                text = random.choice(JunfukaConfig.WINNER_TEXTS).format(
-                    name=c['nickname'], old=c['old'], new=c['new'], diff=c['diff']
-                )
-                ctx.messages.append(f"  {text}")
-
-        if neutrals and not losers and not winners:
-            for c in neutrals:
-                text = random.choice(JunfukaConfig.NEUTRAL_TEXTS).format(
-                    name=c['nickname'], old=c['old'], new=c['new']
-                )
-                ctx.messages.append(f"  {text}")
+            for c in reversed(winners):
+                length_str = f"{format_length(c['old_length'])}→{format_length(c['new_length'])}"
+                hardness_str = f"{c['old_hardness']}→{c['new_hardness']}硬"
+                diff_parts = []
+                if c['length_diff'] != 0:
+                    diff_parts.append(f"{format_length_change(c['length_diff'])}")
+                if c['hardness_diff'] != 0:
+                    diff_parts.append(f"{c['hardness_diff']:+}硬")
+                diff_str = " ".join(diff_parts) if diff_parts else "无变化"
+                ctx.messages.append(f"  🎉 {c['nickname']}: {length_str} {hardness_str} ({diff_str})")
 
         ctx.messages.append("")
         ctx.messages.extend(JunfukaConfig.ENDING_TEXTS)
