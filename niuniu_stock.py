@@ -468,6 +468,24 @@ class NiuniuStock:
         data = self._get_group_data(group_id)
         return data.get("holdings", {}).get(str(user_id), 0)
 
+    def _get_user_stats(self, group_id: str, user_id: str) -> Dict[str, Any]:
+        """获取用户投资统计"""
+        data = self._get_group_data(group_id)
+        if "user_stats" not in data:
+            data["user_stats"] = {}
+        user_id_str = str(user_id)
+        if user_id_str not in data["user_stats"]:
+            data["user_stats"][user_id_str] = {
+                "total_invested": 0,      # 累计投入金币
+                "total_withdrawn": 0,     # 累计取出金币
+                "cost_basis": 0,          # 当前持仓成本
+                "total_profit": 0,        # 历史总盈利
+                "total_loss": 0,          # 历史总亏损
+                "buy_count": 0,           # 购买次数
+                "sell_count": 0,          # 卖出次数
+            }
+        return data["user_stats"][user_id_str]
+
     def buy(self, group_id: str, user_id: str, coins: float) -> Tuple[bool, str, float]:
         """
         购买股票
@@ -488,6 +506,12 @@ class NiuniuStock:
 
         current = data["holdings"].get(user_id_str, 0)
         data["holdings"][user_id_str] = current + shares
+
+        # 更新用户统计
+        stats = self._get_user_stats(group_id, user_id)
+        stats["total_invested"] += coins
+        stats["cost_basis"] += coins
+        stats["buy_count"] += 1
 
         self._save_data()
 
@@ -523,19 +547,43 @@ class NiuniuStock:
         price = data.get("price", STOCK_CONFIG["base_price"])
         coins = shares * price
 
+        # 计算这部分股票的成本（按比例）
+        stats = self._get_user_stats(group_id, user_id)
+        sell_ratio = shares / current
+        cost_of_sold = stats["cost_basis"] * sell_ratio
+        profit_or_loss = coins - cost_of_sold
+
+        # 更新统计
+        stats["total_withdrawn"] += coins
+        stats["cost_basis"] -= cost_of_sold
+        stats["sell_count"] += 1
+        if profit_or_loss >= 0:
+            stats["total_profit"] += profit_or_loss
+        else:
+            stats["total_loss"] += abs(profit_or_loss)
+
         # 更新持仓
         data["holdings"][user_id_str] = current - shares
         if data["holdings"][user_id_str] <= 0:
             del data["holdings"][user_id_str]
+            # 清仓时重置成本
+            stats["cost_basis"] = 0
 
         self._save_data()
+
+        # 盈亏显示
+        if profit_or_loss >= 0:
+            pl_str = f"📈 本次盈利 +{profit_or_loss:.0f}金币"
+        else:
+            pl_str = f"📉 本次亏损 {profit_or_loss:.0f}金币"
 
         return True, (
             f"✅ 卖出成功！\n"
             f"{STOCK_CONFIG['emoji']} {STOCK_CONFIG['name']}\n"
             f"📦 -{shares:.4f}股\n"
             f"💰 获得 {coins:.0f}金币\n"
-            f"📉 成交价 {price:.2f}/股"
+            f"📉 成交价 {price:.2f}/股\n"
+            f"{pl_str}"
         ), coins
 
     # ==================== 显示格式化 ====================
@@ -599,30 +647,88 @@ class NiuniuStock:
         """格式化用户持仓"""
         shares = self.get_holdings(group_id, user_id)
         price = self.get_price(group_id)
+        stats = self._get_user_stats(group_id, user_id)
 
-        if shares <= 0:
-            return f"📊 {nickname} 的持仓\n\n💼 空仓，快去买点妖牛股吧！"
+        # 获取统计数据
+        total_invested = stats.get("total_invested", 0)
+        total_withdrawn = stats.get("total_withdrawn", 0)
+        cost_basis = stats.get("cost_basis", 0)
+        total_profit = stats.get("total_profit", 0)
+        total_loss = stats.get("total_loss", 0)
+        buy_count = stats.get("buy_count", 0)
+        sell_count = stats.get("sell_count", 0)
 
-        value = shares * price
-        base_value = shares * STOCK_CONFIG["base_price"]
-        profit = value - base_value
-        profit_pct = (value - base_value) / base_value * 100 if base_value > 0 else 0
-
-        if profit >= 0:
-            profit_str = f"📈 +{profit:.0f}金币 (+{profit_pct:.1f}%)"
-        else:
-            profit_str = f"📉 {profit:.0f}金币 ({profit_pct:.1f}%)"
+        # 没有任何交易记录
+        if buy_count == 0 and shares <= 0:
+            return f"📊 {nickname} 的投资档案\n\n💼 还没有参与过股市交易\n💡 输入「牛牛股市 购买 <金额>」开始投资"
 
         lines = [
-            f"📊 {nickname} 的持仓",
-            "",
-            f"{STOCK_CONFIG['emoji']} {STOCK_CONFIG['name']}",
-            f"   📦 持有 {shares:.4f}股",
-            f"   💰 市值 {value:.0f}金币",
-            f"   📊 盈亏 {profit_str}",
-            "",
-            f"📈 当前股价: {price:.2f}/股",
+            f"📊 {nickname} 的投资档案",
+            f"═══════════════════════",
         ]
+
+        # 当前持仓
+        if shares > 0:
+            value = shares * price
+            # 浮动盈亏 = 当前市值 - 成本
+            unrealized_pl = value - cost_basis
+            if cost_basis > 0:
+                unrealized_pct = unrealized_pl / cost_basis * 100
+            else:
+                unrealized_pct = 0
+
+            if unrealized_pl >= 0:
+                pl_str = f"📈 +{unrealized_pl:.0f} (+{unrealized_pct:.1f}%)"
+            else:
+                pl_str = f"📉 {unrealized_pl:.0f} ({unrealized_pct:.1f}%)"
+
+            # 平均成本
+            avg_cost = cost_basis / shares if shares > 0 else 0
+
+            lines.extend([
+                "",
+                f"💼 ── 当前持仓 ──",
+                f"   📦 持有股数: {shares:.4f}股",
+                f"   💰 当前市值: {value:.0f}金币",
+                f"   💵 持仓成本: {cost_basis:.0f}金币",
+                f"   📊 平均成本: {avg_cost:.2f}/股",
+                f"   📈 浮动盈亏: {pl_str}",
+            ])
+        else:
+            lines.extend([
+                "",
+                f"💼 ── 当前持仓 ──",
+                f"   📭 空仓",
+            ])
+
+        # 历史统计
+        net_pl = total_profit - total_loss  # 已实现净盈亏
+        total_net = net_pl + (shares * price - cost_basis if shares > 0 else 0)  # 总盈亏（已实现+浮动）
+
+        lines.extend([
+            "",
+            f"📜 ── 历史统计 ──",
+            f"   💸 累计投入: {total_invested:.0f}金币",
+            f"   💰 累计取出: {total_withdrawn:.0f}金币",
+            f"   ✅ 历史盈利: +{total_profit:.0f}金币",
+            f"   ❌ 历史亏损: -{total_loss:.0f}金币",
+            f"   📊 已实现净盈亏: {'+' if net_pl >= 0 else ''}{net_pl:.0f}金币",
+        ])
+
+        # 交易次数
+        lines.extend([
+            "",
+            f"🔢 ── 交易统计 ──",
+            f"   🛒 购买次数: {buy_count}次",
+            f"   🏷️ 卖出次数: {sell_count}次",
+        ])
+
+        # 当前股价
+        lines.extend([
+            "",
+            f"═══════════════════════",
+            f"📈 当前股价: {price:.2f}金币/股",
+        ])
 
         return "\n".join(lines)
 
