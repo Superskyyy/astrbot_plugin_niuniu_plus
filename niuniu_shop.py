@@ -56,6 +56,12 @@ class NiuniuShop:
         nodes = []
         bot_id = event.get_self_id() or "0"
 
+        # 获取用户数据用于动态定价
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+        user_data = self._get_user_data(group_id, user_id)
+        user_length = user_data.get('length', 0)
+
         # 道具类型emoji映射
         type_emoji = {
             'active': '⚡',   # 主动道具
@@ -69,7 +75,18 @@ class NiuniuShop:
             max_str = f"（最多持有{max_count}个）" if max_count else ""
 
             # 动态定价显示
-            price_str = "动态定价" if item.get('dynamic_price') else f"{item['price']} 💰"
+            if item.get('dynamic_price'):
+                # 绝对值！道具的动态价格计算
+                if item['name'] == '绝对值！':
+                    if user_length < 0:
+                        dynamic_price = int(abs(user_length) * 0.1)
+                        price_str = f"{dynamic_price} 💰 (你的价格)"
+                    else:
+                        price_str = "仅限负数牛牛"
+                else:
+                    price_str = "动态定价"
+            else:
+                price_str = f"{item['price']} 💰"
 
             content_text = (
                 f"{emoji} [{item['id']}] {item['name']}\n"
