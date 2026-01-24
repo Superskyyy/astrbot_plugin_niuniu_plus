@@ -620,6 +620,64 @@ class NiuniuStock:
             f"{success_text}"
         )
 
+    # 重置文案
+    RESET_TEXTS = [
+        "🔄 「妖牛股」宣布退市重组！",
+        "💥 牛牛证监会：「推倒重来！」",
+        "🌪️ 金融风暴过后，一切归零...",
+        "🏚️ 「妖牛股」破产清算完成！",
+        "📜 历史翻篇，新的韭菜正在成长...",
+        "🎰 牛牛赌场关门大吉，明天重新开业！",
+        "🧹 大扫除完成！股市焕然一新！",
+        "⚡ 系统维护完成，数据已重置！",
+    ]
+
+    RESET_SUCCESS_TEXTS = [
+        "✨ 新的征程开始了！",
+        "🐂 妖牛股涅槃重生！",
+        "🌅 新的一天，新的韭菜！",
+        "💰 所有人回到同一起跑线！",
+        "🎯 重新开始，谁能成为股神？",
+        "🚀 股市已重置，冲！",
+    ]
+
+    def reset(self, group_id: str) -> Tuple[bool, str]:
+        """
+        重置股市 - 清除所有数据，股价回归基准
+        返回: (成功, 消息)
+        """
+        data = self._get_group_data(group_id)
+
+        # 统计重置前的数据
+        old_price = data.get("price", STOCK_CONFIG["base_price"])
+        holder_count = len(data.get("holdings", {}))
+        total_shares = sum(data.get("holdings", {}).values())
+
+        # 重置所有数据
+        self._data[str(group_id)] = {
+            "price": STOCK_CONFIG["base_price"],
+            "holdings": {},
+            "user_stats": {},
+            "events": [],
+            "last_update": time.time(),
+        }
+
+        self._save_data()
+
+        reset_text = random.choice(self.RESET_TEXTS)
+        success_text = random.choice(self.RESET_SUCCESS_TEXTS)
+
+        return True, (
+            f"{reset_text}\n"
+            f"═══════════════════════\n"
+            f"{STOCK_CONFIG['emoji']} {STOCK_CONFIG['name']} 已重置\n"
+            f"📊 原股价: {old_price:.2f} → 100.00\n"
+            f"👥 清仓人数: {holder_count}人\n"
+            f"📦 销毁股数: {total_shares:.4f}股\n"
+            f"═══════════════════════\n"
+            f"{success_text}"
+        )
+
     def _calculate_tax(self, profit: float, avg_coins: float) -> Tuple[float, float, str]:
         """
         计算阶梯累进税

@@ -30,7 +30,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.14.3")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.14.4")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -643,6 +643,7 @@ class NiuniuPlugin(Star):
                 "牛牛商城": self.shop.show_shop,
                 "牛牛购买": self.shop.handle_buy,
                 "牛牛背包": self.shop.show_items,
+                "牛牛股市 重置": self._niuniu_stock_reset,  # 放在 "牛牛股市" 前面
                 "牛牛股市": self._niuniu_stock,
                 "重置所有牛牛": self._reset_all_niuniu,
                 "牛牛红包": self._niuniu_hongbao,
@@ -877,6 +878,22 @@ class NiuniuPlugin(Star):
         # 执行救市
         stock = NiuniuStock.get()
         success, msg = stock.bailout(group_id, amount)
+
+        yield event.plain_result(msg)
+
+    async def _niuniu_stock_reset(self, event):
+        """牛牛股市 重置 - 清除所有股市数据，仅管理员可用"""
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+
+        # 检查是否为管理员
+        if not self.is_admin(user_id):
+            yield event.plain_result("❌ 只有管理员才能使用此指令")
+            return
+
+        # 执行重置
+        stock = NiuniuStock.get()
+        success, msg = stock.reset(group_id)
 
         yield event.plain_result(msg)
 
