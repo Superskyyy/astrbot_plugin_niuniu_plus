@@ -489,14 +489,22 @@ class NiuniuStock:
         """
         购买股票
         返回: (成功, 消息, 购买股数)
+        注意：先涨价再成交，防止套利
         """
         if coins <= 0:
             return False, "❌ 购买金额必须大于0", 0
 
         data = self._get_group_data(group_id)
-        price = data.get("price", STOCK_CONFIG["base_price"])
+        old_price = data.get("price", STOCK_CONFIG["base_price"])
 
-        shares = coins / price
+        # 先计算买入对价格的影响（先涨价再成交，防止套利）
+        impact = min(0.02, 0.001 + coins / 10000 * 0.01)  # 0.1%-2%
+        new_price = old_price * (1 + impact)
+        new_price = min(STOCK_CONFIG["max_price"], round(new_price, 2))
+        price_change_pct = impact * 100
+
+        # 按涨后的价格成交
+        shares = coins / new_price
 
         # 更新持仓
         user_id_str = str(user_id)
@@ -512,6 +520,9 @@ class NiuniuStock:
         stats["cost_basis"] += coins
         stats["buy_count"] += 1
 
+        # 更新股价
+        data["price"] = new_price
+
         self._save_data()
 
         return True, (
@@ -519,8 +530,95 @@ class NiuniuStock:
             f"{STOCK_CONFIG['emoji']} {STOCK_CONFIG['name']}\n"
             f"📦 +{shares:.4f}股\n"
             f"💰 花费 {coins:.0f}金币\n"
-            f"📈 成交价 {price:.2f}/股"
+            f"📈 成交价 {new_price:.2f}/股 (买入推高 +{price_change_pct:.2f}%)"
         ), shares
+
+    # 救市文案
+    BAILOUT_TEXTS = [
+        "🏛️ 「中央牛行」宣布紧急救市！",
+        "🚨 牛牛央行：「绝不允许股市崩盘！」",
+        "💼 神秘资金入场！传闻是牛牛国家队！",
+        "🦸 「大牛不能倒！」—— 牛牛财政部",
+        "🏦 牛牛证监会：「我们有无限子弹！」",
+        "📢 紧急通知：牛牛主权基金正在抄底！",
+        "🎺 「救市号角」吹响！散户热泪盈眶！",
+        "🛡️ 牛牛平准基金出手了！",
+        "⚡ 「闪电救市」计划启动！",
+        "🌟 神秘力量介入！妖牛股绝地反弹！",
+        "📜 牛牛国务院：「股市稳定关乎国运！」",
+        "🎯 传说中的「国家牛队」终于出手！",
+        "💎 「钻石手」资金强势托底！",
+        "🚀 「牛牛QE」来了！印钞救市！",
+        "🏆 牛牛央妈出手，空头瑟瑟发抖！",
+    ]
+
+    BAILOUT_SUCCESS_TEXTS = [
+        "🎉 救市成功！妖牛股重燃希望！",
+        "✨ 股价已稳！散户高呼万岁！",
+        "🐂 牛市回来了！感谢国家队！",
+        "💪 妖牛股：「我胡汉三又回来了！」",
+        "🌈 雨过天晴！股市重现彩虹！",
+        "🎊 空头被按在地上摩擦！",
+        "💰 「这就是国家的力量」—— 股民",
+        "🔔 「抄底成功」的钟声响起！",
+    ]
+
+    def bailout(self, group_id: str, coins: float) -> Tuple[bool, str]:
+        """
+        救市 - 系统资金买入后销毁，只推高股价
+        返回: (成功, 消息)
+        """
+        if coins <= 0:
+            return False, "❌ 救市金额必须大于0"
+
+        data = self._get_group_data(group_id)
+        old_price = data.get("price", STOCK_CONFIG["base_price"])
+
+        # 救市的影响比普通买入大（2-10%）
+        impact = min(0.10, 0.02 + coins / 5000 * 0.02)
+        new_price = old_price * (1 + impact)
+        new_price = min(STOCK_CONFIG["max_price"], round(new_price, 2))
+        price_change_pct = impact * 100
+
+        # 计算虚拟购买的股数（用于显示）
+        virtual_shares = coins / new_price
+
+        # 更新股价（不记录持仓！）
+        data["price"] = new_price
+        data["last_update"] = time.time()
+
+        # 记录救市事件
+        event = {
+            "time": time.time(),
+            "type": "bailout",
+            "nickname": "牛牛国家队",
+            "direction": 1,
+            "change_pct": price_change_pct,
+            "desc": random.choice(self.BAILOUT_TEXTS),
+        }
+
+        if "events" not in data:
+            data["events"] = []
+        data["events"].append(event)
+
+        if len(data["events"]) > 50:
+            data["events"] = data["events"][-50:]
+
+        self._save_data()
+
+        bailout_text = random.choice(self.BAILOUT_TEXTS)
+        success_text = random.choice(self.BAILOUT_SUCCESS_TEXTS)
+
+        return True, (
+            f"{bailout_text}\n"
+            f"═══════════════════════\n"
+            f"{STOCK_CONFIG['emoji']} {STOCK_CONFIG['name']}\n"
+            f"💵 救市资金: {coins:.0f}金币\n"
+            f"📦 虚空购入: {virtual_shares:.4f}股 (已销毁)\n"
+            f"📈 股价变动: {old_price:.2f} → {new_price:.2f} (+{price_change_pct:.2f}%)\n"
+            f"═══════════════════════\n"
+            f"{success_text}"
+        )
 
     def _calculate_tax(self, profit: float, avg_coins: float) -> Tuple[float, float, str]:
         """
@@ -563,6 +661,7 @@ class NiuniuStock:
         shares=None 表示全部卖出
         avg_coins: 群内金币平均值，用于计算收益税
         返回: (成功, 消息, 获得金币-税后)
+        注意：先跌价再成交，防止套利
         """
         from niuniu_config import StockTaxConfig
 
@@ -580,8 +679,17 @@ class NiuniuStock:
         if shares <= 0:
             return False, "❌ 卖出数量必须大于0", 0
 
-        price = data.get("price", STOCK_CONFIG["base_price"])
-        coins = round(shares * price, 2)  # 避免浮点精度问题
+        old_price = data.get("price", STOCK_CONFIG["base_price"])
+
+        # 先计算卖出对价格的影响（用旧价估算金额）
+        estimated_coins = shares * old_price
+        impact = min(0.02, 0.001 + estimated_coins / 10000 * 0.01)  # 0.1%-2%
+        new_price = old_price * (1 - impact)
+        new_price = max(STOCK_CONFIG["min_price"], round(new_price, 2))
+        price_change_pct = impact * 100
+
+        # 按跌后的价格成交（先跌价再成交，防止套利）
+        coins = round(shares * new_price, 2)
 
         # 计算这部分股票的成本（按比例）
         stats = self._get_user_stats(group_id, user_id)
@@ -615,6 +723,9 @@ class NiuniuStock:
             # 清仓时重置成本
             stats["cost_basis"] = 0
 
+        # 更新股价
+        data["price"] = new_price
+
         self._save_data()
 
         # 构建消息
@@ -622,7 +733,7 @@ class NiuniuStock:
             f"✅ 卖出成功！",
             f"{STOCK_CONFIG['emoji']} {STOCK_CONFIG['name']}",
             f"📦 -{shares:.4f}股",
-            f"📉 成交价 {price:.2f}/股",
+            f"📉 成交价 {new_price:.2f}/股 (卖出压低 -{price_change_pct:.2f}%)",
             f"💵 卖出总额 {coins:.0f}金币",
         ]
 

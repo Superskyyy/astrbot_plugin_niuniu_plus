@@ -30,7 +30,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.14.0")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.14.2")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -646,7 +646,8 @@ class NiuniuPlugin(Star):
                 "牛牛股市": self._niuniu_stock,
                 "重置所有牛牛": self._reset_all_niuniu,
                 "牛牛红包": self._niuniu_hongbao,
-                "牛牛补贴": self._niuniu_butie
+                "牛牛补贴": self._niuniu_butie,
+                "牛牛救市": self._niuniu_jiushi
             }
 
             for cmd, handler in handler_map.items():
@@ -846,6 +847,42 @@ class NiuniuPlugin(Star):
             result_parts.append("（无变化）")
 
         yield event.plain_result("\n".join(result_parts))
+
+    async def _niuniu_jiushi(self, event):
+        """牛牛救市 - 系统资金买入股票后销毁，仅管理员可用"""
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+
+        # 检查是否为管理员
+        if not self.is_admin(user_id):
+            yield event.plain_result("❌ 只有管理员才能使用此指令")
+            return
+
+        # 解析金额
+        msg_parts = event.message_str.split()
+        if len(msg_parts) < 2:
+            yield event.plain_result("❌ 格式：牛牛救市 <金额>\n例：牛牛救市 10000")
+            return
+
+        try:
+            amount = float(msg_parts[1])
+        except ValueError:
+            yield event.plain_result("❌ 金额必须是数字")
+            return
+
+        if amount <= 0:
+            yield event.plain_result("❌ 金额必须大于0")
+            return
+
+        if amount > 1000000:
+            yield event.plain_result("❌ 单次救市金额不能超过100万金币")
+            return
+
+        # 执行救市
+        stock = NiuniuStock.get()
+        success, msg = stock.bailout(group_id, amount)
+
+        yield event.plain_result(msg)
 
     async def _niuniu_stock(self, event):
         """牛牛股市"""
