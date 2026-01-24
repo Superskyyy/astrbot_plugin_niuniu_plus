@@ -574,8 +574,8 @@ class NiuniuStock:
         data = self._get_group_data(group_id)
         old_price = data.get("price", STOCK_CONFIG["base_price"])
 
-        # 救市的影响比普通买入大（2-10%）
-        impact = min(0.10, 0.02 + coins / 5000 * 0.02)
+        # 救市的影响比普通买入大（基础2%，每5000金币+2%，无上限）
+        impact = 0.02 + coins / 5000 * 0.02
         new_price = old_price * (1 + impact)
         new_price = min(STOCK_CONFIG["max_price"], round(new_price, 2))
         price_change_pct = impact * 100
