@@ -587,7 +587,7 @@ class NiuniuPlugin(Star):
     niuniu_commands = ["牛牛菜单", "牛牛帮助", "牛牛开", "牛牛关", "注册牛牛", "打胶", "我的牛牛", "比划比划", "牛牛排行"]
 
     @event_message_type(EventMessageType.GROUP_MESSAGE)
-    async def on_group_message(self, event: AstrMessageEvent):
+    async def on_group_message(self, event: AstrMessageEvent, *args, **kwargs):
         """群聊消息处理器"""
         group_id = str(event.message_obj.group_id)
         group_data = self.get_group_data(group_id)
@@ -656,7 +656,7 @@ class NiuniuPlugin(Star):
                         yield result
                     return
     @event_message_type(EventMessageType.PRIVATE_MESSAGE)
-    async def on_private_message(self, event: AstrMessageEvent):
+    async def on_private_message(self, event: AstrMessageEvent, *args, **kwargs):
         """私聊消息处理器"""
         msg = event.message_str.strip()
         niuniu_commands = [
