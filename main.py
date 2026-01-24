@@ -874,10 +874,6 @@ class NiuniuPlugin(Star):
             yield event.plain_result("❌ 金额必须大于0")
             return
 
-        if amount > 1000000:
-            yield event.plain_result("❌ 单次救市金额不能超过100万金币")
-            return
-
         # 执行救市
         stock = NiuniuStock.get()
         success, msg = stock.bailout(group_id, amount)
