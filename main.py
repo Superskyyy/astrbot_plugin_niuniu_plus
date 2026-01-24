@@ -30,7 +30,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.13.3")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.14.0")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -2396,13 +2396,13 @@ class NiuniuPlugin(Star):
         last_actions.setdefault(group_id, {}).setdefault(user_id, {})['kaitan'] = time.time()
         self.update_last_actions(last_actions)
 
-        # 股市影响：开团是混沌事件，波动较大
-        total_length_change = sum(length_changes.values())
+        # 股市影响：开团是混沌事件，使用平均变化量避免波动过大
+        avg_length_change = sum(length_changes.values()) / len(length_changes) if length_changes else 0
         stock_msg = stock_hook(
             group_id,
             nickname,
             event_type="chaos",
-            length_change=total_length_change
+            length_change=avg_length_change
         )
         if stock_msg:
             result_msgs.append("")

@@ -560,223 +560,140 @@ class BalishijiaEffect(ItemEffect):
         return ctx
 
 
-class DutuyingbiEffect(ItemEffect):
-    """赌徒硬币 - 50% double, 48% halve, 1% jackpot (x4), 1% bad luck (x-2)"""
-    name = "赌徒硬币"
+class DutusaiziEffect(ItemEffect):
+    """赌徒骰子 - 掷骰子获得比例奖惩，1-3点为负，4-6点为正"""
+    name = "赌徒骰子"
     triggers = [EffectTrigger.ON_PURCHASE]
     consume_on_use = False  # Active item, no inventory
 
-    # 股市配置 - 赌徒硬币是中等影响道具
+    # 骰子点数对应的比例变化（基于当前长度绝对值）
+    DICE_RATIOS = {
+        1: -0.30,  # 大惩罚 -30%
+        2: -0.20,  # 中惩罚 -20%
+        3: -0.10,  # 小惩罚 -10%
+        4: +0.10,  # 小奖励 +10%
+        5: +0.20,  # 中奖励 +20%
+        6: +0.30,  # 大奖励 +30%
+    }
+
+    # 股市配置 - 赌徒骰子是小幅影响道具
     stock_config = {
-        "volatility": (0.02, 0.08),
+        "volatility": (0.01, 0.04),
         "templates": {
             "up": [
-                "🎰 {nickname} 赌赢了！股民跟着沾光！",
-                "🪙 硬币翻倍成功！股价应声上涨！",
-                "🎰 {nickname} 的赌运带动了股市！",
-                "✨ 赌神附体！股价跟着起飞！",
-                "🎰 「赌就是干」—— {nickname} 成功了！",
-                "🪙 硬币正面！股市也跟着翻身！",
-                "🎰 {nickname} 用运气征服了股市！",
+                "🎲 {nickname} 掷出高点！股民跟着沾光！",
+                "🎲 骰子滚出6点！股价应声上涨！",
+                "🎲 {nickname} 的骰运带动了股市！",
+                "✨ 骰神附体！股价跟着起飞！",
+                "🎲 「掷就是干」—— {nickname} 成功了！",
+                "🎲 高点！股市也跟着翻身！",
+                "🎲 {nickname} 用运气征服了股市！",
                 "💰 赌徒精神感染股民，集体买入！",
             ],
             "down": [
-                "🎰 {nickname} 赌输了！股民心态崩了！",
-                "🪙 硬币减半...股价跟着腰斩！",
-                "🎰 {nickname} 的霉运传染了股市！",
-                "💀 赌神背弃了你，股价背弃了我们！",
-                "🎰 「赌狗终究是赌狗」—— 股评家",
-                "🪙 硬币反面！股市也跟着翻车！",
-                "🎰 {nickname} 用运气毁灭了股市！",
+                "🎲 {nickname} 掷出低点！股民心态崩了！",
+                "🎲 骰子滚出1点...股价跟着下跌！",
+                "🎲 {nickname} 的霉运传染了股市！",
+                "💀 骰神背弃了你，股价背弃了我们！",
+                "🎲 「赌狗终究是赌狗」—— 股评家",
+                "🎲 低点！股市也跟着翻车！",
+                "🎲 {nickname} 用运气毁灭了股市！",
                 "💸 赌徒精神吓跑股民，集体抛售！",
             ],
         }
     }
 
-    # 头等奖文案
-    JACKPOT_TEXTS = [
-        "🎰✨ 硬币在空中炸裂成金光！！！",
-        "🌟 天降祥瑞！硬币化作一道金龙！",
-        "💫 硬币立了起来！传说中的...头等奖！！",
-        "🎇 叮叮叮！恭喜你中了头等奖！",
-        "⭐ 硬币发出耀眼的光芒，你感觉自己被命运眷顾了！"
+    # 掷骰子动画文案
+    ROLL_TEXTS = [
+        "🎲 骰子在桌上滚动...",
+        "🎲 命运的骰子抛向空中...",
+        "🎲 叮咚叮咚，骰子在跳舞...",
+        "🎲 骰子旋转、弹跳...",
+        "🎲 咕噜咕噜，骰子落下...",
     ]
 
-    # 霉运文案
-    BAD_LUCK_TEXTS = [
-        "🎰💀 硬币裂开了...黑雾涌出！",
-        "☠️ 硬币变成了骷髅头！这是...霉运诅咒！",
-        "🌑 硬币坠入深渊，带走了你的一切...",
-        "💔 硬币碎成粉末，厄运降临！",
-        "👻 硬币消失了，取而代之的是一阵阴风..."
+    # 各点数文案
+    DICE_1_TEXTS = [
+        "🎲💀 1点！骰子立刻碎裂！",
+        "🎲 哎呀！最小的1点！",
+        "🎲 骰子无情地显示：⚀",
+        "🎲 「1」！命运在嘲笑你！",
+        "🎲 一点...骰神今天休假了",
     ]
 
-    # 翻倍文案
-    DOUBLE_TEXTS = [
-        "🎰 硬币正面朝上！长度翻倍！",
-        "🪙 叮！正面！你的牛牛膨胀了！",
-        "✨ 硬币闪闪发光，好运降临！"
+    DICE_2_TEXTS = [
+        "🎲 2点！运气欠佳...",
+        "🎲 骰子显示：⚁",
+        "🎲 「2」！还行，不算太惨",
+        "🎲 两点...勉强能接受",
+        "🎲 2！骰神打了个哈欠",
     ]
 
-    # 减半文案
-    HALVE_TEXTS = [
-        "🎰 硬币反面朝上...长度减半！",
-        "🪙 哐当...反面...你的牛牛缩水了",
-        "💨 硬币滚走了，带走了一半的你..."
+    DICE_3_TEXTS = [
+        "🎲 3点！小亏一笔",
+        "🎲 骰子显示：⚂",
+        "🎲 「3」！差一点就过半了",
+        "🎲 三点...可惜了",
+        "🎲 3！骰神说：再接再厉",
     ]
 
-    # 负数专属文案
-    NEGATIVE_DOUBLE_TEXTS = [
-        "🎰 硬币正面朝上！凹陷减半！",
-        "🌀 负负...得少负？数学真奇妙！",
-        "🎭 硬币帮你把坑填了一半！",
-        "✨ 正面！凹下去的牛牛回弹了一点！",
-        "🪙 叮！命运垂怜，凹陷修复中...",
-        "🍀 硬币说：「给你减点负担」",
-        "🔧 硬币化身维修工，填坑ing~",
-        "💫 正面朝上！负能量被吸走一半！",
+    DICE_4_TEXTS = [
+        "🎲 4点！小有收获！",
+        "🎲 骰子显示：⚃",
+        "🎲 「4」！运气开始转好！",
+        "🎲 四点！过半了！",
+        "🎲 4！骰神微微点头",
     ]
 
-    NEGATIVE_HALVE_TEXTS = [
-        "🎰 硬币反面朝上...凹得更深了！",
-        "🕳️ 硬币砸出一个更大的坑！",
-        "💀 反面！深渊在凝视你...",
-        "😱 硬币：「挖呀挖呀挖~」",
-        "🌑 凹陷加倍！地心探险开始！",
-        "☠️ 硬币跳进坑里，还往下挖！",
-        "🔨 硬币化身挖掘机，凹凹凹！",
-        "💔 反面...你和地心更近了一步",
+    DICE_5_TEXTS = [
+        "🎲 5点！运气不错！",
+        "🎲 骰子显示：⚄",
+        "🎲 「5」！离满点就差一点！",
+        "🎲 五点！今天运气很好！",
+        "🎲 5！骰神露出微笑！",
     ]
 
-    NEGATIVE_JACKPOT_TEXTS = [
-        "🎰✨ 硬币爆发金光！负数牛牛起死回生！",
-        "🌟 天降神迹！从地底飞升天际！",
-        "💫 硬币立起来了！负转正！逆天改命！",
-        "🎇 叮叮叮！从深渊到巅峰！",
-        "⭐ 硬币：「从今天起，你不再是负数！」",
-        "🚀 负数牛牛一飞冲天！！！",
-        "🔮 硬币施展禁术：负数逆转！",
-        "🎊 从欠债到暴富！命运的馈赠！",
-    ]
-
-    NEGATIVE_BADLUCK_TEXTS = [
-        "🎰💀 硬币裂开...负数牛牛坠入深渊！",
-        "☠️ 硬币变成铲子，疯狂往下挖！",
-        "🌑 霉运降临！凹到地心去吧！",
-        "💔 硬币：「让你体验什么叫真正的负」",
-        "👻 负数还能更负？硬币说可以！",
-        "🕳️ 挖穿地球的节奏！凹到极限！",
-        "😈 硬币邪笑：「负无止境~」",
-        "💀 从负数到超级负数！深渊加深！",
+    DICE_6_TEXTS = [
+        "🎲✨ 6点！满点！！！",
+        "🎲 骰子闪闪发光：⚅",
+        "🎲 「6」！完美的一掷！",
+        "🎲 六点！骰神眷顾你！",
+        "🎲 6！今天是你的幸运日！",
     ]
 
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
-        current_length = ctx.user_length
-        roll = random.random()
+        # 掷骰子
+        dice_roll = random.randint(1, 6)
+        ratio = self.DICE_RATIOS[dice_roll]
 
-        # 概率分布：50% 翻倍, 48% 减半, 1% 头等奖, 1% 霉运
-        if roll < 0.01:
-            # 1% 头等奖：长度 x4
-            self._apply_jackpot(ctx, current_length)
-        elif roll < 0.02:
-            # 1% 霉运：长度变成 -2倍
-            self._apply_bad_luck(ctx, current_length)
-        elif roll < 0.52:
-            # 50% 翻倍
-            self._apply_double(ctx, current_length)
+        # 掷骰子动画
+        ctx.messages.append(random.choice(self.ROLL_TEXTS))
+
+        # 根据点数选择文案
+        dice_texts = {
+            1: self.DICE_1_TEXTS,
+            2: self.DICE_2_TEXTS,
+            3: self.DICE_3_TEXTS,
+            4: self.DICE_4_TEXTS,
+            5: self.DICE_5_TEXTS,
+            6: self.DICE_6_TEXTS,
+        }
+        ctx.messages.append(random.choice(dice_texts[dice_roll]))
+
+        # 基于当前长度绝对值计算变化
+        current_length = ctx.user_length
+        base_value = abs(current_length) if current_length != 0 else 10  # 0长度时基准为10cm
+        change = base_value * ratio
+
+        # 应用数值变化
+        ctx.length_change = change
+        ratio_percent = int(ratio * 100)
+        if change > 0:
+            ctx.messages.append(f"🍀 长度 +{abs(ratio_percent)}% ({format_length_change(change)})")
         else:
-            # 48% 减半
-            self._apply_halve(ctx, current_length)
+            ctx.messages.append(f"💔 长度 {ratio_percent}% ({format_length_change(change)})")
 
         return ctx
-
-    def _apply_jackpot(self, ctx: EffectContext, current_length: float):
-        """头等奖：长度变成4倍"""
-        if current_length < 0:
-            ctx.messages.append(random.choice(self.NEGATIVE_JACKPOT_TEXTS))
-        else:
-            ctx.messages.append(random.choice(self.JACKPOT_TEXTS))
-        ctx.messages.append("🏆 ═══ 头 等 奖 ═══ 🏆")
-
-        if current_length > 0:
-            gain = current_length * 3
-            ctx.length_change = gain
-            ctx.messages.append(f"💰 长度暴涨！{format_length(current_length)} → {format_length(current_length + gain)} ({format_length_change(gain)})")
-        elif current_length < 0:
-            # 负数变成正的4倍绝对值
-            gain = abs(current_length) * 4
-            ctx.length_change = gain
-            ctx.messages.append(f"💰 逆天改命！{format_length(current_length)} → {format_length(current_length + gain)} ({format_length_change(gain)})")
-            ctx.messages.append("🎊 负数牛牛的春天来了！！！")
-            return
-        else:
-            gain = 100
-            ctx.length_change = gain
-            ctx.messages.append(f"💰 从零开始的暴富！0cm → {format_length(gain)}")
-
-        ctx.messages.append("🎊 运气爆棚！今天一定要买彩票！")
-
-    def _apply_bad_luck(self, ctx: EffectContext, current_length: float):
-        """霉运：长度变成-2倍"""
-        if current_length < 0:
-            ctx.messages.append(random.choice(self.NEGATIVE_BADLUCK_TEXTS))
-        else:
-            ctx.messages.append(random.choice(self.BAD_LUCK_TEXTS))
-        ctx.messages.append("💀 ═══ 霉 运 降 临 ═══ 💀")
-
-        if current_length > 0:
-            # 正数变成负2倍
-            loss = current_length * 3
-            ctx.length_change = -loss
-            ctx.messages.append(f"😱 长度暴跌！{format_length(current_length)} → {format_length(current_length - loss)} ({format_length_change(-loss)})")
-        elif current_length < 0:
-            # 负数变得更负
-            loss = abs(current_length) * 3
-            ctx.length_change = -loss
-            ctx.messages.append(f"😱 凹到地心！{format_length(current_length)} → {format_length(current_length - loss)} ({format_length_change(-loss)})")
-            ctx.messages.append("🕳️ 负数牛牛的噩梦...")
-            return
-        else:
-            loss = 100
-            ctx.length_change = -loss
-            ctx.messages.append(f"😱 从零坠入深渊！0cm → {format_length(-loss)}")
-
-        ctx.messages.append("🥀 今天不宜出门...")
-
-    def _apply_double(self, ctx: EffectContext, current_length: float):
-        """翻倍"""
-        if current_length > 0:
-            text = random.choice(self.DOUBLE_TEXTS)
-            ctx.length_change = current_length
-            ctx.messages.append(f"{text} {format_length_change(current_length)}")
-        elif current_length < 0:
-            text = random.choice(self.NEGATIVE_DOUBLE_TEXTS)
-            gain = abs(current_length) // 2
-            ctx.length_change = gain
-            ctx.messages.append(f"{text} {format_length_change(gain)}")
-            ctx.messages.append(f"🍀 {format_length(current_length)} → {format_length(current_length + gain)} 往0迈进！")
-        else:
-            change = random.randint(5, 15)
-            ctx.length_change = change
-            ctx.messages.append(f"🎰 硬币悬浮！从虚无中获得了{change}cm！")
-
-    def _apply_halve(self, ctx: EffectContext, current_length: float):
-        """减半"""
-        if current_length > 0:
-            text = random.choice(self.HALVE_TEXTS)
-            loss = current_length / 2
-            ctx.length_change = -loss
-            ctx.messages.append(f"{text} {format_length_change(-loss)}")
-        elif current_length < 0:
-            text = random.choice(self.NEGATIVE_HALVE_TEXTS)
-            loss = abs(current_length)
-            ctx.length_change = -loss
-            ctx.messages.append(f"{text} {format_length_change(-loss)}")
-            ctx.messages.append(f"💀 {format_length(current_length)} → {format_length(current_length - loss)} 更深了...")
-        else:
-            change = random.randint(-15, -5)
-            ctx.length_change = change
-            ctx.messages.append(f"🎰 硬币落入虚空...凹进去了{-change}cm！")
 
 
 # =============================================================================
