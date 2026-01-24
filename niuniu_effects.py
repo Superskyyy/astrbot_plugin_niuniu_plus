@@ -3091,7 +3091,7 @@ def create_effect_manager() -> EffectManager:
 
     # Register active item effects
     manager.register(BalishijiaEffect())
-    manager.register(DutuyingbiEffect())
+    manager.register(DutusaiziEffect())
     manager.register(JiefuJipinEffect())
     manager.register(HundunFengbaoEffect())
     manager.register(HeidongEffect())
