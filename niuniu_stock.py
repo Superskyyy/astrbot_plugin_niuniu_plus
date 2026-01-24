@@ -30,8 +30,8 @@ STOCK_CONFIG = {
         "dajiao": (0.005, 0.02),    # 打胶：0.5%-2%
         "compare": (0.01, 0.05),     # 比划：1%-5%
         "item": (0.02, 0.08),        # 道具：2%-8%
-        "chaos": (0.05, 0.20),       # 混沌：5%-20%
-        "global": (0.10, 0.30),      # 全局：10%-30%
+        "chaos": (0.02, 0.08),       # 混沌(开团)：2%-8%
+        "global": (0.05, 0.15),      # 全局：5%-15%
     },
 }
 
@@ -997,10 +997,9 @@ def stock_hook(group_id: str,
         # 计算幅度系数：变化量越大，影响越大
         magnitude = min(3.0, 1.0 + abs(total_change) / 50)
 
-        # 混沌和全局事件：方向随机，幅度更大
+        # 混沌和全局事件：方向随机（不再额外放大幅度）
         if event_type in ("chaos", "global"):
             direction = 0
-            magnitude *= 1.5
 
         # 计算波动幅度
         vol = random.uniform(min_vol, max_vol) * magnitude
