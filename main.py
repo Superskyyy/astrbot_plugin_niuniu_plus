@@ -30,7 +30,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.14.4")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.14.6")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -685,7 +685,7 @@ class NiuniuPlugin(Star):
         yield event.plain_result(self.niuniu_texts['system'][text_key])
 
     async def _reset_all_niuniu(self, event):
-        """重置所有牛牛 - 仅管理员可用"""
+        """重置所有牛牛 - 仅管理员可用，支持分类重置"""
         group_id = str(event.message_obj.group_id)
         user_id = str(event.get_sender_id())
 
@@ -694,36 +694,101 @@ class NiuniuPlugin(Star):
             yield event.plain_result("❌ 只有管理员才能使用此指令")
             return
 
+        # 解析参数
+        msg_parts = event.message_str.split()
+        reset_type = msg_parts[1] if len(msg_parts) > 1 else None
+
+        # 有效的重置类型
+        valid_types = ['金币', '长度', '硬度', '股市', '全部']
+
+        if reset_type and reset_type not in valid_types:
+            yield event.plain_result(
+                "❌ 无效的重置类型\n"
+                "📌 用法: 重置所有牛牛 <类型>\n"
+                "   • 金币 - 所有牛友金币归零\n"
+                "   • 长度 - 所有牛牛长度随机重置\n"
+                "   • 硬度 - 所有牛牛硬度归一\n"
+                "   • 股市 - 清空所有牛友股票持仓\n"
+                "   • 全部 - 重置以上所有数据"
+            )
+            return
+
+        if not reset_type:
+            yield event.plain_result(
+                "📌 重置所有牛牛 <类型>\n"
+                "   • 金币 - 所有牛友金币归零\n"
+                "   • 长度 - 所有牛牛长度随机重置\n"
+                "   • 硬度 - 所有牛牛硬度归一\n"
+                "   • 股市 - 清空所有牛友股票持仓\n"
+                "   • 全部 - 重置以上所有数据"
+            )
+            return
+
         # 加载数据
         data = self._load_niuniu_lengths()
         group_data = data.get(group_id, {})
 
         # 统计重置人数
         reset_count = 0
-        plugin_enabled = group_data.get('plugin_enabled', False)
 
-        # 重置所有用户数据
+        # 根据类型执行重置
+        if reset_type == '股市':
+            # 重置股市持仓
+            stock = NiuniuStock.get()
+            stock_data = stock._get_group_data(group_id)
+            reset_count = len(stock_data.get("holdings", {}))
+            stock_data["holdings"] = {}
+            stock_data["user_stats"] = {}
+            stock._save_data()
+            yield event.plain_result(
+                f"📊 股市持仓已清空！\n"
+                f"👥 清仓牛友: {reset_count}位\n"
+                f"💰 股价保持不变，所有牛友从零开始炒股~"
+            )
+            return
+
+        # 处理牛牛数据重置
         for uid in list(group_data.keys()):
             if uid.startswith('_') or uid == 'plugin_enabled':
                 continue
             if isinstance(group_data[uid], dict) and 'length' in group_data[uid]:
-                # 保留昵称，重置其他数据
-                nickname = group_data[uid].get('nickname', f'用户{uid}')
-                group_data[uid] = {
-                    'nickname': nickname,
-                    'length': random.randint(3, 10),
-                    'hardness': 1,
-                    'coins': 0,
-                    'items': {}
-                }
+                if reset_type == '金币':
+                    group_data[uid]['coins'] = 0
+                elif reset_type == '长度':
+                    group_data[uid]['length'] = random.randint(3, 10)
+                elif reset_type == '硬度':
+                    group_data[uid]['hardness'] = 1
+                elif reset_type == '全部':
+                    # 保留昵称，重置其他数据
+                    nickname = group_data[uid].get('nickname', f'用户{uid}')
+                    group_data[uid] = {
+                        'nickname': nickname,
+                        'length': random.randint(3, 10),
+                        'hardness': 1,
+                        'coins': 0,
+                        'items': {}
+                    }
                 reset_count += 1
 
-        # 保留插件启用状态
-        group_data['plugin_enabled'] = plugin_enabled
         data[group_id] = group_data
         self._save_niuniu_lengths(data)
 
-        yield event.plain_result(f"✅ 已重置本群 {reset_count} 个牛牛的数据！\n所有人重新开始，公平竞争~")
+        # 如果是全部重置，同时清空股市
+        if reset_type == '全部':
+            stock = NiuniuStock.get()
+            stock_data = stock._get_group_data(group_id)
+            stock_data["holdings"] = {}
+            stock_data["user_stats"] = {}
+            stock._save_data()
+
+        # 生成结果消息
+        type_names = {
+            '金币': '金币已归零',
+            '长度': '长度已随机重置',
+            '硬度': '硬度已归一',
+            '全部': '全部数据已重置（含股市持仓）'
+        }
+        yield event.plain_result(f"✅ 已重置本群 {reset_count} 个牛牛！\n📋 {type_names[reset_type]}")
 
     async def _niuniu_hongbao(self, event):
         """牛牛红包 - 给所有人发金币，仅管理员可用"""

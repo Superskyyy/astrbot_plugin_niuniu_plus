@@ -1043,30 +1043,31 @@ def stock_hook(group_id: str,
 
         min_vol, max_vol = volatility
 
-        # 计算方向：正变化=涨，负变化=跌，无变化=随机
-        total_change = length_change + hardness_change * 10 + coins_change * 0.1
-        if total_change > 0:
-            direction = 1
-        elif total_change < 0:
-            direction = -1
-        else:
-            direction = 0  # 随机
-
         # 计算幅度系数：变化量越大，影响越大
+        total_change = length_change + hardness_change * 10 + coins_change * 0.1
         magnitude = min(3.0, 1.0 + abs(total_change) / 50)
 
-        # 混沌和全局事件：方向随机（不再额外放大幅度）
+        # 计算涨跌概率：变化量影响概率，但不是100%确定
+        # 基础概率 50%，变化量可以将概率偏移到 15%-85%
+        # 混沌和全局事件保持 50/50
         if event_type in ("chaos", "global"):
-            direction = 0
+            up_probability = 0.5
+        else:
+            # 变化量越大，概率偏移越大，最多偏移 35%（妖股就要妖）
+            # 正变化 → 涨概率增加，负变化 → 跌概率增加
+            bias = min(0.35, abs(total_change) / 50 * 0.35)  # 最多偏移 35%
+            if total_change > 0:
+                up_probability = 0.5 + bias  # 50%-85% 涨
+            elif total_change < 0:
+                up_probability = 0.5 - bias  # 15%-50% 涨（即 50%-85% 跌）
+            else:
+                up_probability = 0.5
 
         # 计算波动幅度
         vol = random.uniform(min_vol, max_vol) * magnitude
 
-        # 决定实际方向
-        if direction == 0:
-            actual_direction = random.choice([1, -1])
-        else:
-            actual_direction = direction
+        # 根据概率决定实际方向
+        actual_direction = 1 if random.random() < up_probability else -1
 
         # 计算新价格
         change_pct = vol * actual_direction
