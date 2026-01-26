@@ -30,7 +30,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.14.7")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.14.8")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -915,7 +915,7 @@ class NiuniuPlugin(Star):
         yield event.plain_result("\n".join(result_parts))
 
     async def _niuniu_jiushi(self, event):
-        """牛牛救市 - 系统资金买入股票后销毁，仅管理员可用"""
+        """牛牛救市/砸盘 - 系统资金操作股价，仅管理员可用"""
         group_id = str(event.message_obj.group_id)
         user_id = str(event.get_sender_id())
 
@@ -927,7 +927,11 @@ class NiuniuPlugin(Star):
         # 解析金额
         msg_parts = event.message_str.split()
         if len(msg_parts) < 2:
-            yield event.plain_result("❌ 格式：牛牛救市 <金额>\n例：牛牛救市 10000")
+            yield event.plain_result(
+                "❌ 格式：牛牛救市 <金额>\n"
+                "例：牛牛救市 10000 (救市拉升)\n"
+                "例：牛牛救市 -10000 (砸盘打压)"
+            )
             return
 
         try:
@@ -936,11 +940,11 @@ class NiuniuPlugin(Star):
             yield event.plain_result("❌ 金额必须是数字")
             return
 
-        if amount <= 0:
-            yield event.plain_result("❌ 金额必须大于0")
+        if amount == 0:
+            yield event.plain_result("❌ 金额不能为0")
             return
 
-        # 执行救市
+        # 执行救市/砸盘
         stock = NiuniuStock.get()
         success, msg = stock.bailout(group_id, amount)
 

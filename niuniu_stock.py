@@ -563,38 +563,91 @@ class NiuniuStock:
         "🔔 「抄底成功」的钟声响起！",
     ]
 
+    # 砸盘文案
+    DUMP_TEXTS = [
+        "🏛️ 「中央牛行」宣布抛售国有股！",
+        "🚨 牛牛央行：「市场需要冷静！」",
+        "💼 神秘资金出逃！传闻是牛牛国家队！",
+        "🦹 「让市场教训一下投机者」—— 牛牛财政部",
+        "🏦 牛牛证监会：「泡沫必须挤破！」",
+        "📢 紧急通知：牛牛主权基金正在减持！",
+        "🎺 「砸盘号角」吹响！散户瑟瑟发抖！",
+        "⚔️ 牛牛平准基金反手做空了！",
+        "⚡ 「闪电砸盘」计划启动！",
+        "🌑 神秘力量介入！妖牛股直线跳水！",
+        "📜 牛牛国务院：「房住不炒，股也一样！」",
+        "🎯 传说中的「国家牛队」居然砸盘！",
+        "💀 「死亡螺旋」启动！",
+        "🔨 「牛牛QT」来了！缩表砸盘！",
+        "👻 牛牛央妈反手一刀，多头哭晕在厕所！",
+    ]
+
+    DUMP_SUCCESS_TEXTS = [
+        "💀 砸盘成功！妖牛股跌入深渊！",
+        "😱 股价崩了！散户欲哭无泪！",
+        "🐻 熊市来了！感谢国家队？",
+        "💔 妖牛股：「我还会回来的...吧？」",
+        "🌧️ 乌云密布！股市一片哀嚎！",
+        "😈 多头被按在地上摩擦！",
+        "💸 「这就是国家的力量」—— 空头",
+        "🔔 「逃顶成功」的钟声响起！",
+    ]
+
     def bailout(self, group_id: str, coins: float) -> Tuple[bool, str]:
         """
-        救市 - 系统资金买入后销毁，只推高股价
+        救市/砸盘 - 系统资金买入/卖出后销毁
+        coins > 0: 救市（推高股价）
+        coins < 0: 砸盘（压低股价）
         返回: (成功, 消息)
         """
-        if coins <= 0:
-            return False, "❌ 救市金额必须大于0"
+        if coins == 0:
+            return False, "❌ 金额不能为0"
 
         data = self._get_group_data(group_id)
         old_price = data.get("price", STOCK_CONFIG["base_price"])
 
-        # 救市的影响比普通买入大（基础2%，每5000金币+2%，无上限）
-        impact = 0.02 + coins / 5000 * 0.02
-        new_price = old_price * (1 + impact)
-        new_price = min(STOCK_CONFIG["max_price"], round(new_price, 2))
-        price_change_pct = impact * 100
+        # 计算影响（基础2%，每5000金币+2%，无上限）
+        abs_coins = abs(coins)
+        impact = 0.02 + abs_coins / 5000 * 0.02
 
-        # 计算虚拟购买的股数（用于显示）
-        virtual_shares = coins / new_price
+        if coins > 0:
+            # 救市：推高股价
+            new_price = old_price * (1 + impact)
+            new_price = min(STOCK_CONFIG["max_price"], round(new_price, 2))
+            direction = 1
+            action_texts = self.BAILOUT_TEXTS
+            success_texts = self.BAILOUT_SUCCESS_TEXTS
+            action_name = "救市资金"
+            action_desc = "虚空购入"
+            price_symbol = "📈"
+            change_str = f"+{impact * 100:.2f}%"
+        else:
+            # 砸盘：压低股价
+            new_price = old_price * (1 - impact)
+            new_price = max(STOCK_CONFIG["min_price"], round(new_price, 2))
+            direction = -1
+            action_texts = self.DUMP_TEXTS
+            success_texts = self.DUMP_SUCCESS_TEXTS
+            action_name = "砸盘资金"
+            action_desc = "虚空抛售"
+            price_symbol = "📉"
+            change_str = f"-{impact * 100:.2f}%"
+
+        # 计算虚拟股数（用于显示）
+        virtual_shares = abs_coins / old_price
 
         # 更新股价（不记录持仓！）
         data["price"] = new_price
         data["last_update"] = time.time()
 
-        # 记录救市事件
+        # 记录事件
         event = {
             "time": time.time(),
-            "type": "bailout",
+            "type": "bailout" if coins > 0 else "dump",
             "nickname": "牛牛国家队",
-            "direction": 1,
-            "change_pct": price_change_pct,
-            "desc": random.choice(self.BAILOUT_TEXTS),
+            "direction": direction,
+            "change_pct": impact * 100,
+            "desc": random.choice(action_texts),
         }
 
         if "events" not in data:
@@ -606,16 +659,16 @@ class NiuniuStock:
 
         self._save_data()
 
-        bailout_text = random.choice(self.BAILOUT_TEXTS)
-        success_text = random.choice(self.BAILOUT_SUCCESS_TEXTS)
+        action_text = random.choice(action_texts)
+        success_text = random.choice(success_texts)
 
         return True, (
-            f"{bailout_text}\n"
+            f"{action_text}\n"
             f"═══════════════════════\n"
             f"{STOCK_CONFIG['emoji']} {STOCK_CONFIG['name']}\n"
-            f"💵 救市资金: {coins:.0f}金币\n"
-            f"📦 虚空购入: {virtual_shares:.4f}股 (已销毁)\n"
-            f"📈 股价变动: {old_price:.2f} → {new_price:.2f} (+{price_change_pct:.2f}%)\n"
+            f"💵 {action_name}: {abs_coins:.0f}金币\n"
+            f"📦 {action_desc}: {virtual_shares:.4f}股 (已销毁)\n"
+            f"{price_symbol} 股价变动: {old_price:.2f} → {new_price:.2f} ({change_str})\n"
             f"═══════════════════════\n"
             f"{success_text}"
         )
