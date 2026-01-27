@@ -30,7 +30,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.14.8")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.14.9")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -647,7 +647,6 @@ class NiuniuPlugin(Star):
                 "牛牛股市": self._niuniu_stock,
                 "重置所有牛牛": self._reset_all_niuniu,
                 "牛牛红包": self._niuniu_hongbao,
-                "牛牛补贴": self._niuniu_butie,
                 "牛牛救市": self._niuniu_jiushi
             }
 
@@ -791,7 +790,7 @@ class NiuniuPlugin(Star):
         yield event.plain_result(f"✅ 已重置本群 {reset_count} 个牛牛！\n📋 {type_names[reset_type]}")
 
     async def _niuniu_hongbao(self, event):
-        """牛牛红包 - 给所有人发金币，仅管理员可用"""
+        """牛牛红包 - 给指定用户或所有人发放/扣除属性，仅管理员可用"""
         group_id = str(event.message_obj.group_id)
         user_id = str(event.get_sender_id())
 
@@ -800,69 +799,36 @@ class NiuniuPlugin(Star):
             yield event.plain_result("❌ 只有管理员才能使用此指令")
             return
 
-        # 解析金币数量
-        msg_parts = event.message_str.split()
-        if len(msg_parts) < 2 or not msg_parts[1].isdigit():
-            yield event.plain_result("❌ 格式：牛牛红包 金币数量\n例：牛牛红包 100")
-            return
+        msg = event.message_str.strip()
+        msg_parts = msg.split()
 
-        amount = int(msg_parts[1])
-        if amount <= 0:
-            yield event.plain_result("❌ 红包金额必须大于0")
-            return
-
-        if amount > 10000:
-            yield event.plain_result("❌ 单次红包金额不能超过10000")
-            return
-
-        # 加载数据
-        data = self._load_niuniu_lengths()
-        group_data = data.get(group_id, {})
-
-        # 给所有用户发红包
-        receive_count = 0
-        for uid in list(group_data.keys()):
-            if uid.startswith('_') or uid == 'plugin_enabled':
-                continue
-            if isinstance(group_data[uid], dict) and 'length' in group_data[uid]:
-                group_data[uid]['coins'] = round(group_data[uid].get('coins', 0) + amount)
-                receive_count += 1
-
-        data[group_id] = group_data
-        self._save_niuniu_lengths(data)
-
-        total = amount * receive_count
-        yield event.plain_result(f"🧧 发红包成功！\n💰 每人 {amount} 金币\n👥 共 {receive_count} 人领取\n💵 总计发出 {total} 金币")
-
-    async def _niuniu_butie(self, event):
-        """牛牛补贴 - 给指定用户补贴长度/硬度/金币，仅管理员可用"""
-        group_id = str(event.message_obj.group_id)
-        user_id = str(event.get_sender_id())
-
-        # 检查是否为管理员
-        if not self.is_admin(user_id):
-            yield event.plain_result("❌ 只有管理员才能使用此指令")
-            return
-
-        # 解析@目标
-        target_id = self.parse_target(event)
-        if not target_id:
-            yield event.plain_result("❌ 格式：牛牛补贴 @用户 长度 硬度 金币\n例：牛牛补贴 @xxx 10 5 100\n例：牛牛补贴 @xxx 0 0 -50（倒扣50金币）")
-            return
+        # 检查是否是"所有人"模式
+        is_all = "所有人" in msg or "全体" in msg
 
         # 解析参数（长度、硬度、金币）
-        msg_parts = event.message_str.split()
         numbers = []
         for part in msg_parts:
-            # 支持负数
             try:
-                if part.lstrip('-').isdigit():
-                    numbers.append(int(part))
+                # 支持负数和小数
+                num = float(part) if '.' in part else int(part.lstrip('-') if part.lstrip('-').isdigit() else None)
+                if part.startswith('-'):
+                    num = -abs(num)
+                numbers.append(int(num))
             except:
                 pass
 
         if len(numbers) < 3:
-            yield event.plain_result("❌ 格式：牛牛补贴 @用户 长度 硬度 金币\n例：牛牛补贴 @xxx 10 5 100\n例：牛牛补贴 @xxx 0 0 -50（倒扣50金币）")
+            yield event.plain_result(
+                "🧧 牛牛红包用法：\n"
+                "━━━ 给指定牛友 ━━━\n"
+                "牛牛红包 @用户 <长度> <硬度> <金币>\n"
+                "例：牛牛红包 @xxx 10 5 100\n"
+                "例：牛牛红包 @xxx 0 0 -50\n"
+                "━━━ 给所有牛友 ━━━\n"
+                "牛牛红包 所有人 <长度> <硬度> <金币>\n"
+                "例：牛牛红包 所有人 1 1 100\n"
+                "例：牛牛红包 所有人 -5 0 -50"
+            )
             return
 
         length_change = numbers[0]
@@ -873,46 +839,92 @@ class NiuniuPlugin(Star):
         data = self._load_niuniu_lengths()
         group_data = data.get(group_id, {})
 
-        # 检查目标是否已注册
-        target_data = group_data.get(target_id)
-        if not target_data or not isinstance(target_data, dict) or 'length' not in target_data:
-            yield event.plain_result("❌ 目标用户尚未注册牛牛")
-            return
+        if is_all:
+            # 给所有人发红包
+            affect_count = 0
+            for uid in list(group_data.keys()):
+                if uid.startswith('_') or uid == 'plugin_enabled':
+                    continue
+                if isinstance(group_data[uid], dict) and 'length' in group_data[uid]:
+                    group_data[uid]['length'] = group_data[uid].get('length', 0) + length_change
+                    group_data[uid]['hardness'] = max(0, group_data[uid].get('hardness', 1) + hardness_change)
+                    group_data[uid]['coins'] = round(group_data[uid].get('coins', 0) + coins_change)
+                    affect_count += 1
 
-        target_name = target_data.get('nickname', target_id)
-        old_length = target_data.get('length', 0)
-        old_hardness = target_data.get('hardness', 1)
-        old_coins = target_data.get('coins', 0)
+            data[group_id] = group_data
+            self._save_niuniu_lengths(data)
 
-        # 应用变化
-        new_length = old_length + length_change
-        new_hardness = max(0, old_hardness + hardness_change)  # 硬度最低为0
-        new_coins = round(old_coins + coins_change)  # 金币可以为负数（欠账）
+            # 构建结果消息
+            result_parts = [f"🧧 红包已发放给全体 {affect_count} 位牛友！"]
+            if length_change != 0:
+                sign = "+" if length_change > 0 else ""
+                result_parts.append(f"📏 长度：每人 {sign}{length_change}cm")
+            if hardness_change != 0:
+                sign = "+" if hardness_change > 0 else ""
+                result_parts.append(f"💪 硬度：每人 {sign}{hardness_change}")
+            if coins_change != 0:
+                sign = "+" if coins_change > 0 else ""
+                result_parts.append(f"💰 金币：每人 {sign}{coins_change}")
 
-        target_data['length'] = new_length
-        target_data['hardness'] = new_hardness
-        target_data['coins'] = new_coins
+            if length_change == 0 and hardness_change == 0 and coins_change == 0:
+                result_parts.append("（无变化）")
 
-        group_data[target_id] = target_data
-        data[group_id] = group_data
-        self._save_niuniu_lengths(data)
+            yield event.plain_result("\n".join(result_parts))
+        else:
+            # 给指定用户发红包
+            target_id = self.parse_target(event)
+            if not target_id:
+                yield event.plain_result(
+                    "🧧 牛牛红包用法：\n"
+                    "━━━ 给指定牛友 ━━━\n"
+                    "牛牛红包 @用户 <长度> <硬度> <金币>\n"
+                    "例：牛牛红包 @xxx 10 5 100\n"
+                    "━━━ 给所有牛友 ━━━\n"
+                    "牛牛红包 所有人 <长度> <硬度> <金币>\n"
+                    "例：牛牛红包 所有人 1 1 100"
+                )
+                return
 
-        # 构建结果消息
-        result_parts = [f"✅ 已补贴 {target_name}："]
-        if length_change != 0:
-            sign = "+" if length_change > 0 else ""
-            result_parts.append(f"📏 长度：{old_length}cm → {new_length}cm ({sign}{length_change})")
-        if hardness_change != 0:
-            sign = "+" if hardness_change > 0 else ""
-            result_parts.append(f"💪 硬度：{old_hardness} → {new_hardness} ({sign}{hardness_change})")
-        if coins_change != 0:
-            sign = "+" if coins_change > 0 else ""
-            result_parts.append(f"💰 金币：{old_coins} → {new_coins} ({sign}{coins_change})")
+            # 检查目标是否已注册
+            target_data = group_data.get(target_id)
+            if not target_data or not isinstance(target_data, dict) or 'length' not in target_data:
+                yield event.plain_result("❌ 目标用户尚未注册牛牛")
+                return
 
-        if length_change == 0 and hardness_change == 0 and coins_change == 0:
-            result_parts.append("（无变化）")
+            target_name = target_data.get('nickname', target_id)
+            old_length = target_data.get('length', 0)
+            old_hardness = target_data.get('hardness', 1)
+            old_coins = target_data.get('coins', 0)
 
-        yield event.plain_result("\n".join(result_parts))
+            # 应用变化
+            new_length = old_length + length_change
+            new_hardness = max(0, old_hardness + hardness_change)
+            new_coins = round(old_coins + coins_change)
+
+            target_data['length'] = new_length
+            target_data['hardness'] = new_hardness
+            target_data['coins'] = new_coins
+
+            group_data[target_id] = target_data
+            data[group_id] = group_data
+            self._save_niuniu_lengths(data)
+
+            # 构建结果消息
+            result_parts = [f"🧧 红包已发给 {target_name}："]
+            if length_change != 0:
+                sign = "+" if length_change > 0 else ""
+                result_parts.append(f"📏 长度：{old_length}cm → {new_length}cm ({sign}{length_change})")
+            if hardness_change != 0:
+                sign = "+" if hardness_change > 0 else ""
+                result_parts.append(f"💪 硬度：{old_hardness} → {new_hardness} ({sign}{hardness_change})")
+            if coins_change != 0:
+                sign = "+" if coins_change > 0 else ""
+                result_parts.append(f"💰 金币：{old_coins} → {new_coins} ({sign}{coins_change})")
+
+            if length_change == 0 and hardness_change == 0 and coins_change == 0:
+                result_parts.append("（无变化）")
+
+            yield event.plain_result("\n".join(result_parts))
 
     async def _niuniu_jiushi(self, event):
         """牛牛救市/砸盘 - 系统资金操作股价，仅管理员可用"""
