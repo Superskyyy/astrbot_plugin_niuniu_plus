@@ -1044,7 +1044,8 @@ def stock_hook(group_id: str,
                hardness_change: int = 0,
                coins_change: float = 0,
                volatility: Tuple[float, float] = None,
-               templates: Dict[str, List[str]] = None) -> str:
+               templates: Dict[str, List[str]] = None,
+               mean_reversion: bool = False) -> str:
     """
     股市钩子函数 - 供其他模块调用
 
@@ -1062,6 +1063,8 @@ def stock_hook(group_id: str,
         templates: 自定义模板 {"up": [...], "down": [...], "plain": [...]}
                    如果提供 plain，则使用 plain 模板（不区分涨跌）
                    如果提供了 templates，则忽略 event_type 的内置模板
+        mean_reversion: 是否使用均值回归模式（道具购买专用）
+                        True时涨跌概率由当前股价与基准价的偏离决定
 
     Returns:
         股市影响消息，可附加到事件输出末尾
@@ -1076,10 +1079,10 @@ def stock_hook(group_id: str,
                          volatility=(0.03, 0.10),
                          templates={"up": ["劫富成功！牛市狂欢！"], "down": ["劫富翻车！"]})
 
-        # 工具类道具，使用 plain 模板
-        msg = stock_hook(group_id, "小明", item_name="驱牛药",
-                         volatility=(0.001, 0.005),
-                         templates={"plain": ["{nickname} 使用了 {item_name}，股市反应平淡"]})
+        # 道具购买，使用均值回归模式
+        msg = stock_hook(group_id, "小明", item_name="巴黎牛家",
+                         volatility=(0.02, 0.06),
+                         mean_reversion=True)
     """
     try:
         stock = NiuniuStock.get()
@@ -1100,13 +1103,31 @@ def stock_hook(group_id: str,
         total_change = length_change + hardness_change * 10 + coins_change * 0.1
         magnitude = min(3.0, 1.0 + abs(total_change) / 50)
 
-        # 计算涨跌概率：变化量影响概率，但不是100%确定
-        # 基础概率 50%，变化量可以将概率偏移到 15%-85%
-        # 混沌和全局事件保持 50/50
-        if event_type in ("chaos", "global"):
+        # 计算涨跌概率
+        if mean_reversion:
+            # 均值回归模式（道具购买专用）
+            # 股价高于基准 → 倾向下跌回归
+            # 股价低于基准 → 倾向上涨回归
+            base_price = STOCK_CONFIG["base_price"]
+            deviation = (old_price - base_price) / base_price  # 偏离比例
+
+            # 偏离越大，回归力度越大（最高85%概率回归）
+            regression_strength = min(0.35, abs(deviation) * 0.5)
+
+            if deviation > 0:
+                # 股价偏高，倾向下跌回归
+                up_probability = 0.5 - regression_strength
+            elif deviation < 0:
+                # 股价偏低，倾向上涨回归
+                up_probability = 0.5 + regression_strength
+            else:
+                up_probability = 0.5
+        elif event_type in ("chaos", "global"):
+            # 混沌和全局事件保持 50/50
             up_probability = 0.5
         else:
-            # 变化量越大，概率偏移越大，最多偏移 35%（妖股就要妖）
+            # 常规模式：变化量影响概率
+            # 基础概率 50%，变化量可以将概率偏移到 15%-85%
             # 正变化 → 涨概率增加，负变化 → 跌概率增加
             bias = min(0.35, abs(total_change) / 50 * 0.35)  # 最多偏移 35%
             if total_change > 0:

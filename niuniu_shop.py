@@ -1368,7 +1368,8 @@ class NiuniuShop:
             target_coins = user_coins - final_price + insurance_payout
             self.update_user_coins(group_id, user_id, target_coins)
 
-            # 股市钩子 - 使用道具的 stock_config
+            # 股市钩子 - 道具购买使用均值回归模式
+            # 股价高于基准时倾向下跌，低于基准时倾向上涨，起到市场稳定器作用
             item_name = selected_item.get('name', '')
             item_length_change = ctx.length_change if ctx else 0
             item_hardness_change = ctx.hardness_change if ctx else 0
@@ -1384,7 +1385,8 @@ class NiuniuShop:
                     length_change=item_length_change,
                     hardness_change=item_hardness_change,
                     volatility=stock_cfg.get('volatility'),
-                    templates=stock_cfg.get('templates')
+                    templates=stock_cfg.get('templates'),
+                    mean_reversion=True  # 道具购买启用均值回归
                 )
             else:
                 # 没有 stock_config 的道具，使用默认平淡模板
@@ -1394,7 +1396,8 @@ class NiuniuShop:
                     length_change=item_length_change,
                     hardness_change=item_hardness_change,
                     volatility=(0.001, 0.005),
-                    templates={"plain": ["{nickname} 使用了 {item_name}，股市反应平淡 {change}"]}
+                    templates={"plain": ["{nickname} 使用了 {item_name}，股市反应平淡 {change}"]},
+                    mean_reversion=True  # 道具购买启用均值回归
                 )
             if stock_msg:
                 result_msg.append(stock_msg)
