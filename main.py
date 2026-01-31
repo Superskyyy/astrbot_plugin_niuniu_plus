@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.19.0")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.19.1")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -2881,7 +2881,9 @@ class NiuniuPlugin(Star):
                 robber=nickname,
                 victim=target_data['nickname']
             )
-            yield event.plain_result(fail_text)
+            # 添加调试信息
+            debug_info = f"\n📊 胜率: {win_prob:.1%} | ⏰ CD已更新: {RobberyConfig.COOLDOWN//60}分钟"
+            yield event.plain_result(fail_text + debug_info)
             return
 
         # === 抢劫成功！===
