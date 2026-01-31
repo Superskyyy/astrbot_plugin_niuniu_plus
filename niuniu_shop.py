@@ -1036,7 +1036,6 @@ class NiuniuShop:
                         return
 
                     # 循环触发N次，累积效果
-                    from niuniu_effects import EffectTrigger, EffectContext
                     total_length_change = 0
                     total_hardness_change = 0
                     total_shield_charges = 0
