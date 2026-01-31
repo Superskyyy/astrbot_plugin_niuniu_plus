@@ -706,7 +706,7 @@ class HeidongConfig:
 # 金币消失 Configuration (大自爆/黑洞/月牙天冲)
 # =============================================================================
 class CoinVanishConfig:
-    TRIGGER_CHANCE = 0.75          # 75% 概率触发金币损失
+    TRIGGER_CHANCE = 0.50          # 50% 概率触发金币损失
     # 金币损失档位（递减概率）
     # 格式：(最小比例, 最大比例, 概率)
     LOSS_TIERS = [
