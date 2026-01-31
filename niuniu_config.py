@@ -7,7 +7,7 @@
 PLUGIN_DIR = 'data/plugins/astrbot_plugin_niuniu_plus'
 NIUNIU_LENGTHS_FILE = 'data/niuniu_lengths.yml'
 SIGN_DATA_FILE = 'data/sign_data.yml'
-SHOP_CONFIG_FILE = f'{PLUGIN_DIR}/niuniu_shop.yml'
+SHOP_CONFIG_FILE = f'{PLUGIN_DIR}/niuniu_store.yml'
 LAST_ACTION_FILE = f'{PLUGIN_DIR}/last_actions.yml'
 
 # 文本配置文件（项目根目录）
