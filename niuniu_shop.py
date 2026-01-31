@@ -839,8 +839,11 @@ class NiuniuShop:
                     digit_count = len(str(price_per_buy))
                     result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
 
+                # 扣除金币（含税）
+                self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
                 self._save_user_data(group_id, user_id, user_data)
-                final_price = total_cost_with_tax  # 更新为总花费（含税）
+                yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
+                return
 
             elif selected_item['type'] == 'active':
                 # Active items - 区分简单道具和复杂道具
@@ -1913,9 +1916,20 @@ class NiuniuShop:
 
         except Exception as e:
             import traceback
-            print(f"[NiuniuShop] 购买错误: {str(e)}")
+            error_msg = str(e)
+            error_type = type(e).__name__
+
+            # 打印到控制台（包含完整traceback）
+            print(f"[NiuniuShop] 购买错误: {error_type}: {error_msg}")
             traceback.print_exc()
-            yield event.plain_result("⚠️ 购买过程中出现错误，请稍后再试")
+
+            # 返回到群里（包含错误类型和消息）
+            yield event.plain_result(
+                f"⚠️ 购买失败！\n"
+                f"错误类型: {error_type}\n"
+                f"错误信息: {error_msg}\n"
+                f"请截图反馈给管理员"
+            )
 
     async def show_items(self, event: AstrMessageEvent):
         """显示用户道具及金币总额"""

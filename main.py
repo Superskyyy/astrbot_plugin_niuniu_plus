@@ -1008,10 +1008,25 @@ class NiuniuPlugin(Star):
 
             yield event.plain_result(message)
         except Exception as e:
+            import traceback
+            error_msg = str(e)
+            error_type = type(e).__name__
+
             # 发生异常，退款
             user_data['coins'] = current_coins
             self.update_user_data(group_id, user_id, user_data)
-            yield event.plain_result(f"❌ 订阅失败：系统错误")
+
+            # 打印到控制台
+            print(f"[Subscribe] 订阅失败: {error_type}: {error_msg}")
+            traceback.print_exc()
+
+            # 返回到群里
+            yield event.plain_result(
+                f"❌ 订阅失败！已退款\n"
+                f"错误类型: {error_type}\n"
+                f"错误信息: {error_msg}\n"
+                f"请截图反馈给管理员"
+            )
             return
 
     async def _unsubscribe(self, event):
