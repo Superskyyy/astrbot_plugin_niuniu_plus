@@ -1611,11 +1611,18 @@ class NiuniuShop:
                         if result_type == 'backfire':
                             coin_vanish_victims.append(user_id)
 
-                        # 对每个受害者应用金币消失
+                        # 对每个受害者应用金币消失（优化：传入group_data避免重复I/O）
+                        coin_changes = []  # 收集所有金币变化
                         for victim_id in coin_vanish_victims:
-                            vanish_info = self._apply_coin_vanish(group_id, victim_id, "牛牛黑洞")
-                            if vanish_info['vanished']:
+                            vanish_info = self._apply_coin_vanish(group_id, victim_id, "牛牛黑洞", group_data)
+                            if vanish_info.get('vanished'):
                                 result_msg.append(vanish_info['message'])
+                                coin_changes.append((victim_id, vanish_info['coin_change']))
+
+                        # 批量应用金币变化（单次I/O）
+                        if coin_changes:
+                            for vid, change in coin_changes:
+                                self.modify_coins(group_id, vid, change)
 
                         self._save_niuniu_data(niuniu_data)
 
@@ -1671,13 +1678,19 @@ class NiuniuShop:
                         # 发起人自己也可能失去金币（自己归零了）
                         coin_vanish_victims.append(user_id)
 
-                        # 对每个受害者应用金币消失
+                        # 对每个受害者应用金币消失（优化：传入group_data）
+                        coin_changes = []
                         for victim_id in coin_vanish_victims:
-                            vanish_info = self._apply_coin_vanish(group_id, victim_id, "月牙天冲")
-                            if vanish_info['vanished']:
+                            vanish_info = self._apply_coin_vanish(group_id, victim_id, "月牙天冲", group_data)
+                            if vanish_info.get('vanished'):
                                 result_msg.append(vanish_info['message'])
+                                coin_changes.append((victim_id, vanish_info['coin_change']))
 
                         self._save_niuniu_data(niuniu_data)
+
+                        # 批量应用金币变化
+                        for vid, change in coin_changes:
+                            self.modify_coins(group_id, vid, change)
 
                     # 处理牛牛大自爆的特殊逻辑（合并护盾消耗+祸水东引）
                     if ctx.extra.get('dazibao'):
@@ -1748,13 +1761,19 @@ class NiuniuShop:
                         # 发起人自己也可能失去金币（自己归零了）
                         coin_vanish_victims.append(user_id)
 
-                        # 对每个受害者应用金币消失
+                        # 对每个受害者应用金币消失（优化：传入group_data）
+                        coin_changes = []
                         for victim_id in coin_vanish_victims:
-                            vanish_info = self._apply_coin_vanish(group_id, victim_id, "牛牛大自爆")
-                            if vanish_info['vanished']:
+                            vanish_info = self._apply_coin_vanish(group_id, victim_id, "牛牛大自爆", group_data)
+                            if vanish_info.get('vanished'):
                                 result_msg.append(vanish_info['message'])
+                                coin_changes.append((victim_id, vanish_info['coin_change']))
 
                         self._save_niuniu_data(niuniu_data)
+
+                        # 批量应用金币变化
+                        for vid, change in coin_changes:
+                            self.modify_coins(group_id, vid, change)
 
                     # 处理牛牛盾牌护盾增加
                     if ctx.extra.get('add_shield_charges'):
