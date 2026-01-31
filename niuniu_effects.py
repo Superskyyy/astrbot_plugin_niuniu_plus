@@ -54,6 +54,9 @@ def _calculate_subscription_daily_price(base_price: int, user_coins: int) -> int
     Returns:
         实际每日价格
     """
+    # 防止负数金币获得折扣
+    user_coins = max(0, user_coins)
+
     # 计算基础价的位数
     digits = len(str(base_price))
     tax_rate = digits / 100.0  # 几位数就是%几
