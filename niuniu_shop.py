@@ -8,7 +8,7 @@ from astrbot.core.message.components import Node, Nodes, Plain, At
 from astrbot.core.message.message_event_result import MessageEventResult
 from niuniu_config import (
     PLUGIN_DIR, NIUNIU_LENGTHS_FILE, SIGN_DATA_FILE, SHOP_CONFIG_FILE,
-    DEFAULT_SHOP_ITEMS
+    DEFAULT_SHOP_ITEMS, CoinVanishConfig
 )
 from niuniu_effects import EffectTrigger, EffectContext
 from niuniu_stock import stock_hook
@@ -93,9 +93,9 @@ class NiuniuShop:
                     if len(all_lengths) >= JunfukaConfig.MIN_PLAYERS:
                         avg_length = sum(all_lengths) / len(all_lengths)
                         total_diff = sum(abs(length - avg_length) for length in all_lengths)
-                        dynamic_price = int(JunfukaConfig.BASE_PRICE + total_diff * JunfukaConfig.TOTAL_DIFF_COEFFICIENT)
-                        dynamic_price = max(JunfukaConfig.MIN_PRICE, dynamic_price)
-                        price_str = f"{dynamic_price} 💰 (当前群价)"
+                        base_dynamic_price = int(JunfukaConfig.BASE_PRICE + total_diff * JunfukaConfig.TOTAL_DIFF_COEFFICIENT)
+                        base_dynamic_price = max(JunfukaConfig.MIN_PRICE, base_dynamic_price)
+                        price_str = f"{base_dynamic_price} 💰 + 你的金币×50% (动态)"
                     else:
                         price_str = f"需≥{JunfukaConfig.MIN_PLAYERS}人"
                 else:
@@ -198,7 +198,7 @@ class NiuniuShop:
         """更新总金币"""
         current_coins = self.get_user_coins(group_id, user_id)
         delta = current_coins - coins  # 需要扣除的金币数量
-        
+
         game_coins = self._get_new_game_coins(group_id, user_id)
         if game_coins >= delta:
             self._update_new_game_coins(group_id, user_id, game_coins - delta)
@@ -207,6 +207,91 @@ class NiuniuShop:
             self._update_new_game_coins(group_id, user_id, 0)
             sign_coins = self.get_sign_coins(group_id, user_id)
             self.update_sign_coins(group_id, user_id, sign_coins - remaining)
+
+    def modify_coins(self, group_id: str, user_id: str, delta: float):
+        """修改金币（增加或减少）
+
+        Args:
+            group_id: 群组ID
+            user_id: 用户ID
+            delta: 金币变化量（正数=增加，负数=减少）
+        """
+        current_coins = self.get_user_coins(group_id, user_id)
+        new_coins = current_coins + delta
+        self.update_user_coins(group_id, user_id, new_coins)
+
+    def _calculate_purchase_tax(self, user_coins: float, item_price: int) -> int:
+        """计算购买消费税：用户金币 × 道具价格位数%
+
+        税率规则：几位数就是%几
+        - 100（3位数）→ 3%税率
+        - 1000（4位数）→ 4%税率
+        - 10000（5位数）→ 5%税率
+
+        Args:
+            user_coins: 用户当前金币总额
+            item_price: 道具价格
+
+        Returns:
+            消费税金额（整数）
+        """
+        if item_price <= 0:
+            return 0
+        # 计算价格的位数
+        digit_count = len(str(item_price))
+        # 税率 = 位数%
+        tax_rate = digit_count / 100.0
+        # 计算税额
+        tax = int(user_coins * tax_rate)
+        return tax
+
+    def _calculate_max_purchases_with_tax(self, user_coins: float, price_per_buy: int) -> int:
+        """计算考虑消费税后最多能购买多少次
+
+        通过循环模拟购买过程，每次扣除道具价格+消费税
+
+        Args:
+            user_coins: 用户当前金币总额
+            price_per_buy: 单次购买价格
+
+        Returns:
+            最多可购买次数
+        """
+        remaining_coins = user_coins
+        count = 0
+        while True:
+            tax = self._calculate_purchase_tax(remaining_coins, price_per_buy)
+            total_cost = price_per_buy + tax
+            if remaining_coins >= total_cost:
+                remaining_coins -= total_cost
+                count += 1
+            else:
+                break
+        return count
+
+    def _calculate_batch_purchase_taxes(self, user_coins: float, price_per_buy: int,
+                                        purchase_count: int) -> tuple:
+        """计算批量购买的总税额（考虑每次购买后金币递减）
+
+        Args:
+            user_coins: 用户当前金币总额
+            price_per_buy: 单次购买价格
+            purchase_count: 购买次数
+
+        Returns:
+            (总税额, 每次税额列表)
+        """
+        remaining_coins = user_coins
+        total_tax = 0
+        tax_list = []
+
+        for _ in range(purchase_count):
+            tax = self._calculate_purchase_tax(remaining_coins, price_per_buy)
+            tax_list.append(tax)
+            total_tax += tax
+            remaining_coins -= (price_per_buy + tax)
+
+        return total_tax, tax_list
 
     def _get_user_data(self, group_id: str, user_id: str) -> Dict[str, Any]:
         """获取用户数据"""
@@ -267,6 +352,77 @@ class NiuniuShop:
             length_loss=length_damage, hardness_loss=hardness_damage,
             group_data=group_data
         )
+
+    def _apply_coin_vanish(self, group_id: str, victim_id: str, item_name: str) -> Dict[str, Any]:
+        """
+        计算并执行金币消失（用于大自爆/黑洞/月牙天冲）
+
+        Args:
+            group_id: 群组ID
+            victim_id: 受害者ID
+            item_name: 道具名称（用于显示）
+
+        Returns:
+            消失信息字典，包含:
+            - vanished: 是否触发金币消失
+            - amount: 消失的金币数量
+            - percent: 消失的百分比
+            - message: 消息文本
+        """
+        # 75%概率触发
+        if random.random() > CoinVanishConfig.TRIGGER_CHANCE:
+            return {'vanished': False}
+
+        # 获取受害者当前金币
+        victim_coins = self.get_user_coins(group_id, victim_id)
+        if victim_coins <= 0:
+            return {'vanished': False}
+
+        # 根据概率档位随机选择损失比例
+        rand = random.random()
+        cumulative_prob = 0
+        loss_percent = 0.05  # 默认5%
+
+        for min_pct, max_pct, prob in CoinVanishConfig.LOSS_TIERS:
+            cumulative_prob += prob
+            if rand < cumulative_prob:
+                loss_percent = random.uniform(min_pct, max_pct)
+                break
+
+        # 计算消失金币数量
+        vanish_amount = int(victim_coins * loss_percent)
+        if vanish_amount <= 0:
+            return {'vanished': False}
+
+        # 扣除金币
+        self.modify_coins(group_id, victim_id, -vanish_amount)
+
+        # 获取受害者数据用于显示名称
+        niuniu_data = self._load_niuniu_data()
+        group_data = niuniu_data.get(group_id, {})
+        victim_data = group_data.get(victim_id, {})
+        victim_name = victim_data.get('nickname', victim_id) if isinstance(victim_data, dict) else victim_id
+
+        # 根据道具生成不同的消息
+        if item_name == "牛牛大自爆":
+            emoji = "💥"
+            verb = "炸飞"
+        elif item_name == "牛牛黑洞":
+            emoji = "🌀"
+            verb = "吸走"
+        else:  # 月牙天冲
+            emoji = "🌙"
+            verb = "震碎"
+
+        message = f"{emoji} {victim_name} 被{verb}了 {vanish_amount} 枚金币（{loss_percent*100:.1f}%）！"
+
+        return {
+            'vanished': True,
+            'amount': vanish_amount,
+            'percent': loss_percent,
+            'victim_name': victim_name,
+            'message': message
+        }
 
     def _check_risk_transfer(self, group_data: Dict[str, Any], victim_id: str,
                              length_damage: int, hardness_damage: int,
@@ -590,15 +746,19 @@ class NiuniuShop:
         user_coins = self.get_user_coins(group_id, user_id)
 
         # 检查用户是否有足够的金币（动态定价道具跳过，在效果中检查）
-        if not selected_item.get('dynamic_price') and user_coins < selected_item['price']:
-            shortfall = selected_item['price'] - user_coins
-            yield event.plain_result(
-                f"❌ 金币不足，无法购买\n"
-                f"📋 需要: {selected_item['price']} 金币\n"
-                f"📊 你有: {int(user_coins)} 金币\n"
-                f"⚠️ 还差: {int(shortfall)} 金币"
-            )
-            return
+        if not selected_item.get('dynamic_price'):
+            price = selected_item['price']
+            tax = self._calculate_purchase_tax(user_coins, price)
+            total_needed = price + tax
+            if user_coins < total_needed:
+                shortfall = total_needed - user_coins
+                yield event.plain_result(
+                    f"❌ 金币不足，无法购买\n"
+                    f"📋 需要: {price} 金币 + {tax} 消费税 = {total_needed} 金币\n"
+                    f"📊 你有: {int(user_coins)} 金币\n"
+                    f"⚠️ 还差: {int(shortfall)} 金币"
+                )
+                return
 
         try:
             result_msg = []
@@ -621,19 +781,22 @@ class NiuniuShop:
                     yield event.plain_result(f"⚠️ 已达到最大持有量（当前{current}个，最大{max_count}个）")
                     return
 
-                # 计算可以购买的次数
+                # 计算可以购买的次数（考虑消费税）
                 remaining_capacity = max_count - current
                 max_buys_by_capacity = remaining_capacity // quantity_per_buy
-                max_buys_by_coins = int(user_coins // price_per_buy)
+                max_buys_by_coins = self._calculate_max_purchases_with_tax(user_coins, price_per_buy)
 
                 actual_buy_count = min(buy_count, max_buys_by_capacity, max_buys_by_coins)
 
                 if actual_buy_count <= 0:
                     if max_buys_by_coins <= 0:
-                        shortfall = price_per_buy - user_coins
+                        # 计算第一次购买需要的总金额（含税）
+                        first_tax = self._calculate_purchase_tax(user_coins, price_per_buy)
+                        total_needed = price_per_buy + first_tax
+                        shortfall = total_needed - user_coins
                         yield event.plain_result(
                             f"❌ 金币不足，无法购买\n"
-                            f"📋 需要: {price_per_buy} 金币\n"
+                            f"📋 需要: {price_per_buy} 金币 + {first_tax} 消费税 = {total_needed} 金币\n"
                             f"📊 你有: {int(user_coins)} 金币\n"
                             f"⚠️ 还差: {int(shortfall)} 金币"
                         )
@@ -644,7 +807,20 @@ class NiuniuShop:
                 total_quantity = quantity_per_buy * actual_buy_count
                 total_cost = price_per_buy * actual_buy_count
 
+                # 计算批量购买的总税额（每次购买后金币递减）
+                purchase_tax, tax_list = self._calculate_batch_purchase_taxes(user_coins, price_per_buy, actual_buy_count)
+                total_cost_with_tax = total_cost + purchase_tax
+
                 user_data['items'][selected_item['name']] = current + total_quantity
+
+                # 小蓝片特殊处理：购买时扣除10%长度
+                if selected_item['name'] == '小蓝片':
+                    from niuniu_config import format_length_change
+                    current_length = user_data.get('length', 0)
+                    length_cost = round(current_length * 0.1 * actual_buy_count, 2)
+                    if length_cost > 0:
+                        user_data['length'] = max(0, current_length - length_cost)
+                        result_msg.append(f"💊 小蓝片副作用：消耗了 {format_length_change(-length_cost)}")
 
                 if actual_buy_count == 1:
                     result_msg.append(f"📦 获得 {selected_item['name']}x{total_quantity}")
@@ -658,8 +834,13 @@ class NiuniuShop:
                     else:
                         result_msg.append(f"⚠️ 金币不足，仅购买{actual_buy_count}次")
 
+                # 显示消费税信息
+                if purchase_tax > 0:
+                    digit_count = len(str(price_per_buy))
+                    result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
+
                 self._save_user_data(group_id, user_id, user_data)
-                final_price = total_cost  # 更新为总花费
+                final_price = total_cost_with_tax  # 更新为总花费（含税）
 
             elif selected_item['type'] == 'active':
                 # Active items - 区分简单道具和复杂道具
@@ -667,13 +848,18 @@ class NiuniuShop:
                 effect = self.main.effects.effects.get(selected_item['name'])
 
                 # 复杂道具列表（有特殊逻辑或动态效果，不支持批量购买）
-                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛盾牌', '祸水东引', '上保险', '穷牛一生', '牛牛黑洞', '巴黎牛家', '赌徒骰子', '绝对值！', '牛牛寄生', '驱牛药', '牛牛均富/负卡', '牛牛反弹']
+                # 移除了：祸水东引、上保险、牛牛反弹、巴黎牛家、赌徒骰子、穷牛一生（改为支持批量购买）
+                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '绝对值！', '牛牛寄生', '驱牛药', '牛牛均富/负卡']
+                # 需要循环触发的道具（每次效果独立，不能简单乘以次数）
+                loop_trigger_items = ['祸水东引', '上保险', '牛牛反弹', '巴黎牛家', '赌徒骰子', '穷牛一生']
                 is_simple_item = selected_item['name'] not in complex_items
+                is_dunpai = selected_item['name'] == '牛牛盾牌'  # 牛牛盾牌支持批量购买但需特殊处理
+                is_loop_trigger = selected_item['name'] in loop_trigger_items  # 需要循环触发
 
-                # 简单道具支持批量购买
-                if is_simple_item and buy_count > 1:
+                # 简单道具支持批量购买（排除需要循环触发的道具）
+                if is_simple_item and not is_loop_trigger and buy_count > 1:
                     price_per_buy = selected_item['price']
-                    max_buys_by_coins = int(user_coins // price_per_buy)
+                    max_buys_by_coins = self._calculate_max_purchases_with_tax(user_coins, price_per_buy)
 
                     # 检查硬度上限限制可购买次数
                     max_buys_by_hardness = buy_count
@@ -691,10 +877,13 @@ class NiuniuShop:
                     actual_buy_count = min(buy_count, max_buys_by_coins, max_buys_by_hardness)
 
                     if actual_buy_count <= 0:
-                        shortfall = price_per_buy - user_coins
+                        # 计算第一次购买需要的总金额（含税）
+                        first_tax = self._calculate_purchase_tax(user_coins, price_per_buy)
+                        total_needed = price_per_buy + first_tax
+                        shortfall = total_needed - user_coins
                         yield event.plain_result(
                             f"❌ 金币不足，无法购买\n"
-                            f"📋 需要: {price_per_buy} 金币\n"
+                            f"📋 需要: {price_per_buy} 金币 + {first_tax} 消费税 = {total_needed} 金币\n"
                             f"📊 你有: {int(user_coins)} 金币\n"
                             f"⚠️ 还差: {int(shortfall)} 金币"
                         )
@@ -704,6 +893,10 @@ class NiuniuShop:
                     total_length_change = (effect.length_change if hasattr(effect, 'length_change') else 0) * actual_buy_count
                     total_hardness_change = (effect.hardness_change if hasattr(effect, 'hardness_change') else 0) * actual_buy_count
                     total_cost = price_per_buy * actual_buy_count
+
+                    # 计算批量购买的总税额（每次购买后金币递减）
+                    purchase_tax, tax_list = self._calculate_batch_purchase_taxes(user_coins, price_per_buy, actual_buy_count)
+                    total_cost_with_tax = total_cost + purchase_tax
 
                     # 应用效果
                     old_length = user_data.get('length', 0)
@@ -732,13 +925,256 @@ class NiuniuShop:
                     else:
                         result_msg.append(f"📦 批量购买{actual_buy_count}次")
 
-                    # 扣除金币
-                    self.update_user_coins(group_id, user_id, user_coins - total_cost)
+                    # 显示消费税信息
+                    if purchase_tax > 0:
+                        first_digit = int(str(price_per_buy)[0])
+                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{first_digit}%税率）")
+
+                    # 扣除金币（含税）
+                    self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
+                    yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
+                    return
+
+                # 牛牛盾牌批量购买特殊处理（每次扣除当前50%）
+                if is_dunpai and buy_count > 1:
+                    from niuniu_config import NiuniuDunpaiConfig
+                    price_per_buy = selected_item['price']
+                    max_buys_by_coins = self._calculate_max_purchases_with_tax(user_coins, price_per_buy)
+                    actual_buy_count = min(buy_count, max_buys_by_coins)
+
+                    if actual_buy_count <= 0:
+                        # 计算第一次购买需要的总金额（含税）
+                        first_tax = self._calculate_purchase_tax(user_coins, price_per_buy)
+                        total_needed = price_per_buy + first_tax
+                        shortfall = total_needed - user_coins
+                        yield event.plain_result(
+                            f"❌ 金币不足，无法购买\n"
+                            f"📋 需要: {price_per_buy} 金币 + {first_tax} 消费税 = {total_needed} 金币\n"
+                            f"📊 你有: {int(user_coins)} 金币\n"
+                            f"⚠️ 还差: {int(shortfall)} 金币"
+                        )
+                        return
+
+                    # 循环购买，每次基于当前值扣除50%
+                    current_length = user_data.get('length', 0)
+                    current_hardness = user_data.get('hardness', 1)
+                    original_length = current_length
+                    original_hardness = current_hardness
+                    total_shield_charges = 0
+
+                    for i in range(actual_buy_count):
+                        # 计算本次代价（基于当前值的50%）
+                        length_cost = int(abs(current_length) * 0.5)
+                        hardness_cost = int(current_hardness * 0.5)
+
+                        # 扣除代价
+                        if current_length > 0:
+                            current_length -= length_cost
+                        else:
+                            current_length += length_cost  # 负数长度：让它更接近0
+                        current_hardness -= hardness_cost
+
+                        # 增加护盾
+                        total_shield_charges += NiuniuDunpaiConfig.SHIELD_CHARGES
+
+                    # 应用最终结果
+                    user_data['length'] = current_length
+                    user_data['hardness'] = max(1, current_hardness)
+                    user_data['shield_charges'] = user_data.get('shield_charges', 0) + total_shield_charges
+                    self._save_user_data(group_id, user_id, user_data)
+
+                    # 生成消息
+                    length_change = current_length - original_length
+                    hardness_change = user_data['hardness'] - original_hardness
+                    result_msg.append(f"🛡️ 批量购买牛牛盾牌 ×{actual_buy_count}")
+                    result_msg.append(f"⚠️ 累计代价：长度 {original_length}cm → {current_length}cm ({length_change:+}cm)")
+                    result_msg.append(f"⚠️ 累计代价：硬度 {original_hardness} → {user_data['hardness']} ({hardness_change:+})")
+                    result_msg.append(f"🔒 累计获得 {total_shield_charges} 次护盾防护（{NiuniuDunpaiConfig.SHIELD_CHARGES}×{actual_buy_count}）")
+                    result_msg.append(f"📊 当前护盾总计：{user_data['shield_charges']} 次")
+
+                    if actual_buy_count < buy_count:
+                        result_msg.append(f"⚠️ 金币不足，仅购买{actual_buy_count}次")
+
+                    # 计算批量购买的总税额（每次购买后金币递减）
+                    purchase_tax, tax_list = self._calculate_batch_purchase_taxes(user_coins, price_per_buy, actual_buy_count)
+                    if purchase_tax > 0:
+                        digit_count = len(str(price_per_buy))
+                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
+
+                    # 扣除金币（含税）
+                    total_cost = price_per_buy * actual_buy_count
+                    total_cost_with_tax = total_cost + purchase_tax
+                    self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
+                    yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
+                    return
+
+                # 循环触发道具批量购买（祸水东引、上保险、牛牛反弹、巴黎牛家、赌徒骰子、穷牛一生）
+                if is_loop_trigger and buy_count > 1:
+                    # 检查效果是否存在
+                    if not effect or EffectTrigger.ON_PURCHASE not in effect.triggers:
+                        yield event.plain_result(f"⚠️ 道具效果配置错误：{selected_item['name']}")
+                        return
+
+                    price_per_buy = selected_item['price']
+                    max_buys_by_coins = self._calculate_max_purchases_with_tax(user_coins, price_per_buy)
+                    actual_buy_count = min(buy_count, max_buys_by_coins)
+
+                    if actual_buy_count <= 0:
+                        # 计算第一次购买需要的总金额（含税）
+                        first_tax = self._calculate_purchase_tax(user_coins, price_per_buy)
+                        total_needed = price_per_buy + first_tax
+                        shortfall = total_needed - user_coins
+                        yield event.plain_result(
+                            f"❌ 金币不足，无法购买\n"
+                            f"📋 需要: {price_per_buy} 金币 + {first_tax} 消费税 = {total_needed} 金币\n"
+                            f"📊 你有: {int(user_coins)} 金币\n"
+                            f"⚠️ 还差: {int(shortfall)} 金币"
+                        )
+                        return
+
+                    # 循环触发N次，累积效果
+                    from niuniu_effects import EffectTrigger, EffectContext
+                    total_length_change = 0
+                    total_hardness_change = 0
+                    total_shield_charges = 0
+                    total_risk_transfer_charges = 0
+                    total_reflect_charges = 0
+                    total_insurance_charges = 0
+                    all_messages = []
+
+                    original_length = user_data.get('length', 0)
+                    original_hardness = user_data.get('hardness', 1)
+                    current_length = original_length
+                    current_hardness = original_hardness
+
+                    successfully_bought = 0  # 实际成功购买次数
+                    for i in range(actual_buy_count):
+                        # 检查硬度是否已达上限
+                        if current_hardness >= DajiaoConfig.MAX_HARDNESS:
+                            break  # 硬度已达上限，提前终止
+
+                        # 创建效果上下文
+                        extra_data = {
+                            'item_name': selected_item['name'],
+                            'user_coins': user_coins,
+                            'effects_manager': self.main.effects
+                        }
+                        ctx = EffectContext(
+                            group_id=group_id,
+                            user_id=user_id,
+                            nickname=nickname,
+                            user_data=user_data,
+                            user_length=current_length,
+                            user_hardness=current_hardness,
+                            extra=extra_data
+                        )
+
+                        # 触发效果
+                        if effect and EffectTrigger.ON_PURCHASE in effect.triggers:
+                            ctx = effect.on_trigger(EffectTrigger.ON_PURCHASE, ctx)
+
+                            # 累积长度和硬度变化
+                            total_length_change += ctx.length_change
+                            total_hardness_change += ctx.hardness_change
+                            current_length += ctx.length_change
+                            current_hardness += ctx.hardness_change
+
+                            # 累积各种次数增加
+                            total_shield_charges += ctx.extra.get('add_shield_charges', 0)
+                            total_risk_transfer_charges += ctx.extra.get('add_risk_transfer_charges', 0)
+                            total_reflect_charges += ctx.extra.get('add_reflect_charges', 0)
+                            total_insurance_charges += ctx.extra.get('add_insurance_charges', 0)
+
+                            # 收集第一次的消息作为示例
+                            if i == 0:
+                                all_messages = ctx.messages
+
+                            successfully_bought += 1
+
+                    # 如果一次都没购买成功，提示用户
+                    if successfully_bought == 0:
+                        yield event.plain_result(f"⚠️ 硬度已达上限（{DajiaoConfig.MAX_HARDNESS}），无法购买增加硬度的道具")
+                        return
+
+                    # 应用最终效果
+                    user_data['length'] = max(-999999, min(999999, original_length + total_length_change))
+                    user_data['hardness'] = min(DajiaoConfig.MAX_HARDNESS, max(1, original_hardness + total_hardness_change))
+                    if total_shield_charges > 0:
+                        user_data['shield_charges'] = user_data.get('shield_charges', 0) + total_shield_charges
+                    if total_risk_transfer_charges > 0:
+                        user_data['risk_transfer_charges'] = user_data.get('risk_transfer_charges', 0) + total_risk_transfer_charges
+                    if total_reflect_charges > 0:
+                        user_data['reflect_charges'] = user_data.get('reflect_charges', 0) + total_reflect_charges
+                    if total_insurance_charges > 0:
+                        user_data['insurance_charges'] = user_data.get('insurance_charges', 0) + total_insurance_charges
+
+                    self._save_user_data(group_id, user_id, user_data)
+
+                    # 生成汇总消息
+                    result_msg.append(f"📦 批量购买 {selected_item['name']} ×{successfully_bought}")
+                    if total_length_change != 0:
+                        result_msg.append(f"✨ 累计长度变化：{total_length_change:+}cm（{original_length}cm → {user_data['length']}cm）")
+                    if total_hardness_change != 0:
+                        result_msg.append(f"✨ 累计硬度变化：{total_hardness_change:+}（{original_hardness} → {user_data['hardness']}）")
+                    if total_shield_charges > 0:
+                        result_msg.append(f"🛡️ 累计获得护盾：+{total_shield_charges}次（当前{user_data['shield_charges']}次）")
+                    if total_risk_transfer_charges > 0:
+                        result_msg.append(f"🔄 累计获得转嫁：+{total_risk_transfer_charges}次（当前{user_data['risk_transfer_charges']}次）")
+                    if total_reflect_charges > 0:
+                        result_msg.append(f"↩️ 累计获得反弹：+{total_reflect_charges}次（当前{user_data['reflect_charges']}次）")
+                    if total_insurance_charges > 0:
+                        result_msg.append(f"📋 累计获得保险：+{total_insurance_charges}次（当前{user_data['insurance_charges']}次）")
+
+                    if successfully_bought < buy_count:
+                        if successfully_bought < actual_buy_count:
+                            result_msg.append(f"⚠️ 硬度已达上限，仅购买{successfully_bought}次")
+                        else:
+                            result_msg.append(f"⚠️ 金币不足，仅购买{successfully_bought}次")
+
+                    # 计算批量购买的总税额（每次购买后金币递减）
+                    purchase_tax, tax_list = self._calculate_batch_purchase_taxes(user_coins, price_per_buy, successfully_bought)
+                    if purchase_tax > 0:
+                        digit_count = len(str(price_per_buy))
+                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
+
+                    # 扣除金币（只扣除实际成功购买的次数，含税）
+                    total_cost = price_per_buy * successfully_bought
+                    total_cost_with_tax = total_cost + purchase_tax
+                    self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
+
+                    # 股市钩子 - 使用累积效果触发
+                    item_name = selected_item.get('name', '')
+                    from niuniu_stock import stock_hook
+                    stock_msg = None
+                    if hasattr(effect, 'stock_config') and effect.stock_config:
+                        stock_cfg = effect.stock_config
+                        stock_msg = stock_hook(
+                            group_id, nickname,
+                            item_name=item_name,
+                            length_change=total_length_change,
+                            hardness_change=total_hardness_change,
+                            volatility=stock_cfg.get('volatility'),
+                            templates=stock_cfg.get('templates'),
+                            mean_reversion=True
+                        )
+                    else:
+                        stock_msg = stock_hook(
+                            group_id, nickname,
+                            item_name=item_name,
+                            length_change=total_length_change,
+                            hardness_change=total_hardness_change,
+                            volatility=(0.001, 0.005),
+                            templates={"plain": ["{nickname} 批量使用了 {item_name}，股市反应平淡 {change}"]},
+                            mean_reversion=True
+                        )
+                    if stock_msg:
+                        result_msg.append(stock_msg)
+
                     yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
                     return
 
                 # 复杂道具或单次购买
-                if not is_simple_item and buy_count > 1:
+                if not is_simple_item and not is_dunpai and not is_loop_trigger and buy_count > 1:
                     yield event.plain_result("⚠️ 该道具有特殊效果，不支持批量购买")
                     return
 
@@ -750,7 +1186,11 @@ class NiuniuShop:
                         return
 
                 # Active items use effect system
-                extra_data = {'item_name': selected_item['name'], 'user_coins': user_coins}
+                extra_data = {
+                    'item_name': selected_item['name'],
+                    'user_coins': user_coins,
+                    'effects_manager': self.main.effects
+                }
 
                 # 牛牛寄生需要指定目标
                 if selected_item['name'] == '牛牛寄生':
@@ -1148,6 +1588,22 @@ class NiuniuShop:
                                 current = group_data[target_id].get('shield_charges', 0)
                                 group_data[target_id]['shield_charges'] = max(0, current - shield_info['amount'])
 
+                        # 金币消失：所有受害者（包括发起人如果backfire）都可能失去金币
+                        coin_vanish_victims = []
+                        # 收集所有受影响的人（不包括被护盾完全保护的）
+                        for victim in black_hole.get('victims', []):
+                            if not victim.get('shielded'):
+                                coin_vanish_victims.append(victim['user_id'])
+                        # backfire情况下，发起人也可能失去金币
+                        if result_type == 'backfire':
+                            coin_vanish_victims.append(user_id)
+
+                        # 对每个受害者应用金币消失
+                        for victim_id in coin_vanish_victims:
+                            vanish_info = self._apply_coin_vanish(group_id, victim_id, "牛牛黑洞")
+                            if vanish_info['vanished']:
+                                result_msg.append(vanish_info['message'])
+
                         self._save_niuniu_data(niuniu_data)
 
                     # 处理月牙天冲的特殊逻辑（合并护盾消耗+祸水东引）
@@ -1193,6 +1649,20 @@ class NiuniuShop:
                             if shield_target_id in group_data:
                                 current = group_data[shield_target_id].get('shield_charges', 0)
                                 group_data[shield_target_id]['shield_charges'] = max(0, current - shield_info['amount'])
+
+                        # 金币消失：目标和发起人都可能失去金币
+                        coin_vanish_victims = []
+                        # 如果没有被护盾完全保护，目标可能失去金币
+                        if not ctx.extra.get('consume_shield'):
+                            coin_vanish_victims.append(target_id)
+                        # 发起人自己也可能失去金币（自己归零了）
+                        coin_vanish_victims.append(user_id)
+
+                        # 对每个受害者应用金币消失
+                        for victim_id in coin_vanish_victims:
+                            vanish_info = self._apply_coin_vanish(group_id, victim_id, "月牙天冲")
+                            if vanish_info['vanished']:
+                                result_msg.append(vanish_info['message'])
 
                         self._save_niuniu_data(niuniu_data)
 
@@ -1255,6 +1725,21 @@ class NiuniuShop:
                             if target_id in group_data:
                                 current = group_data[target_id].get('shield_charges', 0)
                                 group_data[target_id]['shield_charges'] = max(0, current - shield_info['amount'])
+
+                        # 金币消失：所有受害者和发起人都可能失去金币
+                        coin_vanish_victims = []
+                        # 收集所有受害者（不包括被护盾完全保护的）
+                        for victim in dazibao.get('victims', []):
+                            if not victim.get('shielded', False):
+                                coin_vanish_victims.append(victim['user_id'])
+                        # 发起人自己也可能失去金币（自己归零了）
+                        coin_vanish_victims.append(user_id)
+
+                        # 对每个受害者应用金币消失
+                        for victim_id in coin_vanish_victims:
+                            vanish_info = self._apply_coin_vanish(group_id, victim_id, "牛牛大自爆")
+                            if vanish_info['vanished']:
+                                result_msg.append(vanish_info['message'])
 
                         self._save_niuniu_data(niuniu_data)
 
@@ -1338,16 +1823,28 @@ class NiuniuShop:
                     hardness_loss = max(0, old_hardness - user_data.get('hardness', 1))
 
                     # 检查保险理赔（长度>=50或硬度>=10，且不是主动自残类道具）
-                    from niuniu_config import ShangbaoxianConfig
+                    from niuniu_config import InsuranceConfig
                     item_name = ctx.extra.get('item_name', '')
-                    is_intentional_self_hurt = item_name in ShangbaoxianConfig.INTENTIONAL_SELF_HURT_ITEMS
-                    if user_data.get('insurance_charges', 0) > 0 and not is_intentional_self_hurt:
-                        length_triggered = length_loss >= ShangbaoxianConfig.LENGTH_THRESHOLD
-                        hardness_triggered = hardness_loss >= ShangbaoxianConfig.HARDNESS_THRESHOLD
+                    is_intentional_self_hurt = item_name in InsuranceConfig.INTENTIONAL_SELF_HURT_ITEMS
+
+                    # 检查是否有保险（订阅或旧的道具次数）
+                    has_insurance_sub = self.main.effects.has_insurance_subscription(group_id, user_id)
+                    old_insurance_charges = user_data.get('insurance_charges', 0)
+
+                    if (has_insurance_sub or old_insurance_charges > 0) and not is_intentional_self_hurt:
+                        length_triggered = length_loss >= InsuranceConfig.LENGTH_THRESHOLD
+                        hardness_triggered = hardness_loss >= InsuranceConfig.HARDNESS_THRESHOLD
                         if length_triggered or hardness_triggered:
-                            user_data['insurance_charges'] -= 1
-                            # 记录理赔金额（稍后统一处理金币）
-                            insurance_payout = ShangbaoxianConfig.PAYOUT
+                            # 确定理赔金额
+                            if has_insurance_sub:
+                                insurance_payout = self.main.effects.get_insurance_payout(group_id, user_id)
+                                remaining_msg = "订阅中"
+                            else:
+                                # 使用旧道具次数
+                                user_data['insurance_charges'] -= 1
+                                insurance_payout = 200  # 旧道具的赔付金额
+                                remaining_msg = f"剩余{user_data['insurance_charges']}次"
+
                             # 构建消息
                             damage_parts = []
                             if length_loss > 0:
@@ -1355,57 +1852,69 @@ class NiuniuShop:
                             if hardness_loss > 0:
                                 damage_parts.append(f"{hardness_loss}硬度")
                             damage_str = "、".join(damage_parts)
-                            result_msg.append(f"📋 保险理赔！损失{damage_str}，赔付{ShangbaoxianConfig.PAYOUT}金币（剩余{user_data['insurance_charges']}次）")
+                            result_msg.append(f"📋 保险理赔！损失{damage_str}，赔付{insurance_payout:,}金币（{remaining_msg}）")
 
                     self._save_user_data(group_id, user_id, user_data)
                     result_msg.extend(ctx.messages)
                 else:
-                    self.main.context.logger.error(f"未找到道具效果类: {selected_item['name']}")
+                    print(f"[NiuniuShop] 未找到道具效果类: {selected_item['name']}")
                     yield event.plain_result("⚠️ 道具配置错误，请联系管理员")
                     return
 
-            # 扣除金币（动态定价道具使用效果返回的价格，加上保险理赔）
-            target_coins = user_coins - final_price + insurance_payout
+            # 计算消费税（基于最终价格，对所有道具生效）
+            purchase_tax = self._calculate_purchase_tax(user_coins, int(final_price))
+            total_cost_with_tax = final_price + purchase_tax
+
+            # 显示消费税信息
+            if purchase_tax > 0:
+                digit_count = len(str(int(final_price)))
+                result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
+
+            # 扣除金币（道具价格+消费税，加上保险理赔）
+            target_coins = user_coins - total_cost_with_tax + insurance_payout
             self.update_user_coins(group_id, user_id, target_coins)
 
-            # 股市钩子 - 道具购买使用均值回归模式
+            # 股市钩子 - 仅对主动道具生效（被动道具无长度/硬度变化）
             # 股价高于基准时倾向下跌，低于基准时倾向上涨，起到市场稳定器作用
-            item_name = selected_item.get('name', '')
-            item_length_change = ctx.length_change if ctx else 0
-            item_hardness_change = ctx.hardness_change if ctx else 0
+            if selected_item['type'] == 'active':
+                item_name = selected_item.get('name', '')
+                item_length_change = ctx.length_change
+                item_hardness_change = ctx.hardness_change
 
-            # 从 effect 获取 stock_config
-            effect = self.main.effects.effects.get(item_name)
-            if effect and hasattr(effect, 'stock_config') and effect.stock_config:
-                # 使用道具定义的 stock_config
-                stock_cfg = effect.stock_config
-                stock_msg = stock_hook(
-                    group_id, nickname,
-                    item_name=item_name,
-                    length_change=item_length_change,
-                    hardness_change=item_hardness_change,
-                    volatility=stock_cfg.get('volatility'),
-                    templates=stock_cfg.get('templates'),
-                    mean_reversion=True  # 道具购买启用均值回归
-                )
-            else:
-                # 没有 stock_config 的道具，使用默认平淡模板
-                stock_msg = stock_hook(
-                    group_id, nickname,
-                    item_name=item_name,
-                    length_change=item_length_change,
-                    hardness_change=item_hardness_change,
-                    volatility=(0.001, 0.005),
-                    templates={"plain": ["{nickname} 使用了 {item_name}，股市反应平淡 {change}"]},
-                    mean_reversion=True  # 道具购买启用均值回归
-                )
-            if stock_msg:
-                result_msg.append(stock_msg)
+                # 从 effect 获取 stock_config
+                effect = self.main.effects.effects.get(item_name)
+                if effect and hasattr(effect, 'stock_config') and effect.stock_config:
+                    # 使用道具定义的 stock_config
+                    stock_cfg = effect.stock_config
+                    stock_msg = stock_hook(
+                        group_id, nickname,
+                        item_name=item_name,
+                        length_change=item_length_change,
+                        hardness_change=item_hardness_change,
+                        volatility=stock_cfg.get('volatility'),
+                        templates=stock_cfg.get('templates'),
+                        mean_reversion=True  # 道具购买启用均值回归
+                    )
+                else:
+                    # 没有 stock_config 的道具，使用默认平淡模板
+                    stock_msg = stock_hook(
+                        group_id, nickname,
+                        item_name=item_name,
+                        length_change=item_length_change,
+                        hardness_change=item_hardness_change,
+                        volatility=(0.001, 0.005),
+                        templates={"plain": ["{nickname} 使用了 {item_name}，股市反应平淡 {change}"]},
+                        mean_reversion=True  # 道具购买启用均值回归
+                    )
+                if stock_msg:
+                    result_msg.append(stock_msg)
 
             yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
 
         except Exception as e:
-            self.main.context.logger.error(f"购买错误: {str(e)}")
+            import traceback
+            print(f"[NiuniuShop] 购买错误: {str(e)}")
+            traceback.print_exc()
             yield event.plain_result("⚠️ 购买过程中出现错误，请稍后再试")
 
     async def show_items(self, event: AstrMessageEvent):
@@ -1470,10 +1979,19 @@ class NiuniuShop:
         if reflect_charges > 0:
             result_list.append(f"⚡ 牛牛反弹：{reflect_charges}次")
 
-        # 显示保险次数
+        # 显示保险次数（仅显示旧道具剩余次数，订阅会在订阅部分显示）
         insurance_charges = user_data.get('insurance_charges', 0)
         if insurance_charges > 0:
-            result_list.append(f"📋 上保险：{insurance_charges}次")
+            result_list.append(f"📋 上保险（旧）：{insurance_charges}次")
+
+        # 显示订阅服务
+        subscriptions = self.main.effects.format_user_subscriptions_for_bag(group_id, user_id)
+        has_subscriptions = False
+        if subscriptions:
+            result_list.append("")
+            result_list.append("💎 ═══ 订阅服务 ═══")
+            result_list.extend(subscriptions)
+            has_subscriptions = True
 
         # 显示寄生牛牛状态
         parasite = user_data.get('parasite')
@@ -1481,7 +1999,7 @@ class NiuniuShop:
             beneficiary_name = parasite.get('beneficiary_name', '某人')
             result_list.append(f"🦠【寄】寄生牛牛来自：{beneficiary_name}（使用驱牛药可清除）")
 
-        if not items and shield_charges == 0 and risk_transfer_charges == 0 and reflect_charges == 0 and insurance_charges == 0 and not parasite:
+        if not items and shield_charges == 0 and risk_transfer_charges == 0 and reflect_charges == 0 and insurance_charges == 0 and not has_subscriptions and not parasite:
             result_list.append("🛍️ 你的背包里还没有道具哦~")
 
         # 显示金币总额

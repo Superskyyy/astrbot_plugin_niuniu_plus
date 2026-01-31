@@ -25,7 +25,7 @@ class NiuniuGames:
                     return yaml.safe_load(f) or {}
             return {}
         except Exception as e:
-            self.main.context.logger.error(f"加载数据失败: {str(e)}")
+            print(f"[NiuniuGames] 加载数据失败: {str(e)}")
             return {}
     
     def _save_data(self, data: Dict[str, Any]):
@@ -35,7 +35,7 @@ class NiuniuGames:
             with open(self.data_file, 'w', encoding='utf-8') as f:
                 yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
         except Exception as e:
-            self.main.context.logger.error(f"保存数据失败: {str(e)}")
+            print(f"[NiuniuGames] 保存数据失败: {str(e)}")
     
     async def start_rush(self, event: AstrMessageEvent):
         """冲(咖啡)游戏"""

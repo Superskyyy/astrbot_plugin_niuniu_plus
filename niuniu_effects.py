@@ -1,11 +1,97 @@
 # Niuniu Effect System
 # Decouples item effects from core game logic
+# Now supports both item effects and subscription effects
 
+import os
+import json
+import time
 import random
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from datetime import datetime
 from niuniu_config import format_length, format_length_change
+
+
+# ==================== 订阅服务配置 ====================
+SUBSCRIPTION_CONFIGS = {
+    "battle_master": {
+        "name": "战斗大师",
+        "price_per_day": 1000000,  # 100万/天
+        "emoji": "🏆",
+        "description": "打胶冷却-75%，成功率+10%，比划胜率+5%",
+    },
+    "insurance_plan": {
+        "name": "保险订阅",
+        "price_per_day": 100000,  # 10万/天
+        "emoji": "📋",
+        "description": "无限次理赔，每次赔付10,000金币",
+        "payout": 10000,  # 每次理赔金额
+    },
+    "parasite_immunity": {
+        "name": "寄生免疫",
+        "price_per_day": 500000,  # 50万/天
+        "emoji": "🚫",
+        "description": "完全免疫寄生牛牛",
+    },
+}
+
+# 订阅数据文件路径
+SUBSCRIPTION_DATA_FILE = 'data/niuniu_subscriptions.json'
+
+
+def _calculate_subscription_daily_price(base_price: int, user_coins: int) -> int:
+    """
+    计算订阅服务的每日动态价格
+
+    公式：基础价 + 用户金币 × (基础价位数)%
+    例如：基础价 500000（6位数）→ 500000 + 用户金币×6%
+
+    Args:
+        base_price: 基础每日价格
+        user_coins: 用户当前金币数
+
+    Returns:
+        实际每日价格
+    """
+    # 计算基础价的位数
+    digits = len(str(base_price))
+    tax_rate = digits / 100.0  # 几位数就是%几
+
+    # 动态价格 = 基础价 + 用户金币 × 税率
+    dynamic_price = base_price + int(user_coins * tax_rate)
+    return dynamic_price
+
+
+def _calculate_total_subscription_cost(base_price: int, user_coins: int, days: int) -> tuple[int, int, bool]:
+    """
+    计算批量购买订阅天数的总花费
+
+    由于每次购买后金币会减少，需要循环计算每天的价格。
+    类似于消费税系统的批量购买逻辑。
+
+    Args:
+        base_price: 基础每日价格
+        user_coins: 用户当前金币数
+        days: 购买天数
+
+    Returns:
+        (总花费, 购买后剩余金币, 是否金币足够)
+    """
+    total_cost = 0
+    remaining_coins = user_coins
+
+    for i in range(days):
+        daily_price = _calculate_subscription_daily_price(base_price, remaining_coins)
+
+        if remaining_coins < daily_price:
+            # 金币不足，返回失败
+            return total_cost, remaining_coins, False
+
+        total_cost += daily_price
+        remaining_coins -= daily_price
+
+    return total_cost, remaining_coins, True
 
 
 class EffectTrigger(str, Enum):
@@ -95,11 +181,13 @@ class ItemEffect:
 
 
 class EffectManager:
-    """Manages all item effects"""
+    """Manages all item effects and subscription effects"""
 
     def __init__(self):
         self.effects: Dict[str, ItemEffect] = {}
         self._shop_ref = None  # Will be set by main plugin
+        self._subscription_data: Dict[str, Any] = {}
+        self._load_subscriptions()
 
     def set_shop(self, shop):
         """Set reference to shop for item operations"""
@@ -108,6 +196,277 @@ class EffectManager:
     def register(self, effect: ItemEffect):
         """Register an effect"""
         self.effects[effect.name] = effect
+
+    # ==================== 订阅管理 ====================
+
+    def _load_subscriptions(self):
+        """加载订阅数据"""
+        if os.path.exists(SUBSCRIPTION_DATA_FILE):
+            try:
+                with open(SUBSCRIPTION_DATA_FILE, 'r', encoding='utf-8') as f:
+                    self._subscription_data = json.load(f)
+            except:
+                self._subscription_data = {}
+        else:
+            self._subscription_data = {}
+
+    def _save_subscriptions(self):
+        """保存订阅数据"""
+        os.makedirs('data', exist_ok=True)
+        with open(SUBSCRIPTION_DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(self._subscription_data, f, ensure_ascii=False, indent=2)
+
+    def _get_user_subscriptions(self, group_id: str, user_id: str) -> Dict[str, Any]:
+        """获取用户的订阅数据"""
+        group_id = str(group_id)
+        user_id = str(user_id)
+
+        if group_id not in self._subscription_data:
+            self._subscription_data[group_id] = {}
+
+        if user_id not in self._subscription_data[group_id]:
+            self._subscription_data[group_id][user_id] = {}
+
+        return self._subscription_data[group_id][user_id]
+
+    def has_subscription(self, group_id: str, user_id: str, subscription_name: str) -> bool:
+        """检查用户是否有某个订阅且未过期"""
+        subs = self._get_user_subscriptions(group_id, user_id)
+
+        if subscription_name not in subs:
+            return False
+
+        expire_time = subs[subscription_name].get("expire_time", 0)
+        if time.time() > expire_time:
+            # 过期了，删除
+            del subs[subscription_name]
+            self._save_subscriptions()
+            return False
+
+        return True
+
+    def subscribe(self, group_id: str, user_id: str, subscription_name: str,
+                  days: int = 1, user_coins: int = 0) -> tuple[bool, str, int]:
+        """
+        订阅服务
+
+        Args:
+            group_id: 群组ID
+            user_id: 用户ID
+            subscription_name: 订阅服务名称
+            days: 订阅天数
+            user_coins: 用户当前金币数（用于计算动态价格）
+
+        Returns:
+            (成功, 消息, 总价)
+        """
+        if subscription_name not in SUBSCRIPTION_CONFIGS:
+            return False, f"❌ 未知的订阅服务: {subscription_name}", 0
+
+        config = SUBSCRIPTION_CONFIGS[subscription_name]
+        base_price = config["price_per_day"]
+
+        # 计算动态总价
+        total_price, _, can_afford = _calculate_total_subscription_cost(base_price, user_coins, days)
+
+        if not can_afford:
+            return False, f"❌ 金币不足！需要 {total_price:,}+ 金币", total_price
+
+        subs = self._get_user_subscriptions(group_id, user_id)
+
+        # 计算过期时间
+        if subscription_name in subs:
+            # 已有订阅，续费
+            current_expire = subs[subscription_name].get("expire_time", time.time())
+            new_expire = max(current_expire, time.time()) + days * 86400
+        else:
+            # 新订阅
+            new_expire = time.time() + days * 86400
+
+        # 保存订阅信息
+        subs[subscription_name] = {
+            "expire_time": new_expire,
+        }
+
+        self._save_subscriptions()
+
+        # 计算首日价格用于显示
+        first_day_price = _calculate_subscription_daily_price(base_price, user_coins)
+
+        return True, (
+            f"✅ 订阅成功！\n"
+            f"{config['emoji']} {config['name']}\n"
+            f"📅 订阅天数: {days}天\n"
+            f"💰 总价: {total_price:,}金币\n"
+            f"💡 首日价格: {first_day_price:,}金币（基础{base_price:,} + 金币×{len(str(base_price))}%）\n"
+            f"📋 效果: {config['description']}\n"
+            f"⏰ 到期时间: {datetime.fromtimestamp(new_expire).strftime('%Y-%m-%d %H:%M:%S')}"
+        ), total_price
+
+    def unsubscribe(self, group_id: str, user_id: str, subscription_name: str) -> tuple[bool, str]:
+        """取消订阅"""
+        subs = self._get_user_subscriptions(group_id, user_id)
+
+        if subscription_name not in subs:
+            config = SUBSCRIPTION_CONFIGS.get(subscription_name, {})
+            return False, f"❌ 你没有订阅 {config.get('name', subscription_name)}"
+
+        config = SUBSCRIPTION_CONFIGS[subscription_name]
+        del subs[subscription_name]
+        self._save_subscriptions()
+
+        return True, f"✅ 已取消订阅 {config['emoji']} {config['name']}"
+
+    def get_cooldown_reduction(self, group_id: str, user_id: str) -> float:
+        """获取冷却时间减少比例（0.0-1.0）"""
+        total_reduction = 0.0
+
+        # 检查战斗大师订阅
+        if self.has_subscription(group_id, user_id, "battle_master"):
+            total_reduction += 0.75  # 75%减少
+
+        # 未来可以添加其他来源的冷却减少...
+
+        return min(total_reduction, 1.0)  # 最多100%
+
+    def get_dajiao_success_boost(self, group_id: str, user_id: str) -> float:
+        """获取打胶成功率加成"""
+        total_boost = 0.0
+
+        # 检查战斗大师订阅
+        if self.has_subscription(group_id, user_id, "battle_master"):
+            total_boost += 0.10  # +10%
+
+        # 未来可以添加其他来源的成功率加成...
+
+        return total_boost
+
+    def get_compare_winrate_boost(self, group_id: str, user_id: str) -> float:
+        """获取比划胜率加成"""
+        total_boost = 0.0
+
+        # 检查战斗大师订阅
+        if self.has_subscription(group_id, user_id, "battle_master"):
+            total_boost += 0.05  # +5%
+
+        # 未来可以添加其他来源的胜率加成...
+
+        return total_boost
+
+    def has_insurance_subscription(self, group_id: str, user_id: str) -> bool:
+        """检查是否有保险订阅"""
+        return self.has_subscription(group_id, user_id, "insurance_plan")
+
+    def get_insurance_payout(self, group_id: str, user_id: str) -> int:
+        """获取保险理赔金额"""
+        if self.has_insurance_subscription(group_id, user_id):
+            config = SUBSCRIPTION_CONFIGS.get("insurance_plan", {})
+            return config.get("payout", 0)
+        return 0
+
+    def has_parasite_immunity(self, group_id: str, user_id: str) -> bool:
+        """检查是否有寄生免疫"""
+        return self.has_subscription(group_id, user_id, "parasite_immunity")
+
+    def format_subscription_shop(self) -> str:
+        """格式化订阅商店"""
+        lines = [
+            "🏪 ═══ 订阅服务商店 ═══ 🏪",
+            "",
+            "💎 高端订阅服务，为富豪量身打造！",
+            "📅 购买后立即生效，到期自动失效",
+            "⚠️ 取消订阅不退款，请谨慎购买",
+            "📝 单次订阅最多365天",
+            "",
+            "💸 动态定价：基础价 + 金币×几位数%",
+            "   （例：50万=6位数 → +6%金币税）",
+            "",
+        ]
+
+        for i, (sub_name, config) in enumerate(SUBSCRIPTION_CONFIGS.items(), 1):
+            base_price = config["price_per_day"]
+            digits = len(str(base_price))
+            lines.extend([
+                f"{i}. {config['emoji']} {config['name']}",
+                f"   💰 基础价: {base_price:,}金币/天 + 金币×{digits}%",
+                f"   📋 效果: {config['description']}",
+                "",
+            ])
+
+        lines.extend([
+            "═══════════════════════",
+            "📌 牛牛订阅 <编号> [天数]",
+            "📌 牛牛取消订阅 <编号>",
+            "📌 牛牛背包 - 查看订阅状态",
+        ])
+
+        return "\n".join(lines)
+
+    def format_my_subscriptions(self, group_id: str, user_id: str) -> str:
+        """格式化我的订阅（独立页面，已废弃）"""
+        subs = self._get_user_subscriptions(group_id, user_id)
+
+        active_subs = []
+        for sub_name, sub_info in list(subs.items()):
+            if self.has_subscription(group_id, user_id, sub_name):
+                config = SUBSCRIPTION_CONFIGS.get(sub_name, {})
+                expire_time = sub_info.get("expire_time", 0)
+                remaining_days = max(0, (expire_time - time.time()) / 86400)
+
+                active_subs.append({
+                    "name": config.get("name", sub_name),
+                    "emoji": config.get("emoji", "✨"),
+                    "description": config.get("description", ""),
+                    "remaining_days": remaining_days,
+                })
+
+        if not active_subs:
+            return "📭 你还没有订阅任何服务\n💡 输入「牛牛订阅商店」查看可用服务"
+
+        lines = [
+            "📊 ═══ 我的订阅 ═══ 📊",
+            "",
+        ]
+
+        for sub in active_subs:
+            lines.extend([
+                f"{sub['emoji']} {sub['name']}",
+                f"   📋 {sub['description']}",
+                f"   ⏰ 剩余: {sub['remaining_days']:.1f}天",
+                "",
+            ])
+
+        lines.append("═══════════════════════")
+
+        return "\n".join(lines)
+
+    def format_user_subscriptions_for_bag(self, group_id: str, user_id: str) -> list:
+        """格式化订阅信息用于背包显示（返回列表）"""
+        subs = self._get_user_subscriptions(group_id, user_id)
+
+        active_subs = []
+        for sub_name, sub_info in list(subs.items()):
+            if self.has_subscription(group_id, user_id, sub_name):
+                config = SUBSCRIPTION_CONFIGS.get(sub_name, {})
+                expire_time = sub_info.get("expire_time", 0)
+                remaining_days = max(0, (expire_time - time.time()) / 86400)
+
+                active_subs.append({
+                    "name": config.get("name", sub_name),
+                    "emoji": config.get("emoji", "✨"),
+                    "description": config.get("description", ""),
+                    "remaining_days": remaining_days,
+                })
+
+        if not active_subs:
+            return []
+
+        lines = []
+        for sub in active_subs:
+            # 简洁显示：emoji + 名称 + 剩余天数
+            lines.append(f"{sub['emoji']} {sub['name']} - 剩余 {sub['remaining_days']:.1f}天")
+
+        return lines
 
     def trigger(self, trigger: EffectTrigger, ctx: EffectContext,
                 user_items: Dict[str, int], target_items: Optional[Dict[str, int]] = None) -> EffectContext:
@@ -1756,13 +2115,19 @@ class HundunFengbaoEffect(ItemEffect):
                 if others:
                     target_uid, target_data = random.choice(others)
                     target_name = target_data.get('nickname', target_uid)
-                    ctx.extra['chaos_storm'].setdefault('parasites', []).append({
-                        'host_id': target_uid,
-                        'host_name': target_name,
-                        'beneficiary_id': uid,
-                        'beneficiary_name': nickname
-                    })
-                    event_text = f"🦠 {nickname} → {target_name}: {random.choice(self.PARASITE_TEXTS)} 以后{target_name}打胶你也有份！"
+
+                    # 检查目标是否有寄生免疫
+                    effects_manager = ctx.extra.get('effects_manager')
+                    if effects_manager and effects_manager.has_parasite_immunity(ctx.group_id, target_uid):
+                        event_text = f"🚫 {nickname} → {target_name}: 寄生失败！{target_name}有寄生免疫！"
+                    else:
+                        ctx.extra['chaos_storm'].setdefault('parasites', []).append({
+                            'host_id': target_uid,
+                            'host_name': target_name,
+                            'beneficiary_id': uid,
+                            'beneficiary_name': nickname
+                        })
+                        event_text = f"🦠 {nickname} → {target_name}: {random.choice(self.PARASITE_TEXTS)} 以后{target_name}打胶你也有份！"
                 else:
                     event_text = f"🤷 {nickname}: 寄生虫找不到宿主...孤独地死去了..."
 
@@ -1845,13 +2210,13 @@ class HeidongEffect(ItemEffect):
         "💀 黑洞：你们的牛牛，我收下了"
     ]
 
-    # 不稳定喷射文案
-    UNSTABLE_TEXTS = [
-        "⚠️ 黑洞过载！部分能量逃逸！",
+    # 喷射路人文案
+    SPRAY_TEXTS = [
+        "⚠️ 黑洞过载！能量喷射到路人身上！",
         "💥 黑洞不稳定，发生了霍金辐射！",
-        "🌪️ 时空裂缝！一半被吸到平行宇宙去了！",
+        "🌪️ 时空裂缝！全部喷到平行宇宙的路人身上了！",
         "🎰 黑洞打了个喷嚏，喷了一地...",
-        "⚡ 能量溢出！无法完全吸收！"
+        "⚡ 能量溢出！随机路人白捡便宜！"
     ]
 
     # 反噬文案
@@ -1863,15 +2228,23 @@ class HeidongEffect(ItemEffect):
         "💫 黑洞坍缩成白矮星，砸在了你头上"
     ]
 
-    # 吃撑反喷文案
-    REVERSE_TEXTS = [
-        "🤡 黑洞吃撑了！呕————",
-        "🌀 黑洞打了个饱嗝，把所有东西都喷出来了！",
-        "😂 黑洞消化不良，反向喷射！",
-        "🎪 这不是黑洞，这是喷泉！",
-        "💫 黑洞：吃太多了，受不了，还给你们！",
-        "🤮 黑洞食物中毒了！全吐出来了！",
-        "🎭 黑洞：开玩笑的，其实我是白洞~"
+    # 反馈给目标文案
+    FEEDBACK_TEXTS = [
+        "🔄 黑洞出bug了！能量全部反弹给受害者！",
+        "💫 时空逆流！吸取的长度原路返回！",
+        "🌀 黑洞：对不起，我退货了~",
+        "⚡ 能量环路！所有人都恢复了！",
+        "🎭 黑洞：开玩笑的，还给你们~"
+    ]
+
+    # 消散于宇宙中文案
+    VANISH_TEXTS = [
+        "🌌 黑洞吸收后...能量消散于虚空之中！",
+        "💫 时空湮灭！所有能量都化为乌有！",
+        "⚫ 黑洞：我吃了，但我消化不了！",
+        "🌀 虚空吞噬！长度永远消失在宇宙深处！",
+        "🕳️ 黑洞：这些长度...已经不属于这个宇宙了！",
+        "💀 能量被转化为暗物质，永久消失！"
     ]
 
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
@@ -1950,7 +2323,7 @@ class HeidongEffect(ItemEffect):
         }
 
         if roll < HeidongConfig.RESULT_ALL_TO_USER:
-            # 40%: 全部归使用者
+            # 50%: 全部归使用者
             ctx.extra['black_hole']['result'] = 'all_to_user'
             ctx.length_change = total_stolen
             ctx.messages.extend([
@@ -1972,12 +2345,10 @@ class HeidongEffect(ItemEffect):
                 "═══════════════════"
             ])
 
-        elif roll < HeidongConfig.RESULT_ALL_TO_USER + HeidongConfig.RESULT_HALF_SPRAY:
-            # 30%: 一半喷给路人
-            ctx.extra['black_hole']['result'] = 'half_spray'
-            user_gain = total_stolen // 2
-            spray_amount = total_stolen - user_gain
-            ctx.length_change = user_gain
+        elif roll < HeidongConfig.RESULT_ALL_TO_USER + HeidongConfig.RESULT_SPRAY_RANDOM:
+            # 10%: 全部喷给路人
+            ctx.extra['black_hole']['result'] = 'spray_random'
+            ctx.length_change = 0  # 使用者什么都没得到
 
             # 随机选几个路人获得喷射
             non_victims = [(uid, data) for uid, data in valid_users
@@ -1985,7 +2356,7 @@ class HeidongEffect(ItemEffect):
             if non_victims:
                 spray_count = min(3, len(non_victims))
                 spray_targets = random.sample(non_victims, spray_count)
-                spray_each = spray_amount // spray_count
+                spray_each = total_stolen // spray_count
                 for uid, data in spray_targets:
                     ctx.extra['black_hole']['spray_targets'].append({
                         'user_id': uid,
@@ -1998,7 +2369,7 @@ class HeidongEffect(ItemEffect):
                 f"🕳️ {ctx.nickname} 召唤了黑洞！",
                 f"💫 吸取了 {len(victims)} 人的精华！",
                 "",
-                random.choice(self.UNSTABLE_TEXTS),
+                random.choice(self.SPRAY_TEXTS),
                 ""
             ])
             for v in victims:
@@ -2007,15 +2378,15 @@ class HeidongEffect(ItemEffect):
                 else:
                     ctx.messages.append(f"  💨 {v['nickname']} -{v['amount']}cm")
             ctx.messages.append("")
-            ctx.messages.append(f"📥 {ctx.nickname} 勉强吸到 +{user_gain}cm")
+            ctx.messages.append(f"😭 {ctx.nickname} 什么都没得到！")
             if ctx.extra['black_hole']['spray_targets']:
-                ctx.messages.append("📤 剩下的喷射给了路人：")
+                ctx.messages.append("📤 全部能量都喷给了路人：")
                 for t in ctx.extra['black_hole']['spray_targets']:
                     ctx.messages.append(f"  🎁 {t['nickname']} 捡漏 +{t['amount']}cm")
             ctx.messages.append("═══════════════════")
 
-        elif roll < HeidongConfig.RESULT_ALL_TO_USER + HeidongConfig.RESULT_HALF_SPRAY + HeidongConfig.RESULT_BACKFIRE:
-            # 20%: 反噬自己
+        elif roll < HeidongConfig.RESULT_ALL_TO_USER + HeidongConfig.RESULT_SPRAY_RANDOM + HeidongConfig.RESULT_BACKFIRE:
+            # 10%: 反噬自己
             ctx.extra['black_hole']['result'] = 'backfire'
             backfire_loss = int(abs(ctx.user_length) * HeidongConfig.BACKFIRE_PERCENT)
             ctx.length_change = -backfire_loss
@@ -2036,32 +2407,56 @@ class HeidongEffect(ItemEffect):
             for v in victims:
                 v['amount'] = 0
 
-        else:
-            # 10%: 吃撑反喷
-            ctx.extra['black_hole']['result'] = 'reverse'
-            # 使用者损失，受害者反而获得
-            ctx.length_change = -total_stolen
+        elif roll < HeidongConfig.RESULT_ALL_TO_USER + HeidongConfig.RESULT_SPRAY_RANDOM + HeidongConfig.RESULT_BACKFIRE + HeidongConfig.RESULT_FEEDBACK:
+            # 10%: 反馈给目标
+            ctx.extra['black_hole']['result'] = 'feedback'
+            ctx.length_change = 0  # 使用者什么都没得到
 
             ctx.messages.extend([
                 "🌀 ══ 牛牛黑洞 ══ 🌀",
                 f"🕳️ {ctx.nickname} 召唤了黑洞！",
                 "",
-                random.choice(self.REVERSE_TEXTS),
+                random.choice(self.FEEDBACK_TEXTS),
                 "",
-                "🎉 黑洞变成了喷泉！所有人反而变长了！",
+                "🔄 能量全部返回给受害者！",
                 ""
             ])
             for v in victims:
                 if not v['shielded'] and v['amount'] > 0:
-                    # 反转：受害者获得长度而不是失去
-                    v['reverse_gain'] = v['amount']
-                    ctx.messages.append(f"  🎁 {v['nickname']} 白捡 +{v['amount']}cm")
+                    # 反馈：受害者获得原本要失去的长度
+                    v['feedback_gain'] = v['amount']
+                    ctx.messages.append(f"  🎁 {v['nickname']} 反而 +{v['amount']}cm")
                     v['amount'] = 0  # 不扣他们的
             ctx.messages.extend([
                 "",
-                f"💸 而 {ctx.nickname} 作为代价... -{total_stolen}cm",
+                f"😭 {ctx.nickname} 白忙一场！",
+                "═══════════════════"
+            ])
+
+        else:
+            # 20%: 消散于宇宙中
+            ctx.extra['black_hole']['result'] = 'vanish'
+            ctx.length_change = 0  # 使用者什么都没得到
+
+            ctx.messages.extend([
+                "🌀 ══ 牛牛黑洞 ══ 🌀",
+                f"🕳️ {ctx.nickname} 召唤了黑洞！",
+                f"💫 吸取了 {len(victims)} 人的精华！",
                 "",
-                "🤡 群友们：谢谢老板！",
+                random.choice(self.VANISH_TEXTS),
+                ""
+            ])
+            for v in victims:
+                if v['shielded']:
+                    ctx.messages.append(f"  🛡️ {v['nickname']} 护盾抵挡！（剩余{v['shield_remaining']}层）")
+                else:
+                    ctx.messages.append(f"  💨 {v['nickname']} -{v['amount']}cm")
+            ctx.messages.extend([
+                "",
+                f"🌌 {total_stolen}cm长度永久消失在宇宙深处！",
+                f"😭 {ctx.nickname} 什么都没得到！",
+                "",
+                "💫 这些长度...已经不属于这个宇宙了！",
                 "═══════════════════"
             ])
 
@@ -2702,8 +3097,8 @@ class JueduizhiEffect(ItemEffect):
             ctx.intercept = True
             return ctx
 
-        # 动态价格 = 长度的绝对值 * 0.1
-        dynamic_price = int(abs(current_length) * 0.1)
+        # 动态价格 = 长度的绝对值 * 0.5
+        dynamic_price = int(abs(current_length) * 0.5)
         ctx.extra['dynamic_price'] = dynamic_price
 
         # 检查金币是否足够（由商店传入）
@@ -2800,6 +3195,19 @@ class NiuniuJishengEffect(ItemEffect):
             return ctx
 
         host_name = host_data.get('nickname', host_id)
+
+        # 检查目标是否有寄生免疫订阅
+        effects_manager = ctx.extra.get('effects_manager')
+        if effects_manager and effects_manager.has_parasite_immunity(ctx.group_id, host_id):
+            ctx.messages.extend([
+                "❌ ══ 牛牛寄生 ══ ❌",
+                f"🚫 {host_name} 有寄生免疫订阅！",
+                "💎 无法寄生免疫者！",
+                "═══════════════════"
+            ])
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
 
         # 检查宿主是否已有寄生牛牛
         old_parasite = host_data.get('parasite')
@@ -2944,25 +3352,31 @@ class JunfukaEffect(ItemEffect):
             ctx.intercept = True
             return ctx
 
-        # 计算动态价格：基础价格 + Σ|长度 - 平均长度| × 系数
+        # 计算动态价格：基础价格 + Σ|长度 - 平均长度| × 系数 + 使用者金币 × 50%
         all_lengths = [data.get('length', 0) for _, data in all_valid_users]
         avg_for_price = sum(all_lengths) / len(all_lengths)
         total_diff = sum(abs(length - avg_for_price) for length in all_lengths)
-        dynamic_price = int(JunfukaConfig.BASE_PRICE + total_diff * JunfukaConfig.TOTAL_DIFF_COEFFICIENT)
-        dynamic_price = max(JunfukaConfig.MIN_PRICE, dynamic_price)
+        base_price = int(JunfukaConfig.BASE_PRICE + total_diff * JunfukaConfig.TOTAL_DIFF_COEFFICIENT)
+        base_price = max(JunfukaConfig.MIN_PRICE, base_price)
+
+        # 加入使用者金币的50%作为成本
+        user_coins = ctx.extra.get('user_coins', 0)
+        wealth_cost = int(user_coins * 0.5)
+        dynamic_price = base_price + wealth_cost
         ctx.extra['dynamic_price'] = dynamic_price
 
         # 检查金币是否足够
-        user_coins = ctx.extra.get('user_coins', 0)
         if user_coins < dynamic_price:
             shortfall = dynamic_price - user_coins
             ctx.messages.extend([
                 "❌ ══ 牛牛均富/负卡 ══ ❌",
                 "💰 金币不足，无法发动均富！",
-                f"📋 需要: {dynamic_price} 金币",
+                f"📋 总价: {dynamic_price} 金币",
+                f"  └ 基础价格: {base_price} 金币",
+                f"  └ 财富税(50%): {wealth_cost} 金币",
                 f"📊 你有: {user_coins} 金币",
                 f"⚠️ 还差: {shortfall} 金币",
-                f"💡 提示: 群内分布越分散，价格越高哦~",
+                f"💡 提示: 富豪使用均富卡成本更高哦~",
                 "═══════════════════"
             ])
             ctx.extra['refund'] = True

@@ -21,7 +21,7 @@ from niuniu_stock import NiuniuStock, stock_hook
 from niuniu_config import (
     PLUGIN_DIR, NIUNIU_LENGTHS_FILE, GAME_TEXTS_FILE, LAST_ACTION_FILE,
     DajiaoEvents, DajiaoCombo, DailyBonus, TimePeriod, TIMEZONE,
-    CompareStreak, CompareBet, CompareAudience,
+    CompareStreak, CompareBet, CompareAudience, RobberyConfig,
     format_length as config_format_length, format_length_change
 )
 import pytz
@@ -30,13 +30,12 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.14.10")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.18.7")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
     COOLDOWN_30_MIN = 1800   # 30分钟
     COMPARE_COOLDOWN = 600   # 比划冷却
-    KAITAN_COOLDOWN = 3600   # 开团冷却（1小时）
     INVITE_LIMIT = 3         # 邀请次数限制
 
     def __init__(self, context: Context, config: dict = None):
@@ -201,6 +200,22 @@ class NiuniuPlugin(Star):
         """格式化长度显示"""
         return config_format_length(length)
 
+    def format_coins(self, coins):
+        """格式化金币显示（k、m、b缩写）"""
+        is_negative = coins < 0
+        coins = abs(coins)
+
+        if coins < 1000:
+            result = str(int(coins))
+        elif coins < 1000000:
+            result = f"{coins/1000:.1f}k"
+        elif coins < 1000000000:
+            result = f"{coins/1000000:.1f}m"
+        else:
+            result = f"{coins/1000000000:.1f}b"
+
+        return f"-{result}" if is_negative else result
+
     def check_insurance_claim(self, group_id: str, user_id: str, nickname: str,
                                length_loss: int = 0, hardness_loss: int = 0,
                                group_data: dict = None) -> dict:
@@ -223,7 +238,7 @@ class NiuniuPlugin(Star):
                 'message': str          # 理赔消息
             }
         """
-        from niuniu_config import ShangbaoxianConfig
+        from niuniu_config import InsuranceConfig
 
         # 获取用户数据
         if group_data is not None:
@@ -233,31 +248,42 @@ class NiuniuPlugin(Star):
         else:
             user_data = self.get_user_data(group_id, user_id)
 
-        # 检查保险次数
-        insurance_charges = user_data.get('insurance_charges', 0)
-        if insurance_charges <= 0:
+        # 检查是否有保险（订阅或旧道具）
+        has_insurance_sub = self.effects.has_insurance_subscription(group_id, user_id)
+        old_insurance_charges = user_data.get('insurance_charges', 0)
+
+        if not has_insurance_sub and old_insurance_charges <= 0:
             return {'triggered': False}
 
         # 检查是否达到阈值
-        length_triggered = length_loss >= ShangbaoxianConfig.LENGTH_THRESHOLD
-        hardness_triggered = hardness_loss >= ShangbaoxianConfig.HARDNESS_THRESHOLD
+        length_triggered = length_loss >= InsuranceConfig.LENGTH_THRESHOLD
+        hardness_triggered = hardness_loss >= InsuranceConfig.HARDNESS_THRESHOLD
 
         if not length_triggered and not hardness_triggered:
             return {'triggered': False}
 
-        # 触发保险理赔
-        new_charges = insurance_charges - 1
-
-        # 更新数据
-        if group_data is not None:
-            # 直接修改 group_data（用于批量操作，稍后统一保存）
-            group_data[user_id]['insurance_charges'] = new_charges
-            current_coins = group_data[user_id].get('coins', 0)
-            group_data[user_id]['coins'] = round(current_coins + ShangbaoxianConfig.PAYOUT)
+        # 确定理赔金额和剩余次数
+        if has_insurance_sub:
+            payout = self.effects.get_insurance_payout(group_id, user_id)
+            charges_remaining = "订阅中"
         else:
-            # 独立操作，立即保存
-            self.update_user_data(group_id, user_id, {'insurance_charges': new_charges})
-            self.games.update_user_coins(group_id, user_id, ShangbaoxianConfig.PAYOUT)
+            # 使用旧道具次数
+            payout = 200
+            new_charges = old_insurance_charges - 1
+            charges_remaining = new_charges
+
+            # 更新旧道具次数
+            if group_data is not None:
+                group_data[user_id]['insurance_charges'] = new_charges
+            else:
+                self.update_user_data(group_id, user_id, {'insurance_charges': new_charges})
+
+        # 更新金币
+        if group_data is not None:
+            current_coins = group_data[user_id].get('coins', 0)
+            group_data[user_id]['coins'] = round(current_coins + payout)
+        else:
+            self.games.update_user_coins(group_id, user_id, payout)
 
         # 构建消息
         damage_parts = []
@@ -269,9 +295,9 @@ class NiuniuPlugin(Star):
 
         return {
             'triggered': True,
-            'payout': ShangbaoxianConfig.PAYOUT,
-            'charges_remaining': new_charges,
-            'message': f"📋 {nickname} 保险理赔！损失{damage_str}，赔付{ShangbaoxianConfig.PAYOUT}金币（剩余{new_charges}次）"
+            'payout': payout,
+            'charges_remaining': charges_remaining,
+            'message': f"📋 {nickname} 保险理赔！损失{damage_str}，赔付{payout:,}金币（{charges_remaining}）"
         }
 
     def _check_and_trigger_parasite(self, group_id: str, host_id: str, gain: float,
@@ -315,18 +341,24 @@ class NiuniuPlugin(Star):
         if not beneficiary_id:
             return messages
 
-        # 检查增益是否达到阈值
-        host_length = host_data.get('length', 0)
-        threshold = abs(host_length) * NiuniuJishengConfig.TRIGGER_THRESHOLD
+        # 获取受益者（寄生者）数据
+        beneficiary_data = self.get_user_data(group_id, beneficiary_id)
+        if not beneficiary_data:
+            return messages
+
+        # 检查增益是否达到阈值（使用寄生者的长度，而不是宿主）
+        beneficiary_length = beneficiary_data.get('length', 0)
+        threshold = abs(beneficiary_length) * NiuniuJishengConfig.TRIGGER_THRESHOLD
 
         if gain <= threshold:
             return messages
 
         # 触发抽取！
         host_name = host_data.get('nickname', host_id)
+        host_length = host_data.get('length', 0)
 
-        # 计算抽取量
-        drain_length = int(abs(host_length) * NiuniuJishengConfig.DRAIN_LENGTH_PERCENT)
+        # 计算抽取量（从增长中抽取25%）
+        drain_length = int(gain * NiuniuJishengConfig.DRAIN_LENGTH_PERCENT)
         if drain_length < 1:
             drain_length = 1
 
@@ -349,31 +381,29 @@ class NiuniuPlugin(Star):
         })
 
         # 给受益者加长度和硬度
-        beneficiary_data = self.get_user_data(group_id, beneficiary_id)
-        if beneficiary_data:
-            new_beneficiary_length = beneficiary_data.get('length', 0) + drain_length
-            new_beneficiary_hardness = min(100, beneficiary_data.get('hardness', 1) + drain_hardness)
-            self.update_user_data(group_id, beneficiary_id, {
-                'length': new_beneficiary_length,
-                'hardness': new_beneficiary_hardness
-            })
+        new_beneficiary_length = beneficiary_data.get('length', 0) + drain_length
+        new_beneficiary_hardness = min(100, beneficiary_data.get('hardness', 1) + drain_hardness)
+        self.update_user_data(group_id, beneficiary_id, {
+            'length': new_beneficiary_length,
+            'hardness': new_beneficiary_hardness
+        })
 
-            # 生成消息
-            drain_text = random.choice(NiuniuJishengConfig.DRAIN_TEXTS).format(
-                host_name=host_name,
-                gain=gain,
-                beneficiary_name=beneficiary_name,
-                drain_length=drain_length,
-                drain_hardness=drain_hardness
+        # 生成消息
+        drain_text = random.choice(NiuniuJishengConfig.DRAIN_TEXTS).format(
+            host_name=host_name,
+            gain=gain,
+            beneficiary_name=beneficiary_name,
+            drain_length=drain_length,
+            drain_hardness=drain_hardness
+        )
+        messages.append(drain_text)
+
+        # 链式反应：如果受益者也有寄生牛牛，检查是否触发
+        if drain_length > 0:
+            chain_messages = self._check_and_trigger_parasite(
+                group_id, beneficiary_id, drain_length, processed_ids
             )
-            messages.append(drain_text)
-
-            # 链式反应：如果受益者也有寄生牛牛，检查是否触发
-            if drain_length > 0:
-                chain_messages = self._check_and_trigger_parasite(
-                    group_id, beneficiary_id, drain_length, processed_ids
-                )
-                messages.extend(chain_messages)
+            messages.extend(chain_messages)
 
         return messages
 
@@ -638,11 +668,17 @@ class NiuniuPlugin(Star):
                 "打胶": self._dajiao,
                 "我的牛牛": self._show_status,
                 "比划比划": self._compare,
-                "开团": self._kaitan,
+                "牛牛抢劫": self._robbery,
                 "牛牛排行": self._show_ranking,
+                "牛牛道具商城": self.shop.show_shop,  # 别名
+                "牛牛道具商店": self.shop.show_shop,  # 别名
                 "牛牛商城": self.shop.show_shop,
                 "牛牛购买": self.shop.handle_buy,
                 "牛牛背包": self.shop.show_items,
+                "牛牛订阅商城": self._subscription_shop,  # 别名
+                "牛牛订阅商店": self._subscription_shop,
+                "牛牛取消订阅": self._unsubscribe,
+                "牛牛订阅": self._subscribe,
                 "牛牛股市 重置": self._niuniu_stock_reset,  # 放在 "牛牛股市" 前面
                 "牛牛股市": self._niuniu_stock,
                 "重置所有牛牛": self._reset_all_niuniu,
@@ -788,6 +824,120 @@ class NiuniuPlugin(Star):
             '全部': '全部数据已重置（含股市持仓）'
         }
         yield event.plain_result(f"✅ 已重置本群 {reset_count} 个牛牛！\n📋 {type_names[reset_type]}")
+
+    async def _subscription_shop(self, event):
+        """牛牛订阅商店 - 显示所有订阅服务"""
+        yield event.plain_result(self.effects.format_subscription_shop())
+
+    async def _subscribe(self, event):
+        """牛牛订阅 - 订阅服务"""
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+        msg = event.message_str.strip()
+
+        # 检查是否注册牛牛
+        user_data = self.get_user_data(group_id, user_id)
+        if not user_data:
+            yield event.plain_result("❌ 你还没有注册牛牛！请先使用「注册牛牛」")
+            return
+
+        # 解析参数: 牛牛订阅 <编号> [天数]
+        parts = msg.split()
+        if len(parts) < 2:
+            yield event.plain_result("❌ 用法: 牛牛订阅 <编号> [天数]\n💡 输入「牛牛订阅商店」查看可用服务")
+            return
+
+        try:
+            sub_index = int(parts[1]) - 1  # 编号从1开始
+            days = int(parts[2]) if len(parts) > 2 else 1
+        except ValueError:
+            yield event.plain_result("❌ 编号和天数必须是数字")
+            return
+
+        if days <= 0:
+            yield event.plain_result("❌ 天数必须大于0")
+            return
+
+        # 限制最大天数（避免整数溢出和不合理订阅）
+        if days > 365:
+            yield event.plain_result("❌ 单次订阅最多365天")
+            return
+
+        # 获取订阅名称
+        from niuniu_effects import SUBSCRIPTION_CONFIGS
+        sub_names = list(SUBSCRIPTION_CONFIGS.keys())
+        if sub_index < 0 or sub_index >= len(sub_names):
+            yield event.plain_result(f"❌ 无效的编号，请输入 1-{len(sub_names)}")
+            return
+
+        sub_name = sub_names[sub_index]
+        config = SUBSCRIPTION_CONFIGS[sub_name]
+        base_price = config["price_per_day"]
+
+        # 获取用户当前金币
+        current_coins = user_data.get('coins', 0)
+
+        # 计算动态总价（循环计算，考虑金币递减）
+        from niuniu_effects import _calculate_total_subscription_cost
+        total_price, remaining_coins, can_afford = _calculate_total_subscription_cost(base_price, current_coins, days)
+
+        # 检查金币是否足够
+        if not can_afford:
+            yield event.plain_result(f"❌ 金币不足！需要至少 {total_price:,}+ 金币，你只有 {current_coins:,} 金币")
+            return
+
+        try:
+            # 扣除金币
+            user_data['coins'] = remaining_coins
+            self.update_user_data(group_id, user_id, user_data)
+
+            # 保存订阅（传入原始金币数用于计算显示）
+            success, message, actual_cost = self.effects.subscribe(group_id, user_id, sub_name, days, current_coins)
+
+            if not success:
+                # 订阅失败，退款
+                user_data['coins'] = current_coins
+                self.update_user_data(group_id, user_id, user_data)
+                yield event.plain_result(message)
+                return
+
+            yield event.plain_result(message)
+        except Exception as e:
+            # 发生异常，退款
+            user_data['coins'] = current_coins
+            self.update_user_data(group_id, user_id, user_data)
+            yield event.plain_result(f"❌ 订阅失败：系统错误")
+            return
+
+    async def _unsubscribe(self, event):
+        """牛牛取消订阅 - 取消订阅服务"""
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+        msg = event.message_str.strip()
+
+        # 解析参数: 牛牛取消订阅 <编号>
+        parts = msg.split()
+        if len(parts) < 2:
+            yield event.plain_result("❌ 用法: 牛牛取消订阅 <编号>\n💡 输入「牛牛背包」查看当前订阅")
+            return
+
+        try:
+            sub_index = int(parts[1]) - 1
+        except ValueError:
+            yield event.plain_result("❌ 编号必须是数字")
+            return
+
+        # 获取订阅名称
+        from niuniu_effects import SUBSCRIPTION_CONFIGS
+        sub_names = list(SUBSCRIPTION_CONFIGS.keys())
+        if sub_index < 0 or sub_index >= len(sub_names):
+            yield event.plain_result(f"❌ 无效的编号，请输入 1-{len(sub_names)}")
+            return
+
+        sub_name = sub_names[sub_index]
+        success, message = self.effects.unsubscribe(group_id, user_id, sub_name)
+
+        yield event.plain_result(message)
 
     async def _niuniu_hongbao(self, event):
         """牛牛红包 - 给指定用户或所有人发放/扣除属性，仅管理员可用"""
@@ -1004,27 +1154,40 @@ class NiuniuPlugin(Star):
         subcmd = parts[0]
 
         if subcmd == "购买":
-            # 牛牛股市 购买 <金额>
+            # 牛牛股市 购买 <金额|梭哈>
             if len(parts) < 2:
-                yield event.plain_result("❌ 格式：牛牛股市 购买 <金额>")
-                return
-
-            try:
-                coins = float(parts[1])
-            except:
-                yield event.plain_result("❌ 请输入有效的金额")
+                yield event.plain_result("❌ 格式：牛牛股市 购买 <金额|梭哈>")
                 return
 
             user_coins = user_data.get('coins', 0)
-            if coins > user_coins:
-                yield event.plain_result(f"❌ 金币不足！你只有 {user_coins:.0f} 金币")
-                return
+
+            # 检查是否梭哈
+            is_soha = False
+            if parts[1] == "梭哈":
+                is_soha = True
+                coins = user_coins * 0.95
+                if coins < 2:  # 考虑3%手续费，至少2金币才有意义
+                    yield event.plain_result(f"❌ 金币不足！梭哈至少需要2金币（你只有 {user_coins:.0f} 金币）")
+                    return
+            else:
+                try:
+                    coins = float(parts[1])
+                except:
+                    yield event.plain_result("❌ 请输入有效的金额或「梭哈」")
+                    return
+
+                if coins > user_coins:
+                    yield event.plain_result(f"❌ 金币不足！你只有 {user_coins:.0f} 金币")
+                    return
 
             success, message, shares = stock.buy(group_id, user_id, coins)
             if success:
                 # 扣除金币
                 user_data['coins'] = round(user_coins - coins)
                 self.update_user_data(group_id, user_id, {'coins': user_data['coins']})
+                # 如果是梭哈，添加特殊提示
+                if is_soha:
+                    message = f"🎰 梭哈模式！投入95%财富\n{message}"
             yield event.plain_result(message)
 
         elif subcmd == "出售":
@@ -1060,7 +1223,7 @@ class NiuniuPlugin(Star):
             yield event.plain_result(stock.format_holdings(group_id, user_id, nickname))
 
         else:
-            yield event.plain_result("❌ 未知命令\n📌 牛牛股市 购买 <金额>\n📌 牛牛股市 出售 [数量/全部]\n📌 牛牛股市 持仓")
+            yield event.plain_result("❌ 未知命令\n📌 牛牛股市 购买 <金额|梭哈>\n📌 牛牛股市 出售 [数量/全部]\n📌 牛牛股市 持仓")
 
     async def _register(self, event):
         """注册牛牛"""
@@ -1116,8 +1279,12 @@ class NiuniuPlugin(Star):
         last_actions = self._load_last_actions()
         last_time = last_actions.setdefault(group_id, {}).get(user_id, {}).get('dajiao', 0)
 
+        # 获取订阅冷却减少
+        cooldown_reduction = self.effects.get_cooldown_reduction(group_id, user_id)
+        actual_cooldown = self.COOLDOWN_10_MIN * (1 - cooldown_reduction)
+
         # 检查是否处于冷却期
-        on_cooldown, remaining = self.check_cooldown(last_time, self.COOLDOWN_10_MIN)
+        on_cooldown, remaining = self.check_cooldown(last_time, actual_cooldown)
 
         # 创建效果上下文
         ctx = EffectContext(
@@ -1196,6 +1363,10 @@ class NiuniuPlugin(Star):
         # 时段加成
         time_success_bonus = period_config.get('success_bonus', 0) if period_config else 0
         time_length_bonus = period_config.get('length_bonus', 0) if period_config else 0
+
+        # 订阅加成
+        sub_success_boost = self.effects.get_dajiao_success_boost(group_id, user_id)
+        time_success_bonus += sub_success_boost
 
         if time_length_bonus > 0 and current_period in time_texts:
             period_texts = time_texts[current_period]
@@ -1550,6 +1721,52 @@ class NiuniuPlugin(Star):
 
         yield event.plain_result(final_text)
 
+    def _calculate_win_probability(self, group_id: str, user_id: str,
+                                   u_len: float, t_len: float,
+                                   u_hardness: int, t_hardness: int,
+                                   streak_bonus: float = 0.0) -> float:
+        """
+        计算胜负概率（复用比划逻辑）
+
+        Args:
+            group_id: 群组ID
+            user_id: 用户ID
+            u_len: 用户长度
+            t_len: 目标长度
+            u_hardness: 用户硬度
+            t_hardness: 目标硬度
+            streak_bonus: 连胜/连败加成
+
+        Returns:
+            胜率（0.15-0.85）
+        """
+        base_win = 0.5
+
+        # 负数长度特殊处理
+        if u_len <= 0 and t_len > 0:
+            # 用户凹进去了，对方正常：极大劣势
+            length_factor = -0.2
+        elif u_len > 0 and t_len <= 0:
+            # 用户正常，对方凹进去了：极大优势
+            length_factor = 0.2
+        elif u_len <= 0 and t_len <= 0:
+            # 都凹进去了：谁更接近0谁有优势
+            max_abs = max(abs(u_len), abs(t_len), 1)
+            length_factor = (u_len - t_len) / max_abs * 0.2
+        else:
+            # 都是正数：正常计算
+            length_factor = (u_len - t_len) / max(u_len, t_len, 1) * 0.2
+
+        hardness_factor = (u_hardness - t_hardness) * 0.08
+
+        # 获取订阅胜率加成
+        sub_winrate_boost = self.effects.get_compare_winrate_boost(group_id, user_id)
+
+        # 应用连击加成和订阅加成
+        win_prob = min(max(base_win + length_factor + hardness_factor + streak_bonus + sub_winrate_boost, 0.15), 0.85)
+
+        return win_prob
+
     async def _compare(self, event):
         """比划功能"""
         group_id = str(event.message_obj.group_id)
@@ -1731,39 +1948,35 @@ class NiuniuPlugin(Star):
             ctx.messages.append(f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(target_data['length'])}")
 
             # 检查被夺取者的保险（夺牛魔steal效果）
-            from niuniu_config import ShangbaoxianConfig
+            from niuniu_config import InsuranceConfig
             if ctx.target_length_change < 0:
                 target_length_loss = abs(ctx.target_length_change)
-                if target_length_loss >= ShangbaoxianConfig.LENGTH_THRESHOLD:
-                    target_insurance = target_data.get('insurance_charges', 0)
-                    if target_insurance > 0:
-                        # 消耗保险并赔付
-                        self.update_user_data(group_id, target_id, {'insurance_charges': target_insurance - 1})
-                        self.games.update_user_coins(group_id, target_id, ShangbaoxianConfig.PAYOUT)
-                        ctx.messages.append(f"📋 {target_data['nickname']} 保险理赔！损失{target_length_loss}cm，赔付{ShangbaoxianConfig.PAYOUT}金币（剩余{target_insurance - 1}次）")
+                if target_length_loss >= InsuranceConfig.LENGTH_THRESHOLD:
+                    # 检查订阅或旧道具次数
+                    has_insurance_sub = self.effects.has_insurance_subscription(group_id, target_id)
+                    old_insurance_charges = target_data.get('insurance_charges', 0)
+
+                    if has_insurance_sub or old_insurance_charges > 0:
+                        if has_insurance_sub:
+                            payout = self.effects.get_insurance_payout(group_id, target_id)
+                            remaining_msg = "订阅中"
+                        else:
+                            # 消耗旧道具次数
+                            self.update_user_data(group_id, target_id, {'insurance_charges': old_insurance_charges - 1})
+                            payout = 200
+                            remaining_msg = f"剩余{old_insurance_charges - 1}次"
+
+                        self.games.update_user_coins(group_id, target_id, payout)
+                        ctx.messages.append(f"📋 {target_data['nickname']} 保险理赔！损失{target_length_loss}cm，赔付{payout:,}金币（{remaining_msg}）")
 
             yield event.plain_result("\n".join(ctx.messages))
             return
 
-        # 计算胜负 (支持负数长度)
-        base_win = 0.5
-        # 负数长度特殊处理
-        if u_len <= 0 and t_len > 0:
-            # 用户凹进去了，对方正常：极大劣势
-            length_factor = -0.2
-        elif u_len > 0 and t_len <= 0:
-            # 用户正常，对方凹进去了：极大优势
-            length_factor = 0.2
-        elif u_len <= 0 and t_len <= 0:
-            # 都凹进去了：谁更接近0谁有优势
-            max_abs = max(abs(u_len), abs(t_len), 1)
-            length_factor = (u_len - t_len) / max_abs * 0.2
-        else:
-            # 都是正数：正常计算
-            length_factor = (u_len - t_len) / max(u_len, t_len, 1) * 0.2
-        hardness_factor = (ctx.user_hardness - ctx.target_hardness) * 0.08
-        # 应用连击加成
-        win_prob = min(max(base_win + length_factor + hardness_factor + streak_bonus, 0.15), 0.85)
+        # 计算胜负概率（复用通用方法）
+        win_prob = self._calculate_win_probability(
+            group_id, user_id, u_len, t_len,
+            ctx.user_hardness, ctx.target_hardness, streak_bonus
+        )
 
         # 执行判定
         is_win = random.random() < win_prob
@@ -1799,6 +2012,15 @@ class NiuniuPlugin(Star):
             )
             streak_msgs.append(streak_text)
 
+        # 计算群内金币平均值（用于下注税计算）
+        bet_tax_info = ""
+        if bet_amount > 0:
+            niuniu_data = self._load_niuniu_lengths()
+            group_niuniu_data = niuniu_data.get(group_id, {})
+            all_coins = [data.get('coins', 0) for uid, data in group_niuniu_data.items()
+                        if isinstance(data, dict) and 'coins' in data and data.get('coins', 0) > 0]
+            avg_coins = sum(all_coins) / len(all_coins) if all_coins else 0
+
         if is_win:
             # 硬度影响伤害：赢家(user)硬度加成攻击，输家(target)硬度减少损失
             hardness_bonus = max(0, int((u_hardness - 5) * 0.15))
@@ -1815,6 +2037,37 @@ class NiuniuPlugin(Star):
             # 更新数据
             self.update_user_data(group_id, user_id, {'length': user_data['length'] + total_gain})
             self.update_user_data(group_id, target_id, {'length': target_data['length'] - loss})
+
+            # 处理金币下注（获胜方）
+            if bet_amount > 0:
+                # 计算税收（复用股市税率）
+                tax_amount, effective_rate, bracket_str = self.stock._calculate_tax(bet_amount, avg_coins)
+                net_gain = bet_amount - tax_amount
+
+                # 检查输家是否有足够金币
+                target_coins = self.shop.get_user_coins(group_id, target_id)
+                if target_coins < bet_amount:
+                    # 输家金币不足，按实际金币结算
+                    actual_bet = target_coins
+                    tax_amount, effective_rate, bracket_str = self.stock._calculate_tax(actual_bet, avg_coins)
+                    net_gain = actual_bet - tax_amount
+                    bet_tax_info = f"\n💰 {target_data['nickname']} 金币不足，实际下注 {actual_bet} 枚"
+                    bet_tax_info += f"\n💸 赢得 {net_gain:.0f} 枚金币（税前 {actual_bet}，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
+                    if bracket_str and bracket_str != "免税":
+                        bet_tax_info += f"\n📊 税率明细：{bracket_str}"
+                    # 扣除输家金币（全部）
+                    self.shop.modify_coins(group_id, target_id, -actual_bet)
+                    # 增加赢家金币（扣税后）
+                    self.shop.modify_coins(group_id, user_id, int(net_gain))
+                else:
+                    # 正常结算
+                    bet_tax_info = f"\n💸 赢得 {net_gain:.0f} 枚金币（税前 {bet_amount}，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
+                    if bracket_str and bracket_str != "免税":
+                        bet_tax_info += f"\n📊 税率明细：{bracket_str}"
+                    # 扣除输家金币
+                    self.shop.modify_coins(group_id, target_id, -bet_amount)
+                    # 增加赢家金币（扣税后）
+                    self.shop.modify_coins(group_id, user_id, int(net_gain))
 
             text = random.choice(self.niuniu_texts['compare']['win']).format(
                 winner=nickname,
@@ -1893,6 +2146,10 @@ class NiuniuPlugin(Star):
 
             if total_gain == 0:
                 text += f"\n{self.niuniu_texts['compare']['user_no_increase'].format(nickname=nickname)}"
+
+            # 添加下注税收信息
+            if bet_tax_info:
+                text += bet_tax_info
         else:
             # 硬度影响伤害：赢家(target)硬度加成攻击，输家(user)硬度减少损失
             hardness_bonus = max(0, int((t_hardness - 5) * 0.15))
@@ -1914,6 +2171,35 @@ class NiuniuPlugin(Star):
                 pass
             else:
                 self.update_user_data(group_id, user_id, {'length': user_data['length'] - loss})
+
+            # 处理金币下注（失败方）
+            if bet_amount > 0:
+                # 检查自己是否有足够金币
+                user_coins = self.shop.get_user_coins(group_id, user_id)
+                if user_coins < bet_amount:
+                    # 自己金币不足，按实际金币结算
+                    actual_bet = user_coins
+                    tax_amount, effective_rate, bracket_str = self.stock._calculate_tax(actual_bet, avg_coins)
+                    net_gain = actual_bet - tax_amount
+                    bet_tax_info = f"\n💰 {nickname} 金币不足，实际下注 {actual_bet} 枚"
+                    bet_tax_info += f"\n💸 损失 {actual_bet} 枚金币（{target_data['nickname']} 获得 {net_gain:.0f} 枚，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
+                    if bracket_str and bracket_str != "免税":
+                        bet_tax_info += f"\n📊 税率明细：{bracket_str}"
+                    # 扣除自己金币（全部）
+                    self.shop.modify_coins(group_id, user_id, -actual_bet)
+                    # 增加赢家金币（扣税后）
+                    self.shop.modify_coins(group_id, target_id, int(net_gain))
+                else:
+                    # 正常结算
+                    tax_amount, effective_rate, bracket_str = self.stock._calculate_tax(bet_amount, avg_coins)
+                    net_gain = bet_amount - tax_amount
+                    bet_tax_info = f"\n💸 损失 {bet_amount} 枚金币（{target_data['nickname']} 获得 {net_gain:.0f} 枚，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
+                    if bracket_str and bracket_str != "免税":
+                        bet_tax_info += f"\n📊 税率明细：{bracket_str}"
+                    # 扣除自己金币
+                    self.shop.modify_coins(group_id, user_id, -bet_amount)
+                    # 增加赢家金币（扣税后）
+                    self.shop.modify_coins(group_id, target_id, int(net_gain))
 
             text = random.choice(self.niuniu_texts['compare']['lose']).format(
                 loser=nickname,
@@ -1965,6 +2251,10 @@ class NiuniuPlugin(Star):
             # 添加效果消息
             for msg in ctx.messages:
                 text += f"\n{msg}"
+
+            # 添加下注税收信息
+            if bet_tax_info:
+                text += bet_tax_info
 
         # 硬度衰减（只有输家有概率衰减，15%概率）
         hardness_decay_msg = ""
@@ -2347,8 +2637,8 @@ class NiuniuPlugin(Star):
 
         yield None  # Generator placeholder
 
-    async def _kaitan(self, event):
-        """开团功能 - 群友混战（固定8场）"""
+    async def _robbery(self, event):
+        """牛牛抢劫功能 - 尝试抢劫目标的金币"""
         group_id = str(event.message_obj.group_id)
         user_id = str(event.get_sender_id())
         nickname = event.get_sender_name()
@@ -2358,188 +2648,272 @@ class NiuniuPlugin(Star):
             yield event.plain_result("❌ 插件未启用")
             return
 
-        # 检查发起者是否注册
+        # 获取自身数据
         user_data = self.get_user_data(group_id, user_id)
         if not user_data:
-            yield event.plain_result("❌ 请先注册牛牛")
+            yield event.plain_result(self.niuniu_texts['dajiao']['not_registered'].format(nickname=nickname))
             return
 
-        # 检查开团冷却
+        # 解析目标
+        target_id = self.parse_target(event)
+        if not target_id:
+            yield event.plain_result("❌ 请@要抢劫的牛牛！用法：牛牛抢劫 @目标")
+            return
+
+        if target_id == user_id:
+            yield event.plain_result("❌ 不能抢劫自己！")
+            return
+
+        # 获取目标数据
+        target_data = self.get_user_data(group_id, target_id)
+        if not target_data:
+            yield event.plain_result("❌ 目标还没有注册牛牛！")
+            return
+
+        # 检查目标是否有金币（先检查，避免浪费冷却）
+        target_coins = self.shop.get_user_coins(group_id, target_id)
+        if target_coins <= 0:
+            yield event.plain_result(f"❌ {target_data['nickname']} 一分钱都没有，抢个寂寞...")
+            return
+
+        # 冷却检查
         last_actions = self._load_last_actions()
-        last_kaitan = last_actions.setdefault(group_id, {}).setdefault(user_id, {}).get('kaitan', 0)
-        on_cooldown, remaining = self.check_cooldown(last_kaitan, self.KAITAN_COOLDOWN)
+        robbery_records = last_actions.setdefault(group_id, {}).setdefault(user_id, {}).setdefault('robbery', {})
+        last_robbery = robbery_records.get(target_id, 0)
+        on_cooldown, remaining = self.check_cooldown(last_robbery, RobberyConfig.COOLDOWN)
         if on_cooldown:
             mins = int(remaining // 60) + 1
-            yield event.plain_result(f"❌ {nickname}，你开团太频繁了！还需等待 {mins} 分钟后才能再次开团")
+            yield event.plain_result(f"❌ 冷却中！还需要 {mins} 分钟才能再次抢劫 {target_data['nickname']}")
             return
 
-        # 解析所有@的用户
-        at_users = []
-        if hasattr(event.message_obj, 'message') and event.message_obj.message:
-            for seg in event.message_obj.message:
-                if hasattr(seg, 'type') and seg.type == 'at':
-                    target_id = str(seg.data.get('qq', ''))
-                    if target_id:
-                        at_users.append(target_id)
+        # 注意：冷却时间将在抢劫结束后更新（成功或失败都消耗冷却）
 
-        # 构建参与者列表
-        participants = []
+        # 获取双方数据用于胜负判定
+        u_len = user_data['length']
+        t_len = target_data['length']
+        u_hardness = user_data['hardness']
+        t_hardness = target_data['hardness']
 
-        if at_users:
-            # 有@人：发起者 + @的人
-            participants.append((user_id, nickname))
-            for target_id in at_users:
-                if target_id != user_id:
-                    target_data = self.get_user_data(group_id, target_id)
-                    if target_data:
-                        participants.append((target_id, target_data.get('nickname', f'用户{target_id}')))
-        else:
-            # 没@人：全群已注册用户参与
-            # 先确保发起者在参与者列表中
-            participants.append((user_id, nickname))
-            data = self._load_niuniu_lengths()
-            group_users = data.get(group_id, {})
-            for uid, udata in group_users.items():
-                # 跳过非用户数据（如plugin_enabled, _recent_compares等）
-                if uid.startswith('_') or uid == 'plugin_enabled':
-                    continue
-                # 跳过发起者（已添加）
-                if uid == user_id:
-                    continue
-                if isinstance(udata, dict) and 'length' in udata:
-                    participants.append((uid, udata.get('nickname', f'用户{uid}')))
+        # 计算连胜/连败加成（复用比划的streak系统）
+        win_streak = user_data.get('robbery_win_streak', 0)
+        lose_streak = user_data.get('robbery_lose_streak', 0)
+        streak_bonus = 0
+        if win_streak >= CompareStreak.WIN_STREAK_THRESHOLD:
+            streak_bonus += CompareStreak.WIN_STREAK_BONUS
+        if lose_streak >= CompareStreak.LOSE_STREAK_THRESHOLD:
+            streak_bonus += CompareStreak.LOSE_STREAK_BONUS
 
-        # 去重
-        seen = set()
-        unique_participants = []
-        for p in participants:
-            if p[0] not in seen:
-                seen.add(p[0])
-                unique_participants.append(p)
-        participants = unique_participants
+        # 使用通用胜负判定方法（完全复用比划逻辑）
+        win_prob = self._calculate_win_probability(
+            group_id, user_id, u_len, t_len,
+            u_hardness, t_hardness, streak_bonus
+        )
 
-        # 至少需要3人才能叫"团"
-        if len(participants) < 3:
-            yield event.plain_result("❌ 开团至少需要3人！\n用法：开团 或 开团 @群友1 @群友2 ...")
-            return
+        # 执行判定
+        is_win = random.random() < win_prob
 
-        # 打乱顺序
-        random.shuffle(participants)
-
-        result_msgs = ["⚔️ ═══ 牛牛大乱斗 ═══ ⚔️", f"👥 参与者：{len(participants)}人", ""]
-
-        # 记录战绩
-        wins = {p[0]: 0 for p in participants}
-        length_changes = {p[0]: 0 for p in participants}
-
-        # 固定8场战斗
-        MAX_BATTLES = 8
-        battle_count = 0
-        failed_attempts = 0
-
-        while battle_count < MAX_BATTLES and failed_attempts < 20:
-            # 随机选两个不同的参与者
-            if len(participants) < 2:
-                break
-            p1, p2 = random.sample(participants, 2)
-            p1_id, p1_name = p1
-            p2_id, p2_name = p2
-
-            # 获取最新数据
-            p1_data = self.get_user_data(group_id, p1_id)
-            p2_data = self.get_user_data(group_id, p2_id)
-
-            if not p1_data or not p2_data:
-                failed_attempts += 1
-                continue
-
-            p1_len = p1_data['length']
-            p2_len = p2_data['length']
-            p1_hard = p1_data['hardness']
-            p2_hard = p2_data['hardness']
-
-            # 简化胜率计算
-            base_win = 0.5
-            if p1_len > 0 and p2_len > 0:
-                length_factor = (p1_len - p2_len) / max(p1_len, p2_len, 1) * 0.2
-            elif p1_len <= 0 and p2_len > 0:
-                length_factor = -0.2
-            elif p1_len > 0 and p2_len <= 0:
-                length_factor = 0.2
-            else:
-                length_factor = 0
-            hardness_factor = (p1_hard - p2_hard) * 0.08
-            win_prob = min(max(base_win + length_factor + hardness_factor, 0.15), 0.85)
-
-            # 判定
-            p1_wins = random.random() < win_prob
-
-            # 按双方长度绝对值计算涨跌幅度（3%-8%获胜，2%-5%失败）
-            avg_abs_len = (abs(p1_len) + abs(p2_len)) / 2
-            base_change = max(5, int(avg_abs_len * random.uniform(0.03, 0.08)))  # 最少5cm
-            gain = base_change
-            loss = max(3, int(avg_abs_len * random.uniform(0.02, 0.05)))  # 最少3cm
-
-            if p1_wins:
-                wins[p1_id] += 1
-                length_changes[p1_id] += gain
-                length_changes[p2_id] -= loss
-                self.update_user_data(group_id, p1_id, {'length': p1_data['length'] + gain})
-                self.update_user_data(group_id, p2_id, {'length': p2_data['length'] - loss})
-                result_msgs.append(f"⚔️ {p1_name} 🆚 {p2_name} → 🏆 {p1_name} (+{self.format_length(gain)})")
-            else:
-                wins[p2_id] += 1
-                length_changes[p2_id] += gain
-                length_changes[p1_id] -= loss
-                self.update_user_data(group_id, p1_id, {'length': p1_data['length'] - loss})
-                self.update_user_data(group_id, p2_id, {'length': p2_data['length'] + gain})
-                result_msgs.append(f"⚔️ {p1_name} 🆚 {p2_name} → 🏆 {p2_name} (+{self.format_length(gain)})")
-
-            battle_count += 1
-
-        # 统计结果
-        result_msgs.append("")
-        result_msgs.append("📊 ═══ 战绩统计 ═══ 📊")
-
-        # 只显示参与过战斗的人（有胜场或有长度变化）
-        active_participants = [p for p in participants if wins[p[0]] > 0 or length_changes[p[0]] != 0]
-
-        # 按胜场排序
-        sorted_participants = sorted(active_participants, key=lambda p: (wins[p[0]], length_changes[p[0]]), reverse=True)
-
-        for rank, (pid, pname) in enumerate(sorted_participants, 1):
-            final_data = self.get_user_data(group_id, pid)
-            change = length_changes[pid]
-            change_str = f"+{change}" if change >= 0 else str(change)
-            if rank == 1:
-                result_msgs.append(f"👑 {pname}: {wins[pid]}胜 ({change_str}cm) → {self.format_length(final_data['length'])}")
-            else:
-                result_msgs.append(f"{rank}. {pname}: {wins[pid]}胜 ({change_str}cm) → {self.format_length(final_data['length'])}")
-
-        # 宣布冠军
-        if sorted_participants:
-            champion = sorted_participants[0]
-            result_msgs.append("")
-            result_msgs.append(f"🎉 本次大乱斗冠军：{champion[1]}！")
-
-        # 更新开团冷却时间
-        last_actions = self._load_last_actions()
-        last_actions.setdefault(group_id, {}).setdefault(user_id, {})['kaitan'] = time.time()
+        # 更新冷却时间（成功或失败都消耗冷却）
+        current_time = time.time()
+        robbery_records[target_id] = current_time
         self.update_last_actions(last_actions)
 
-        # 股市影响：开团是混沌事件，使用平均变化量避免波动过大
-        avg_length_change = sum(length_changes.values()) / len(length_changes) if length_changes else 0
-        stock_msg = stock_hook(
-            group_id,
-            nickname,
-            event_type="chaos",
-            length_change=avg_length_change
-        )
-        if stock_msg:
-            result_msgs.append("")
-            result_msgs.append(stock_msg)
+        # 更新连胜/连败
+        if is_win:
+            new_win_streak = win_streak + 1
+            new_lose_streak = 0
+        else:
+            new_win_streak = 0
+            new_lose_streak = lose_streak + 1
 
-        yield event.plain_result("\n".join(result_msgs))
+        self.update_user_data(group_id, user_id, {
+            'robbery_win_streak': new_win_streak,
+            'robbery_lose_streak': new_lose_streak
+        })
+
+        if not is_win:
+            # 抢劫失败 - 使用配置中的失败文本
+            fail_text = random.choice(RobberyConfig.ROBBERY_FAIL_TEXTS).format(
+                robber=nickname,
+                victim=target_data['nickname']
+            )
+            yield event.plain_result(fail_text)
+            return
+
+        # === 抢劫成功！===
+
+        # === 打斗判定（50%概率） ===
+        is_fight = random.random() < RobberyConfig.FIGHT_CHANCE
+        fight_info = []
+
+        if is_fight:
+            # 触发打斗！双方都会损失长度和硬度
+            # 选择损失档位（递减概率）
+            rand = random.random()
+            cumulative_prob = 0
+            damage_percent = 0.05  # 默认5%
+
+            for min_pct, max_pct, prob in RobberyConfig.FIGHT_DAMAGE_TIERS:
+                cumulative_prob += prob
+                if rand < cumulative_prob:
+                    damage_percent = random.uniform(min_pct, max_pct)
+                    break
+
+            # 计算双方损失
+            # 抢劫者损失
+            robber_length_loss = int(abs(u_len) * damage_percent)
+            robber_hardness_loss = int(u_hardness * damage_percent)
+            if robber_hardness_loss == 0 and damage_percent > 0:
+                robber_hardness_loss = 1  # 至少损失1硬度
+
+            # 受害者损失
+            victim_length_loss = int(abs(t_len) * damage_percent)
+            victim_hardness_loss = int(t_hardness * damage_percent)
+            if victim_hardness_loss == 0 and damage_percent > 0:
+                victim_hardness_loss = 1  # 至少损失1硬度
+
+            # 应用损失（无论正负长度，损失都是减少）
+            new_robber_len = u_len - robber_length_loss
+            new_robber_hard = max(1, u_hardness - robber_hardness_loss)
+            new_victim_len = t_len - victim_length_loss
+            new_victim_hard = max(1, t_hardness - victim_hardness_loss)
+
+            # 更新数据
+            self.update_user_data(group_id, user_id, {
+                'length': new_robber_len,
+                'hardness': new_robber_hard
+            })
+            self.update_user_data(group_id, target_id, {
+                'length': new_victim_len,
+                'hardness': new_victim_hard
+            })
+
+            # 记录打斗信息
+            fight_text = random.choice(RobberyConfig.FIGHT_TEXTS)
+            fight_info.append(fight_text)
+            fight_info.append(f"💔 {nickname}：-{robber_length_loss}cm长度, -{robber_hardness_loss}硬度")
+            fight_info.append(f"💔 {target_data['nickname']}：-{victim_length_loss}cm长度, -{victim_hardness_loss}硬度")
+            fight_info.append(f"📊 损失比例：{damage_percent*100:.1f}%")
+        else:
+            # 不打斗，一方投降
+            surrender_text = random.choice(RobberyConfig.SURRENDER_TEXTS_WIN).format(
+                victim=target_data['nickname'],
+                robber=nickname
+            )
+            fight_info.append(surrender_text)
+
+        # 选择抢劫金额档位
+        rand = random.random()
+        cumulative_prob = 0
+        robbery_percent = 0.05  # 默认5%
+
+        for min_pct, max_pct, prob in RobberyConfig.ROBBERY_AMOUNT_TIERS:
+            cumulative_prob += prob
+            if rand < cumulative_prob:
+                robbery_percent = random.uniform(min_pct, max_pct)
+                break
+
+        # 计算抢劫金额
+        robbery_amount = int(target_coins * robbery_percent)
+        if robbery_amount <= 0:
+            robbery_amount = 1  # 至少抢1枚
+
+        # === 触发抢劫后事件 ===
+        # 选择事件
+        event_rand = random.random()
+        cumulative_prob = 0
+        selected_event = None
+
+        for event_id, prob, desc_template, params in RobberyConfig.ROBBERY_EVENTS:
+            cumulative_prob += prob
+            if event_rand < cumulative_prob:
+                selected_event = (event_id, desc_template, params)
+                break
+
+        if not selected_event:
+            # 默认完美逃脱
+            selected_event = ('perfect_escape', '🏃 完美逃脱！没人发现你！', {'keep_ratio': 1.0})
+
+        event_id, desc_template, event_params = selected_event
+
+        # 处理不同事件类型
+        final_gain = 0
+        return_to_victim = 0
+        event_desc = ""
+
+        if 'keep_ratio' in event_params:
+            # 固定保留比例
+            keep_ratio = event_params['keep_ratio']
+            final_gain = int(robbery_amount * keep_ratio)
+            event_desc = desc_template
+
+        elif 'return_min' in event_params:
+            # 归还部分给受害者
+            return_ratio = random.uniform(event_params['return_min'], event_params['return_max'])
+            return_to_victim = int(robbery_amount * return_ratio)
+            final_gain = robbery_amount - return_to_victim
+            return_pct = int(return_ratio * 100)
+            event_desc = desc_template.format(return_pct=return_pct, victim=target_data['nickname'])
+
+        elif 'loss_min' in event_params:
+            # 损失大部分（金币消失）
+            loss_ratio = random.uniform(event_params['loss_min'], event_params['loss_max'])
+            loss_amount = int(robbery_amount * loss_ratio)
+            final_gain = robbery_amount - loss_amount
+            loss_pct = int(loss_ratio * 100)
+            event_desc = desc_template.format(loss_pct=loss_pct)
+
+        elif 'bonus_min' in event_params:
+            # 额外收获
+            bonus_ratio = random.uniform(event_params['bonus_min'], event_params['bonus_max'])
+            bonus_amount = int(robbery_amount * bonus_ratio)
+            final_gain = robbery_amount + bonus_amount
+            bonus_pct = int(bonus_ratio * 100)
+            event_desc = desc_template.format(bonus_pct=bonus_pct)
+
+        else:
+            # 未知事件类型，默认完美逃脱
+            final_gain = robbery_amount
+            event_desc = "🏃 完美逃脱！（未知事件类型，请联系管理员）"
+            print(f"[WARNING] Unknown robbery event type: {event_id}, params: {event_params}")
+
+        # 执行金币转移
+        self.shop.modify_coins(group_id, target_id, -robbery_amount)  # 扣除受害者金币
+        if return_to_victim > 0:
+            self.shop.modify_coins(group_id, target_id, return_to_victim)  # 归还部分
+        if final_gain > 0:
+            self.shop.modify_coins(group_id, user_id, final_gain)  # 给抢劫者
+
+        # 构建结果消息
+        result_lines = [
+            "💰 ══ 牛牛抢劫结果 ══ 💰",
+            f"🎯 {nickname} 抢劫 {target_data['nickname']} 成功！",
+            f"💵 抢到：{robbery_amount} 枚金币（{robbery_percent*100:.1f}%）",
+            ""
+        ]
+
+        # 添加打斗信息
+        if fight_info:
+            result_lines.extend(fight_info)
+            result_lines.append("")
+
+        # 添加抢劫后事件
+        result_lines.append(f"🎲 {event_desc}")
+        result_lines.append("")
+
+        if return_to_victim > 0:
+            result_lines.append(f"↩️ 归还给 {target_data['nickname']}：{return_to_victim} 枚")
+        if final_gain > 0:
+            result_lines.append(f"✅ {nickname} 最终获得：{final_gain} 枚金币")
+        elif final_gain == 0:
+            result_lines.append(f"😭 {nickname} 最终什么都没得到...")
+
+        # 连胜提示
+        if new_win_streak >= 3:
+            result_lines.append(f"🔥 抢劫{new_win_streak}连胜！")
+
+        result_lines.append("═══════════════════")
+
+        yield event.plain_result("\n".join(result_lines))
 
     async def _show_status(self, event):
         """查看牛牛状态"""
@@ -2623,10 +2997,16 @@ class NiuniuPlugin(Star):
         top_users = sorted_users[:10]
         for idx, (uid, data) in enumerate(top_users, 1):
             hardness = data.get('hardness', 1)
+            coins = data.get('coins', 0)
             # 检查是否有寄生牛牛
-            parasite_mark = "【寄】" if data.get('parasite') else ""
+            parasite_info = " 🪱寄生牛牛" if data.get('parasite') else ""
+            # 第一行：排名、昵称、长度、硬度
             ranking.append(
-                f"{idx}. {data['nickname']}{parasite_mark} ➜ {self.format_length(data['length'])} 💪{hardness}"
+                f"{idx}. {data['nickname']} ➜ {self.format_length(data['length'])} 💪{hardness}"
+            )
+            # 第二行：金币、寄生标记
+            ranking.append(
+                f"   💰 {self.format_coins(coins)}{parasite_info}"
             )
 
         # 如果总人数超过10，显示...和后3名
@@ -2637,10 +3017,16 @@ class NiuniuPlugin(Star):
             bottom_users = sorted_users[bottom_start:]
             for idx, (uid, data) in enumerate(bottom_users, bottom_start + 1):
                 hardness = data.get('hardness', 1)
+                coins = data.get('coins', 0)
                 # 检查是否有寄生牛牛
-                parasite_mark = "【寄】" if data.get('parasite') else ""
+                parasite_info = " 🪱寄生牛牛" if data.get('parasite') else ""
+                # 第一行：排名、昵称、长度、硬度
                 ranking.append(
-                    f"{idx}. {data['nickname']}{parasite_mark} ➜ {self.format_length(data['length'])} 💪{hardness}"
+                    f"{idx}. {data['nickname']} ➜ {self.format_length(data['length'])} 💪{hardness}"
+                )
+                # 第二行：金币、寄生标记
+                ranking.append(
+                    f"   💰 {self.format_coins(coins)}{parasite_info}"
                 )
 
         yield event.plain_result("\n".join(ranking))

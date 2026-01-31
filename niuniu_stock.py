@@ -30,7 +30,7 @@ STOCK_CONFIG = {
         "dajiao": (0.005, 0.02),    # 打胶：0.5%-2%
         "compare": (0.01, 0.05),     # 比划：1%-5%
         "item": (0.02, 0.08),        # 道具：2%-8%
-        "chaos": (0.02, 0.08),       # 混沌(开团)：2%-8%
+        "chaos": (0.02, 0.08),       # 混沌事件：2%-8%
         "global": (0.05, 0.15),      # 全局：5%-15%
     },
 }
@@ -358,6 +358,7 @@ class NiuniuStock:
             self._data[group_id] = {
                 "price": STOCK_CONFIG["base_price"],
                 "holdings": {},      # {user_id: shares}
+                "buy_times": {},     # {user_id: timestamp} 最近买入时间
                 "events": [],        # 最近事件列表
                 "last_update": time.time(),
             }
@@ -494,17 +495,21 @@ class NiuniuStock:
         if coins <= 0:
             return False, "❌ 购买金额必须大于0", 0
 
+        # 计算手续费（3%）
+        fee = round(coins * 0.03, 2)
+        actual_coins = coins - fee
+
         data = self._get_group_data(group_id)
         old_price = data.get("price", STOCK_CONFIG["base_price"])
 
-        # 先计算买入对价格的影响（先涨价再成交，防止套利）
-        impact = min(0.02, 0.001 + coins / 10000 * 0.01)  # 0.1%-2%
+        # 先计算买入对价格的影响（用实际购买金额计算，先涨价再成交，防止套利）
+        impact = min(0.02, 0.001 + actual_coins / 10000 * 0.01)  # 0.1%-2%
         new_price = old_price * (1 + impact)
         new_price = min(STOCK_CONFIG["max_price"], round(new_price, 2))
         price_change_pct = impact * 100
 
         # 按涨后的价格成交
-        shares = coins / new_price
+        shares = actual_coins / new_price
 
         # 更新持仓
         user_id_str = str(user_id)
@@ -514,10 +519,15 @@ class NiuniuStock:
         current = data["holdings"].get(user_id_str, 0)
         data["holdings"][user_id_str] = current + shares
 
-        # 更新用户统计
+        # 记录买入时间
+        if "buy_times" not in data:
+            data["buy_times"] = {}
+        data["buy_times"][user_id_str] = time.time()
+
+        # 更新用户统计（记录实际投入，不包括手续费）
         stats = self._get_user_stats(group_id, user_id)
-        stats["total_invested"] += coins
-        stats["cost_basis"] += coins
+        stats["total_invested"] += actual_coins
+        stats["cost_basis"] += actual_coins
         stats["buy_count"] += 1
 
         # 更新股价
@@ -529,7 +539,8 @@ class NiuniuStock:
             f"✅ 购买成功！\n"
             f"{STOCK_CONFIG['emoji']} {STOCK_CONFIG['name']}\n"
             f"📦 +{shares:.4f}股\n"
-            f"💰 花费 {coins:.0f}金币\n"
+            f"💰 支付 {coins:.0f}金币 (含手续费 {fee:.0f})\n"
+            f"💵 实际购买 {actual_coins:.0f}金币\n"
             f"📈 成交价 {new_price:.2f}/股 (买入推高 +{price_change_pct:.2f}%)"
         ), shares
 
@@ -774,7 +785,7 @@ class NiuniuStock:
         返回: (成功, 消息, 获得金币-税后)
         注意：先跌价再成交，防止套利
         """
-        from niuniu_config import StockTaxConfig
+        from niuniu_config import StockTaxConfig, StockTradingConfig
 
         data = self._get_group_data(group_id)
         user_id_str = str(user_id)
@@ -790,6 +801,12 @@ class NiuniuStock:
         if shares <= 0:
             return False, "❌ 卖出数量必须大于0", 0
 
+        # 检查持仓时间
+        buy_time = data.get("buy_times", {}).get(user_id_str, 0)
+        hold_time = time.time() - buy_time
+        is_quick_sell = hold_time < StockTradingConfig.MIN_HOLD_TIME
+        quick_sell_fee = 0
+
         old_price = data.get("price", STOCK_CONFIG["base_price"])
 
         # 先计算卖出对价格的影响（用旧价估算金额）
@@ -802,11 +819,18 @@ class NiuniuStock:
         # 按跌后的价格成交（先跌价再成交，防止套利）
         coins = round(shares * new_price, 2)
 
+        # 计算基础手续费（3%）
+        fee = round(coins * 0.03, 2)
+
         # 计算这部分股票的成本（按比例）
         stats = self._get_user_stats(group_id, user_id)
         sell_ratio = shares / current
         cost_of_sold = stats["cost_basis"] * sell_ratio
         profit_or_loss = coins - cost_of_sold
+
+        # 如果是快速倒手且有盈利，收取获利部分的75%作为倒手费
+        if is_quick_sell and profit_or_loss > 0:
+            quick_sell_fee = round(profit_or_loss * StockTradingConfig.QUICK_SELL_FEE_RATE, 2)
 
         # 计算收益税（仅对正收益征税）
         tax_amount = 0
@@ -815,24 +839,26 @@ class NiuniuStock:
         if profit_or_loss > 0 and avg_coins > 0:
             tax_amount, tax_rate, tax_bracket_str = self._calculate_tax(profit_or_loss, avg_coins)
 
-        # 税后实际获得金币
-        coins_after_tax = coins - tax_amount
+        # 税后+扣除手续费+倒手费后实际获得金币
+        coins_after_all_fees = coins - tax_amount - fee - quick_sell_fee
 
-        # 更新统计（记录税前数据）
-        stats["total_withdrawn"] += coins_after_tax
+        # 更新统计（记录税后+手续费+倒手费后的数据）
+        stats["total_withdrawn"] += coins_after_all_fees
         stats["cost_basis"] -= cost_of_sold
         stats["sell_count"] += 1
         if profit_or_loss >= 0:
-            stats["total_profit"] += (profit_or_loss - tax_amount)
+            stats["total_profit"] += (profit_or_loss - tax_amount - fee - quick_sell_fee)
         else:
-            stats["total_loss"] += abs(profit_or_loss)
+            stats["total_loss"] += abs(profit_or_loss) + fee + quick_sell_fee  # 亏损时所有费用都算损失
 
         # 更新持仓
         data["holdings"][user_id_str] = current - shares
         if data["holdings"][user_id_str] <= 0:
             del data["holdings"][user_id_str]
-            # 清仓时重置成本
+            # 清仓时重置成本和买入时间
             stats["cost_basis"] = 0
+            if user_id_str in data.get("buy_times", {}):
+                del data["buy_times"][user_id_str]
 
         # 更新股价
         data["price"] = new_price
@@ -854,6 +880,19 @@ class NiuniuStock:
         else:
             lines.append(f"📉 本次亏损 {profit_or_loss:.0f}金币")
 
+        # 手续费显示
+        lines.append(f"💸 手续费: -{fee:.0f}金币 (3%)")
+
+        # 快速倒手费显示
+        if is_quick_sell:
+            lines.append("")
+            if profit_or_loss > 0:
+                lines.append(random.choice(StockTradingConfig.QUICK_SELL_PENALTY_TEXTS))
+                lines.append(f"⏰ 持仓时间: {int(hold_time)}秒 (需要{StockTradingConfig.MIN_HOLD_TIME}秒)")
+                lines.append(f"💀 倒手费: -{quick_sell_fee:.0f}金币 (获利部分的{StockTradingConfig.QUICK_SELL_FEE_RATE*100:.0f}%)")
+            else:
+                lines.append("⏰ 持仓时间不足，但因为亏损，不收取倒手费")
+
         # 税收显示
         if tax_amount > 0:
             lines.append("")
@@ -864,18 +903,20 @@ class NiuniuStock:
             lines.append(f"📋 有效税率: {tax_rate*100:.1f}%")
 
             # 根据税率选择文案
-            if tax_rate >= 0.50:
+            if tax_rate >= 0.95:
+                lines.append(random.choice(StockTaxConfig.ULTIMATE_TAX_TEXTS))
+            elif tax_rate >= 0.50:
                 lines.append(random.choice(StockTaxConfig.EXTREME_TAX_TEXTS))
             elif tax_rate >= 0.30:
                 lines.append(random.choice(StockTaxConfig.HIGH_TAX_TEXTS))
             elif tax_rate <= 0.10:
                 lines.append(random.choice(StockTaxConfig.LOW_TAX_TEXTS))
 
-            lines.append(f"💰 税后到手: {coins_after_tax:.0f}金币")
-        else:
-            lines.append(f"💰 实际获得: {coins_after_tax:.0f}金币")
+        # 最终到手
+        lines.append("")
+        lines.append(f"💰 最终到手: {coins_after_all_fees:.0f}金币")
 
-        return True, "\n".join(lines), coins_after_tax
+        return True, "\n".join(lines), coins_after_all_fees
 
     # ==================== 显示格式化 ====================
 
@@ -927,7 +968,7 @@ class NiuniuStock:
         lines.extend([
             "",
             "═══════════════════════",
-            "📌 牛牛股市 购买 <金额>",
+            "📌 牛牛股市 购买 <金额|梭哈>",
             "📌 牛牛股市 出售 [数量/全部]",
             "📌 牛牛股市 持仓",
         ])
@@ -951,7 +992,7 @@ class NiuniuStock:
 
         # 没有任何交易记录
         if buy_count == 0 and shares <= 0:
-            return f"📊 {nickname} 的投资档案\n\n💼 还没有参与过股市交易\n💡 输入「牛牛股市 购买 <金额>」开始投资"
+            return f"📊 {nickname} 的投资档案\n\n💼 还没有参与过股市交易\n💡 输入「牛牛股市 购买 <金额|梭哈>」开始投资"
 
         lines = [
             f"📊 {nickname} 的投资档案",
