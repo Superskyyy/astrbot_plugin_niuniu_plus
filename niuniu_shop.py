@@ -927,8 +927,8 @@ class NiuniuShop:
 
                     # 显示消费税信息
                     if purchase_tax > 0:
-                        first_digit = int(str(price_per_buy)[0])
-                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{first_digit}%税率）")
+                        digit_count = len(str(price_per_buy))
+                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
 
                     # 扣除金币（含税）
                     self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
