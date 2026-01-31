@@ -353,14 +353,18 @@ class NiuniuShop:
             group_data=group_data
         )
 
-    def _apply_coin_vanish(self, group_id: str, victim_id: str, item_name: str) -> Dict[str, Any]:
+    def _apply_coin_vanish(self, group_id: str, victim_id: str, item_name: str,
+                           group_data: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         计算并执行金币消失（用于大自爆/黑洞/月牙天冲）
+
+        优化：传入 group_data 避免重复文件I/O
 
         Args:
             group_id: 群组ID
             victim_id: 受害者ID
             item_name: 道具名称（用于显示）
+            group_data: 已加载的群组数据（可选，传入则直接使用避免重复加载）
 
         Returns:
             消失信息字典，包含:
@@ -368,13 +372,22 @@ class NiuniuShop:
             - amount: 消失的金币数量
             - percent: 消失的百分比
             - message: 消息文本
+            - coin_change: 金币变化量（负数，调用者需要应用）
         """
         # 75%概率触发
         if random.random() > CoinVanishConfig.TRIGGER_CHANCE:
             return {'vanished': False}
 
-        # 获取受害者当前金币
-        victim_coins = self.get_user_coins(group_id, victim_id)
+        # 获取受害者当前金币（优化：如果有group_data则直接取coins字段）
+        if group_data and victim_id in group_data:
+            victim_data = group_data.get(victim_id, {})
+            victim_coins = victim_data.get('coins', 0)
+            # 也检查sign_data中的金币
+            sign_coins = self.get_sign_coins(group_id, victim_id)
+            victim_coins = victim_coins + sign_coins
+        else:
+            victim_coins = self.get_user_coins(group_id, victim_id)
+
         if victim_coins <= 0:
             return {'vanished': False}
 
@@ -394,14 +407,12 @@ class NiuniuShop:
         if vanish_amount <= 0:
             return {'vanished': False}
 
-        # 扣除金币
-        self.modify_coins(group_id, victim_id, -vanish_amount)
-
-        # 获取受害者数据用于显示名称
-        niuniu_data = self._load_niuniu_data()
-        group_data = niuniu_data.get(group_id, {})
-        victim_data = group_data.get(victim_id, {})
-        victim_name = victim_data.get('nickname', victim_id) if isinstance(victim_data, dict) else victim_id
+        # 获取受害者名称（使用传入的group_data避免重复加载）
+        if group_data and victim_id in group_data:
+            victim_data = group_data.get(victim_id, {})
+            victim_name = victim_data.get('nickname', victim_id) if isinstance(victim_data, dict) else victim_id
+        else:
+            victim_name = victim_id
 
         # 根据道具生成不同的消息
         if item_name == "牛牛大自爆":
@@ -421,7 +432,8 @@ class NiuniuShop:
             'amount': vanish_amount,
             'percent': loss_percent,
             'victim_name': victim_name,
-            'message': message
+            'message': message,
+            'coin_change': -vanish_amount  # 返回变化量，由调用者统一应用
         }
 
     def _check_risk_transfer(self, group_data: Dict[str, Any], victim_id: str,
