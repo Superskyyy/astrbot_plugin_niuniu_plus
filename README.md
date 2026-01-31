@@ -1,4 +1,4 @@
-# 牛牛大作战 Plus
+# 牛牛大作战 Pro Max Plus 🚀
 
 > 基于 [astrbot_plugin_niuniu](https://github.com/zgojin/astrbot_plugin_niuniu) 重构，感谢原作者 **zgojin** 的创意与贡献！
 
