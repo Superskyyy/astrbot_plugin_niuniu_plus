@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.19.5")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.19.6")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -217,6 +217,10 @@ class NiuniuPlugin(Star):
         user_data.update(updates)
         self._save_data(data)
         return user_data
+
+    def consume_item(self, group_id: str, user_id: str, item_name: str) -> bool:
+        """消耗道具（代理方法，调用shop.consume_item）"""
+        return self.shop.consume_item(group_id, user_id, item_name)
 
     def update_group_data(self, group_id, updates):
         """更新群组数据并保存到文件/缓存"""

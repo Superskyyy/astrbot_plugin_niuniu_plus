@@ -1,5 +1,16 @@
 # Changelog
 
+## [v4.19.6] - 2026-01-31
+
+### Bug修复
+- **修复打胶道具消耗报错** 🐛 BUG FIX
+  - 问题：打胶时报错 `'NiuniuPlugin' object has no attribute 'consume_item'`
+  - 原因：`consume_item`方法在NiuniuShop类中，但effects引用的是NiuniuPlugin
+  - 修复：在NiuniuPlugin中添加代理方法
+  - 📍 位置：main.py:220-222
+
+---
+
 ## [v4.19.5] - 2026-01-31
 
 ### 数值调整
