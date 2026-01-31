@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.19.6")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.19.7")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -1991,11 +1991,6 @@ class NiuniuPlugin(Star):
                 yield event.plain_result("❌ 10分钟内只能比划三次")
                 return
 
-            # 更新冷却时间和比划次数
-            compare_records[target_id] = current_time
-            compare_records['count'] = compare_count + 1
-            self.update_last_actions(last_actions)
-
             # ===== 解析赌注 =====
             bet_amount = 0
             msg_parts = event.message_str.split()
@@ -2004,14 +1999,10 @@ class NiuniuPlugin(Star):
                     bet_amount = int(part)
                     break
 
-            # 验证赌注
+            # 验证赌注（只检查最小值，无上限）
             if bet_amount > 0:
-                if bet_amount < CompareBet.MIN_BET or bet_amount > CompareBet.MAX_BET:
-                    yield event.plain_result(
-                        self.niuniu_texts['compare'].get('bet_invalid', ['❌ 赌注必须在 {min}-{max} 之间'])[0].format(
-                            min=CompareBet.MIN_BET, max=CompareBet.MAX_BET
-                        )
-                    )
+                if bet_amount < CompareBet.MIN_BET:
+                    yield event.plain_result(f"❌ 赌注最少 {CompareBet.MIN_BET} 金币")
                     return
                 # 检查金币是否足够
                 user_coins = self.shop.get_user_coins(group_id, user_id)
@@ -2022,6 +2013,11 @@ class NiuniuPlugin(Star):
                         )
                     )
                     return
+
+            # 更新冷却时间和比划次数（在验证通过后才更新）
+            compare_records[target_id] = current_time
+            compare_records['count'] = compare_count + 1
+            self.update_last_actions(last_actions)
 
             # ===== 连胜/连败系统 =====
             win_streak = user_data.get('compare_win_streak', 0)
