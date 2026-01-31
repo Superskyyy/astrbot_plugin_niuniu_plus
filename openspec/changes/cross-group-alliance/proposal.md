@@ -50,6 +50,10 @@ alliances:
       "12345678": ["user1", "user2"]
       "87654321": ["user2", "user3"]
       "11111111": ["user3", "user4"]
+    unified_origins:  # 各群的会话标识符（用于广播消息）
+      "12345678": "aiocqhttp:GroupMessage:12345678"
+      "87654321": "aiocqhttp:GroupMessage:87654321"
+      "11111111": "aiocqhttp:GroupMessage:11111111"
     created_at: 1706745600
     created_by: "999999999"  # 创建者QQ号
     leader_group: "12345678"
@@ -436,6 +440,13 @@ async def _alliance_create(self, event):
         users = [uid for uid in group_data.keys() if uid != 'plugin_enabled']
         original_users[gid] = users
 
+    # 构造各群的 unified_msg_origin（用于广播）
+    platform_name = event.unified_msg_origin.split(':')[0]
+    unified_origins = {}
+    for gid in group_ids:
+        # 假设所有群使用相同平台，手动构造
+        unified_origins[gid] = f"{platform_name}:GroupMessage:{gid}"
+
     # 创建联盟
     alliance_id = group_ids[0]
     alliances.setdefault('alliances', {})[alliance_id] = {
@@ -444,6 +455,7 @@ async def _alliance_create(self, event):
         'groups': group_ids,
         'group_aliases': {},  # 可后续通过命令配置
         'original_users': original_users,
+        'unified_origins': unified_origins,
         'created_at': time.time(),
         'created_by': user_id,
         'leader_group': group_id
@@ -705,31 +717,94 @@ async def trigger_market_crash(self, group_id: str):
 #### 4.2 广播方法实现
 
 ```python
-async def send_group_message(self, group_id: str, message: str):
-    """
-    发送群消息的底层方法
-    需要调用 AstrBot 的 API
-    """
-    # TODO: 实现方案待定
-    # 可能需要使用 self.context 的某个方法
-    pass
+from astrbot.api.message_components import Plain, MessageChain
 
-async def _broadcast_to_alliance(self, group_id: str, message: str, exclude_current: bool = False):
-    """向联盟内所有群广播消息"""
+async def _broadcast_to_alliance(
+    self,
+    group_id: str,
+    message: str,
+    exclude_current: bool = False
+):
+    """
+    向联盟内所有群广播消息
+
+    Args:
+        group_id: 当前操作的群号
+        message: 要广播的消息内容
+        exclude_current: 是否排除当前群（避免重复通知）
+    """
     alliance_id = self._get_alliance_id(group_id)
     if not alliance_id:
         return
 
-    groups = self._get_alliance_groups(alliance_id)
+    alliances = self._load_alliances()
+    alliance = alliances['alliances'][alliance_id]
+    unified_origins = alliance.get('unified_origins', {})
 
-    for gid in groups:
+    # 如果没有 unified_origins，尝试构造（容错）
+    if not unified_origins:
+        platform_name = "aiocqhttp"  # 默认平台
+        for gid in alliance['groups']:
+            unified_origins[gid] = f"{platform_name}:GroupMessage:{gid}"
+
+    # 广播到各群
+    for gid, origin in unified_origins.items():
         if exclude_current and gid == group_id:
             continue
 
         try:
-            await self.send_group_message(gid, message)
+            # 构建消息链
+            chain = MessageChain()
+            chain.chain.append(Plain(message))
+
+            # 发送消息
+            await self.context.send_message(origin, chain)
+
+            self.context.logger.info(f"✅ 广播到群 {gid} 成功")
+
         except Exception as e:
-            logger.error(f"广播到群 {gid} 失败: {e}")
+            self.context.logger.error(f"❌ 广播到群 {gid} 失败: {e}")
+```
+
+#### 4.3 自动记录 unified_msg_origin（容错机制）
+
+在 `on_group_message` 中添加后台记录逻辑：
+
+```python
+async def on_group_message(self, event: AstrMessageEvent):
+    """处理群消息"""
+    group_id = str(event.message_obj.group_id)
+
+    # 自动记录 unified_msg_origin（用于后续广播）
+    self._record_group_origin(group_id, event.unified_msg_origin)
+
+    # ... 其他消息处理逻辑
+
+def _record_group_origin(self, group_id: str, unified_msg_origin: str):
+    """
+    记录群的真实 unified_msg_origin
+    如果该群在联盟中，更新联盟配置
+    """
+    try:
+        alliance_id = self._get_alliance_id(group_id)
+        if not alliance_id:
+            return
+
+        alliances = self._load_alliances()
+        alliance = alliances['alliances'][alliance_id]
+
+        # 更新真实的 unified_msg_origin
+        if 'unified_origins' not in alliance:
+            alliance['unified_origins'] = {}
+
+        current_origin = alliance['unified_origins'].get(group_id)
+        if current_origin != unified_msg_origin:
+            alliance['unified_origins'][group_id] = unified_msg_origin
+            self._save_alliances(alliances)
+            self.context.logger.info(f"📝 更新群 {group_id} 的 unified_msg_origin")
+
+    except Exception as e:
+        self.context.logger.error(f"记录群会话ID失败: {e}")
 ```
 
 #### 4.3 广播集成点
@@ -842,9 +917,10 @@ ctx = EffectContext(
 ## Implementation Plan
 
 ### Phase 1: 基础设施 (1-2天)
-- [ ] 创建联盟配置文件操作方法（含群别名）
+- [ ] 创建联盟配置文件操作方法（含群别名、unified_origins）
 - [ ] 实现数据合并逻辑
-- [ ] 改造核心数据访问层
+- [ ] 改造核心数据访问层（get_user_data, update_user_data）
+- [ ] 实现自动记录 unified_msg_origin 的逻辑
 - [ ] 单元测试
 
 ### Phase 2: 联盟管理 (1天)
@@ -857,9 +933,10 @@ ctx = EffectContext(
 - [ ] 验证跨群共享
 
 ### Phase 4: 广播系统 (半天-1天)
-- [ ] 调研 AstrBot 消息API
-- [ ] 实现广播方法
-- [ ] 集成到关键功能点
+- [ ] ✅ 调研 AstrBot 消息API（已完成）
+- [ ] 实现 _broadcast_to_alliance() 方法
+- [ ] 集成到关键功能点（股市事件、联盟管理、全局BUFF等）
+- [ ] 测试广播容错机制（构造值 + 真实值）
 
 ### Phase 5: 功能适配 (半天-1天)
 - [ ] 排行榜跨群聚合（显示群别名）
@@ -967,24 +1044,32 @@ ctx = EffectContext(
 
 ## Open Questions
 
-1. **AstrBot 消息发送API**: 如何主动向指定群发送消息？
-   - 需要查阅 AstrBot 文档或代码
-   - 可能需要使用 `self.context` 的某个方法
+### ✅ 已解决（技术调研完成）
 
-2. **权限验证**: 如何验证用户是否为其他群的管理员？
-   - 跨群权限查询可能不可行
-   - 建议采用"邀请-确认"机制或仅允许盟主群管理员创建
+1. ~~**AstrBot 消息发送API**~~ ✅
+   - 使用 `await self.context.send_message(unified_msg_origin, message_chain)`
+   - 参考：`technical-research.md`
 
-3. **联盟解散后的数据分叉**: 如何判断用户"在某个群有活动"？
-   - 方案1: 检查原始数据文件中该群是否有该用户的条目
-   - 方案2: 联盟创建时记录每个用户的"原始归属群"
-   - 需要确认具体实现方式
+2. ~~**权限验证**~~ ✅
+   - 只验证操作者是否为管理员（使用现有的 `self.is_admin()`）
+   - 采用信任模型，不跨群验证
 
-4. **联盟解散后**: 是否保留历史数据？
-   - 建议：保留联盟配置但标记为"已解散"
-   - 不删除数据，仅停止同步
+3. ~~**数据分叉判断**~~ ✅
+   - 联盟创建时记录 `original_users`
+
+4. ~~**历史数据保留**~~ ✅
+   - 解散后完全删除联盟配置，不保留历史
+
+### ⚠️ 待确认
+
+无剩余待确认问题。所有技术细节已在调研中确定。
 
 ## References
 
 - 原始设计文档：跨群战斗系统 - 架构设计文档
 - 用户需求：所有东西都是跨群共享的，包括通知系统
+- 技术调研报告：`technical-research.md`（2026-01-31 完成）
+  - AstrBot 消息发送 API
+  - 权限验证机制
+  - unified_msg_origin 格式和使用
+  - 广播系统实现方案
