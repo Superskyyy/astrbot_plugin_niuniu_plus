@@ -246,7 +246,7 @@ class EffectManager:
 
         return self._subscription_data[group_id][user_id]
 
-    def subscription_middleware(self, group_id: str, user_id: str) -> None:
+    def subscription_middleware(self, group_id: str, user_id: str) -> Optional[str]:
         """
         订阅中间件：处理订阅相关的检查和清理
 
@@ -257,52 +257,65 @@ class EffectManager:
         Args:
             group_id: 群组ID
             user_id: 用户ID
+
+        Returns:
+            错误消息（如果有），None表示成功
         """
-        group_id = str(group_id)
-        user_id = str(user_id)
+        try:
+            group_id = str(group_id)
+            user_id = str(user_id)
 
-        subs = self._get_user_subscriptions(group_id, user_id)
-        if not subs:
-            return
+            subs = self._get_user_subscriptions(group_id, user_id)
+            if not subs:
+                return None
 
-        current_time = time.time()
-        today = datetime.now().strftime('%Y-%m-%d')
-        modified = False
+            current_time = time.time()
+            today = datetime.now().strftime('%Y-%m-%d')
+            modified = False
 
-        # 清理所有过期订阅
-        expired_subs = []
-        for sub_name, sub_info in subs.items():
-            if isinstance(sub_info, dict) and "expire_time" in sub_info:
-                if current_time > sub_info.get("expire_time", 0):
-                    expired_subs.append(sub_name)
+            # 清理所有过期订阅
+            expired_subs = []
+            for sub_name, sub_info in subs.items():
+                if isinstance(sub_info, dict) and "expire_time" in sub_info:
+                    if current_time > sub_info.get("expire_time", 0):
+                        expired_subs.append(sub_name)
 
-        for sub_name in expired_subs:
-            del subs[sub_name]
-            modified = True
+            for sub_name in expired_subs:
+                del subs[sub_name]
+                modified = True
 
-        # 重置所有需要每日重置的计数器
-        for sub_name, sub_info in subs.items():
-            if not isinstance(sub_info, dict):
-                continue
+            # 重置所有需要每日重置的计数器
+            for sub_name, sub_info in subs.items():
+                if not isinstance(sub_info, dict):
+                    continue
 
-            # 检查是否需要每日重置
-            if sub_name == "melon_eater":
-                # 吃瓜群众：重置每日触发次数
-                if "melon_trigger_date" not in sub_info or sub_info["melon_trigger_date"] != today:
-                    sub_info["melon_trigger_count"] = 0
-                    sub_info["melon_trigger_date"] = today
-                    modified = True
+                # 检查是否需要每日重置
+                if sub_name == "melon_eater":
+                    # 吃瓜群众：重置每日触发次数
+                    if "melon_trigger_date" not in sub_info or sub_info["melon_trigger_date"] != today:
+                        sub_info["melon_trigger_count"] = 0
+                        sub_info["melon_trigger_date"] = today
+                        modified = True
 
-            # 未来可以在这里添加其他订阅的每日重置逻辑
-            # elif sub_name == "other_subscription":
-            #     if "reset_date" not in sub_info or sub_info["reset_date"] != today:
-            #         sub_info["daily_count"] = 0
-            #         sub_info["reset_date"] = today
-            #         modified = True
+                # 未来可以在这里添加其他订阅的每日重置逻辑
+                # elif sub_name == "other_subscription":
+                #     if "reset_date" not in sub_info or sub_info["reset_date"] != today:
+                #         sub_info["daily_count"] = 0
+                #         sub_info["reset_date"] = today
+                #         modified = True
 
-        # 如果有修改，保存数据
-        if modified:
-            self._save_subscriptions()
+            # 如果有修改，保存数据
+            if modified:
+                self._save_subscriptions()
+
+            return None  # 成功，无错误
+
+        except Exception as e:
+            error_msg = f"⚠️ 订阅中间件异常: {str(e)}"
+            print(f"[SubscriptionMiddleware Error] {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return error_msg
 
     def has_subscription(self, group_id: str, user_id: str, subscription_name: str) -> bool:
         """检查用户是否有某个订阅且未过期"""
