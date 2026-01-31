@@ -4,10 +4,10 @@
 
 ### Bug修复
 - **修复道具购买 UnboundLocalError** 🐛 CRITICAL BUG FIX
-  - 问题：购买巴黎牛家等道具时报错 `cannot access local variable 'EffectContext'`
-  - 原因：条件块内的本地导入导致 Python 将 `EffectContext` 标记为局部变量
+  - 问题：购买道具时报错 `cannot access local variable 'EffectContext'` 或 `'stock_hook'`
+  - 原因：条件块内的本地导入导致 Python 将变量标记为局部变量
   - 修复：删除多余的本地导入（顶部已有全局导入）
-  - 📍 位置：niuniu_shop.py:1039
+  - 📍 位置：niuniu_shop.py:1039, 1149
 
 ---
 

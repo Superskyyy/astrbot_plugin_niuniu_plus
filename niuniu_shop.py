@@ -1146,7 +1146,6 @@ class NiuniuShop:
 
                     # 股市钩子 - 使用累积效果触发
                     item_name = selected_item.get('name', '')
-                    from niuniu_stock import stock_hook
                     stock_msg = None
                     if hasattr(effect, 'stock_config') and effect.stock_config:
                         stock_cfg = effect.stock_config
