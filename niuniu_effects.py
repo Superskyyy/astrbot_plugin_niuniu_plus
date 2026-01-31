@@ -34,6 +34,20 @@ SUBSCRIPTION_CONFIGS = {
         "emoji": "🚫",
         "description": "完全免疫寄生牛牛",
     },
+    "melon_eater": {
+        "name": "吃瓜群众",
+        "price_per_day": 100000,  # 10万/天
+        "emoji": "🍉",
+        "description": "别人打胶成功时获得50%增长，使用道具时30%概率获得10%金币",
+        "max_triggers_per_day": 20,  # 每天最多触发20次
+    },
+    "time_rewind_vip": {
+        "name": "时光倒流VIP",
+        "price_per_day": 1000000,  # 100万/天
+        "emoji": "⏰",
+        "description": "受到损失时30%概率时光倒流，损失无效化",
+        "trigger_chance": 0.30,  # 30%触发概率
+    },
 }
 
 # 订阅数据文件路径
@@ -371,6 +385,49 @@ class EffectManager:
         """检查是否有寄生免疫"""
         return self.has_subscription(group_id, user_id, "parasite_immunity")
 
+    def has_time_rewind_vip(self, group_id: str, user_id: str) -> bool:
+        """检查是否有时光倒流VIP"""
+        return self.has_subscription(group_id, user_id, "time_rewind_vip")
+
+    def get_all_group_subscribers(self, group_id: str, subscription_name: str) -> List[str]:
+        """获取群内所有订阅了某个服务的用户ID列表"""
+        group_id = str(group_id)
+        subscribers = []
+
+        if group_id not in self._subscription_data:
+            return subscribers
+
+        for user_id in self._subscription_data[group_id]:
+            if self.has_subscription(group_id, user_id, subscription_name):
+                subscribers.append(user_id)
+
+        return subscribers
+
+    def increment_melon_eater_count(self, group_id: str, user_id: str) -> bool:
+        """增加吃瓜群众触发次数，返回是否还能继续触发"""
+        subs = self._get_user_subscriptions(group_id, user_id)
+
+        if "melon_eater" not in subs:
+            return False
+
+        # 获取今天的触发次数
+        today = datetime.now().strftime('%Y-%m-%d')
+        if "melon_trigger_date" not in subs["melon_eater"] or subs["melon_eater"]["melon_trigger_date"] != today:
+            # 新的一天，重置计数
+            subs["melon_eater"]["melon_trigger_count"] = 0
+            subs["melon_eater"]["melon_trigger_date"] = today
+
+        current_count = subs["melon_eater"].get("melon_trigger_count", 0)
+        max_triggers = SUBSCRIPTION_CONFIGS["melon_eater"]["max_triggers_per_day"]
+
+        if current_count >= max_triggers:
+            return False
+
+        # 增加计数
+        subs["melon_eater"]["melon_trigger_count"] = current_count + 1
+        self._save_subscriptions()
+        return True
+
     def format_subscription_shop(self) -> str:
         """格式化订阅商店"""
         lines = [
@@ -495,6 +552,121 @@ class EffectManager:
                 # If intercepted, stop processing
                 if ctx.intercept:
                     break
+
+        # 处理订阅效果
+        ctx = self._trigger_subscription_effects(trigger, ctx)
+
+        return ctx
+
+    def _trigger_subscription_effects(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        """处理订阅类效果"""
+        # 时光倒流VIP - 在损失发生前拦截
+        if trigger in [EffectTrigger.AFTER_DAJIAO, EffectTrigger.AFTER_COMPARE, EffectTrigger.ON_COMPARE_LOSE]:
+            ctx = self._trigger_time_rewind_vip(ctx)
+
+        # 吃瓜群众 - 在别人成功后触发
+        if trigger == EffectTrigger.AFTER_DAJIAO:
+            ctx = self._trigger_melon_eater_on_dajiao(ctx)
+
+        return ctx
+
+    def _trigger_time_rewind_vip(self, ctx: EffectContext) -> EffectContext:
+        """时光倒流VIP - 30%概率防止损失"""
+        # 检查是否有损失
+        has_loss = (
+            ctx.length_change < 0 or
+            ctx.hardness_change < 0 or
+            ctx.extra.get('coins_change', 0) < 0
+        )
+
+        if not has_loss:
+            return ctx
+
+        # 检查是否有时光倒流VIP订阅
+        if not self.has_time_rewind_vip(ctx.group_id, ctx.user_id):
+            return ctx
+
+        # 30%概率触发
+        import random
+        if random.random() > SUBSCRIPTION_CONFIGS["time_rewind_vip"]["trigger_chance"]:
+            return ctx
+
+        # 触发时光倒流，取消所有损失
+        rewind_msgs = []
+        if ctx.length_change < 0:
+            rewind_msgs.append(f"长度 {ctx.length_change}cm")
+            ctx.length_change = 0
+        if ctx.hardness_change < 0:
+            rewind_msgs.append(f"硬度 {ctx.hardness_change}")
+            ctx.hardness_change = 0
+        if ctx.extra.get('coins_change', 0) < 0:
+            rewind_msgs.append(f"金币 {ctx.extra['coins_change']}")
+            ctx.extra['coins_change'] = 0
+
+        if rewind_msgs:
+            ctx.messages.append("")
+            ctx.messages.append("⏰ ══ 时光倒流VIP ══ ⏰")
+            ctx.messages.append(f"⏪ 时光倒流！损失被抹消了！")
+            ctx.messages.append(f"🔄 挽回: {' | '.join(rewind_msgs)}")
+            ctx.messages.append("✨ 命运的齿轮逆转了...")
+
+        return ctx
+
+    def _trigger_melon_eater_on_dajiao(self, ctx: EffectContext) -> EffectContext:
+        """吃瓜群众 - 别人打胶成功时触发"""
+        # 只在成功且有增长时触发
+        if ctx.length_change <= 0 and ctx.hardness_change <= 0:
+            return ctx
+
+        # 获取群内所有吃瓜群众订阅者（排除自己）
+        melon_eaters = self.get_all_group_subscribers(ctx.group_id, "melon_eater")
+        melon_eaters = [uid for uid in melon_eaters if uid != ctx.user_id]
+
+        if not melon_eaters:
+            return ctx
+
+        # 处理每个吃瓜群众
+        melon_messages = []
+        shop = self._shop_ref
+
+        for eater_id in melon_eaters:
+            # 检查今日触发次数
+            if not self.increment_melon_eater_count(ctx.group_id, eater_id):
+                continue
+
+            # 计算吃瓜收益（50%）
+            length_gain = round(ctx.length_change * 0.5, 2) if ctx.length_change > 0 else 0
+            hardness_gain = round(ctx.hardness_change * 0.5) if ctx.hardness_change > 0 else 0
+
+            if length_gain == 0 and hardness_gain == 0:
+                continue
+
+            # 更新吃瓜群众数据
+            if shop:
+                eater_data = shop.get_user_data(ctx.group_id, eater_id)
+                if eater_data:
+                    if length_gain > 0:
+                        eater_data['length'] = eater_data.get('length', 0) + length_gain
+                    if hardness_gain > 0:
+                        eater_data['hardness'] = eater_data.get('hardness', 0) + hardness_gain
+                    shop.update_user_data(ctx.group_id, eater_id, eater_data)
+
+                    # 获取吃瓜者昵称
+                    eater_nickname = eater_data.get('nickname', f'用户{eater_id}')
+
+                    # 构建消息
+                    gains = []
+                    if length_gain > 0:
+                        gains.append(f"+{length_gain}cm")
+                    if hardness_gain > 0:
+                        gains.append(f"+{hardness_gain}硬度")
+
+                    melon_messages.append(f"🍉 {eater_nickname} 吃到了你的瓜！({' '.join(gains)})")
+
+        # 追加吃瓜消息
+        if melon_messages:
+            ctx.messages.append("")
+            ctx.messages.extend(melon_messages)
 
         return ctx
 
@@ -3190,7 +3362,7 @@ class NiuniuJishengEffect(ItemEffect):
         if not host_data or not isinstance(host_data, dict) or 'length' not in host_data:
             ctx.messages.extend([
                 "❌ ══ 牛牛寄生 ══ ❌",
-                "⚠️ 目标用户未注册牛牛！",
+                "⚠️ 该用户大概是没有牛牛的！",
                 "═══════════════════"
             ])
             ctx.extra['refund'] = True

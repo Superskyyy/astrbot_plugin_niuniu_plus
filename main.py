@@ -30,7 +30,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.18.9")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.18.11")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -838,7 +838,7 @@ class NiuniuPlugin(Star):
         # 检查是否注册牛牛
         user_data = self.get_user_data(group_id, user_id)
         if not user_data:
-            yield event.plain_result("❌ 你还没有注册牛牛！请先使用「注册牛牛」")
+            yield event.plain_result("❌ 你大概是没有牛牛的！请先使用「注册牛牛」")
             return
 
         # 解析参数: 牛牛订阅 <编号> [天数]
@@ -1038,7 +1038,7 @@ class NiuniuPlugin(Star):
             # 检查目标是否已注册
             target_data = group_data.get(target_id)
             if not target_data or not isinstance(target_data, dict) or 'length' not in target_data:
-                yield event.plain_result("❌ 目标用户尚未注册牛牛")
+                yield event.plain_result("❌ 该用户大概是没有牛牛的")
                 return
 
             target_name = target_data.get('nickname', target_id)
@@ -1138,7 +1138,7 @@ class NiuniuPlugin(Star):
         # 检查是否已注册
         user_data = self.get_user_data(group_id, user_id)
         if not user_data or 'length' not in user_data:
-            yield event.plain_result("❌ 请先注册牛牛！")
+            yield event.plain_result("❌ 你大概是没有牛牛的，请先注册牛牛！")
             return
 
         stock = NiuniuStock.get()
@@ -2667,7 +2667,7 @@ class NiuniuPlugin(Star):
         # 获取目标数据
         target_data = self.get_user_data(group_id, target_id)
         if not target_data:
-            yield event.plain_result("❌ 目标还没有注册牛牛！")
+            yield event.plain_result("❌ 该用户大概是没有牛牛的！")
             return
 
         # 检查目标是否有金币（先检查，避免浪费冷却）

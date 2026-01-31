@@ -55,7 +55,7 @@ class NiuniuGames:
         # 从文件获取用户数据
         user_data = group_data.get(user_id, {})
         if not user_data:
-            yield event.plain_result("❌ 请先注册牛牛")
+            yield event.plain_result("❌ 你大概是没有牛牛的，请先注册牛牛")
             return
         
         # 获取当前日期（基于开冲时间）
@@ -112,7 +112,7 @@ class NiuniuGames:
         data = self._load_data()
         user_data = data.get(group_id, {}).get(user_id, {})
         if not user_data:
-            yield event.plain_result("❌ 请先注册牛牛")
+            yield event.plain_result("❌ 你大概是没有牛牛的，请先注册牛牛")
             return
         
         # 检查是否在冲
@@ -228,7 +228,7 @@ class NiuniuGames:
         #从文件获取用户数据
         user_data = group_data.get(user_id, {})
         if not user_data:
-            yield event.plain_result("❌ 请先注册牛牛")
+            yield event.plain_result("❌ 你大概是没有牛牛的，请先注册牛牛")
             return
         
         # 检查冷却时间
