@@ -246,6 +246,64 @@ class EffectManager:
 
         return self._subscription_data[group_id][user_id]
 
+    def subscription_middleware(self, group_id: str, user_id: str) -> None:
+        """
+        订阅中间件：处理订阅相关的检查和清理
+
+        功能：
+        1. 清理该用户的所有过期订阅
+        2. 重置所有需要每日重置的计数器
+
+        Args:
+            group_id: 群组ID
+            user_id: 用户ID
+        """
+        group_id = str(group_id)
+        user_id = str(user_id)
+
+        subs = self._get_user_subscriptions(group_id, user_id)
+        if not subs:
+            return
+
+        current_time = time.time()
+        today = datetime.now().strftime('%Y-%m-%d')
+        modified = False
+
+        # 清理所有过期订阅
+        expired_subs = []
+        for sub_name, sub_info in subs.items():
+            if isinstance(sub_info, dict) and "expire_time" in sub_info:
+                if current_time > sub_info.get("expire_time", 0):
+                    expired_subs.append(sub_name)
+
+        for sub_name in expired_subs:
+            del subs[sub_name]
+            modified = True
+
+        # 重置所有需要每日重置的计数器
+        for sub_name, sub_info in subs.items():
+            if not isinstance(sub_info, dict):
+                continue
+
+            # 检查是否需要每日重置
+            if sub_name == "melon_eater":
+                # 吃瓜群众：重置每日触发次数
+                if "melon_trigger_date" not in sub_info or sub_info["melon_trigger_date"] != today:
+                    sub_info["melon_trigger_count"] = 0
+                    sub_info["melon_trigger_date"] = today
+                    modified = True
+
+            # 未来可以在这里添加其他订阅的每日重置逻辑
+            # elif sub_name == "other_subscription":
+            #     if "reset_date" not in sub_info or sub_info["reset_date"] != today:
+            #         sub_info["daily_count"] = 0
+            #         sub_info["reset_date"] = today
+            #         modified = True
+
+        # 如果有修改，保存数据
+        if modified:
+            self._save_subscriptions()
+
     def has_subscription(self, group_id: str, user_id: str, subscription_name: str) -> bool:
         """检查用户是否有某个订阅且未过期"""
         subs = self._get_user_subscriptions(group_id, user_id)
@@ -560,8 +618,8 @@ class EffectManager:
 
     def _trigger_subscription_effects(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
         """处理订阅类效果"""
-        # 时光倒流VIP - 在损失发生前拦截
-        if trigger in [EffectTrigger.AFTER_DAJIAO, EffectTrigger.AFTER_COMPARE, EffectTrigger.ON_COMPARE_LOSE]:
+        # 时光倒流VIP - 在损失后拦截
+        if trigger == EffectTrigger.ON_COMPARE_LOSE:
             ctx = self._trigger_time_rewind_vip(ctx)
 
         # 吃瓜群众 - 在别人成功后触发
@@ -587,7 +645,6 @@ class EffectManager:
             return ctx
 
         # 30%概率触发
-        import random
         if random.random() > SUBSCRIPTION_CONFIGS["time_rewind_vip"]["trigger_chance"]:
             return ctx
 

@@ -30,7 +30,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.18.11")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.18.13")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -47,7 +47,7 @@ class NiuniuPlugin(Star):
         self.shop = NiuniuShop(self)  # 实例化商城模块
         self.games = NiuniuGames(self)  # 实例化游戏模块
         self.effects = create_effect_manager()  # 实例化效果管理器
-        self.effects.set_shop(self.shop)  # 设置商城引用
+        self.effects.set_shop(self)  # 设置主插件引用（用于访问get_user_data等方法）
 
     async def terminate(self):
         """插件卸载时清理模块缓存，确保热重载生效"""
@@ -611,6 +611,30 @@ class NiuniuPlugin(Star):
                         if re.search(re.escape(target_name), nickname, re.IGNORECASE):
                             return user_id
         return None
+    def run_command_middleware(self, group_id: str, user_id: str) -> None:
+        """
+        命令中间件统一入口
+
+        在每个牛牛命令执行前调用，用于执行全局检查和清理逻辑
+
+        当前注册的中间件：
+        1. subscription_middleware - 订阅系统中间件（清理过期订阅、重置每日计数）
+
+        未来可扩展：
+        - daily_reset_middleware - 每日重置中间件（签到、任务等）
+        - event_middleware - 事件中间件（全局事件触发）
+        - statistics_middleware - 统计中间件（数据收集）
+
+        Args:
+            group_id: 群组ID
+            user_id: 用户ID
+        """
+        # 执行订阅中间件
+        self.effects.subscription_middleware(group_id, user_id)
+
+        # 未来可以在这里添加更多中间件
+        # self.daily_reset_middleware(group_id, user_id)
+        # self.event_middleware(group_id, user_id)
     # endregion
 
     # region 事件处理
@@ -632,6 +656,10 @@ class NiuniuPlugin(Star):
                 yield result
             return
         elif msg.startswith("牛牛菜单") or msg.startswith("牛牛帮助"):
+            # 执行命令中间件
+            user_id = str(event.get_sender_id())
+            self.run_command_middleware(group_id, user_id)
+
             async for result in self._show_menu(event):
                 yield result
             return
@@ -647,18 +675,27 @@ class NiuniuPlugin(Star):
 
         # 处理其他命令（开冲现在是非阻塞的，可以边冲边做其他事）
         if msg.startswith("开冲"):
+            # 执行命令中间件
+            self.run_command_middleware(group_id, user_id)
+
             if is_rushing:
                 yield event.plain_result("❌ 你已经在开冲了，无需重复操作")
                 return
             async for result in self.games.start_rush(event):
                 yield result
         elif msg.startswith("停止开冲"):
+            # 执行命令中间件
+            self.run_command_middleware(group_id, user_id)
+
             if not is_rushing:
                 yield event.plain_result("❌ 你当前并未在开冲，无需停止")
                 return
             async for result in self.games.stop_rush(event):
                 yield result
         elif msg.startswith("飞飞机"):
+            # 执行命令中间件
+            self.run_command_middleware(group_id, user_id)
+
             async for result in self.games.fly_plane(event):
                 yield result
         else:
@@ -688,6 +725,9 @@ class NiuniuPlugin(Star):
 
             for cmd, handler in handler_map.items():
                 if msg.startswith(cmd):
+                    # 执行命令中间件
+                    self.run_command_middleware(group_id, user_id)
+
                     async for result in handler(event):
                         yield result
                     return
