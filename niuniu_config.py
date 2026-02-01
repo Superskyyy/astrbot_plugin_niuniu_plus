@@ -379,7 +379,7 @@ DEFAULT_SHOP_ITEMS = [
         'id': 0,
         'name': "化牛绵掌",
         'type': 'active',
-        'desc': "消耗99%总资产(含股票,底价10亿)！施加「含笑五步癫」：目标每次行动损失快照值的19.6%（长度/硬度/资产），走5步共98%，先扣币再卖股，无法抵挡！用法：牛牛购买 0 @目标",
+        'desc': "消耗你99%总资产(含股票,底价10亿)！对目标施加「含笑五步癫」：记录目标当前的长度/硬度/总资产作为快照，之后目标每次行动**完成后**（打胶/比划/抢劫/买卖等）都会损失快照值的19.6%，走5步共损失98%，资产先扣金币再强卖股票，效果无法被任何道具抵挡！用法：牛牛购买 0 @目标",
         'price': 0,
         'dynamic_price': True
     },
@@ -814,7 +814,7 @@ class NiuniuJishengConfig:
 #   - 被动参与比划也会触发（被人比划也算行动）
 #
 # ==================== 排行榜和背包显示 ====================
-# - 排行榜：中了含笑五步癫的玩家会显示【癫】标识
+# - 排行榜：中了含笑五步癫的玩家会显示【🤪癫】标识
 # - 背包：显示含笑五步癫详情（剩余步数、快照值）
 #
 # ==================== 设计理念 ====================
@@ -843,16 +843,16 @@ class HuaniuMianzhangConfig:
 
     # 含笑五步癫debuff 施加文案
     DEBUFF_TEXTS = [
-        "【癫】{target} 中了「含笑五步癫」！接下来5次行动都会癫狂受损！",
-        "【癫】{target} 开始癫狂发作！每次行动都会流失长度、硬度、资产！",
-        "【癫】{target} 被「含笑五步癫」诅咒！无法抵挡，走5步必癫！",
+        "【🤪癫】{target} 中了「含笑五步癫」！接下来5次行动都会癫狂受损！",
+        "【🤪癫】{target} 开始癫狂发作！每次行动都会流失长度、硬度、资产！",
+        "【🤪癫】{target} 被「含笑五步癫」诅咒！无法抵挡，走5步必癫！",
     ]
 
     # 含笑五步癫触发文案（asset_loss 可能是 "100币" 或 "100币+5股"）
     DEBUFF_TRIGGER_TEXTS = [
-        "【癫】发作！{nickname} 癫狂损失 {length_loss}cm、{hardness_loss}硬度、{asset_loss}！（{remaining}/5步）",
-        "【癫】{nickname} 踏出一步，流失 {length_loss}cm/{hardness_loss}硬/{asset_loss}！（还剩{remaining}步）",
-        "【癫】含笑五步癫！{nickname} -{length_loss}cm -{hardness_loss}硬 -{asset_loss}（第{step}步）",
+        "【🤪癫】发作！{nickname} 癫狂损失 {length_loss}cm、{hardness_loss}硬度、{asset_loss}！（{remaining}/5步）",
+        "【🤪癫】{nickname} 踏出一步，流失 {length_loss}cm/{hardness_loss}硬/{asset_loss}！（还剩{remaining}步）",
+        "【🤪癫】含笑五步癫！{nickname} -{length_loss}cm -{hardness_loss}硬 -{asset_loss}（第{step}步）",
     ]
 
     # 含笑五步癫结束文案

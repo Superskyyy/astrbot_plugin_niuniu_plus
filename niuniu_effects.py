@@ -3855,14 +3855,14 @@ class HuaniuMianzhangEffect(ItemEffect):
         target_total_asset = target_coins + target_stock_value
 
         # 存储扣除信息，由 shop 统一处理
-        # 快照数据：记录目标受击时的长度、硬度、总资产，用于后续化骨伤害计算
+        # 快照数据：记录目标受击时的长度、硬度、总资产，用于后续含笑五步癫伤害计算
         ctx.extra['huaniu_mianzhang'] = {
             'target_id': target_id,
             'target_name': target_name,
             'coins_to_deduct': int(coins_to_deduct),
             'shares_to_sell': shares_to_sell,
             'total_asset_consumed': asset_consume,
-            # 快照数据用于化骨debuff（资产=金币+股票市值）
+            # 快照数据用于含笑五步癫（资产=金币+股票市值）
             'snapshot_length': abs(target_data.get('length', 0)),  # 用绝对值作为基准
             'snapshot_hardness': target_data.get('hardness', 1),
             'snapshot_asset': target_total_asset,  # 总资产

@@ -1306,7 +1306,7 @@ class NiuniuShop:
                     stock_data = stock.get_stock_data()
                     extra_data['stock_data'] = stock_data
 
-                    # 获取目标的金币（用于化骨debuff快照）
+                    # 获取目标的金币（用于含笑五步癫快照）
                     extra_data['target_coins'] = self.get_user_coins(group_id, target_id)
 
                 # 需要群组数据的道具
@@ -1912,7 +1912,7 @@ class NiuniuShop:
                             user_data['length'] = avg_length
                             user_data['hardness'] = avg_hardness
 
-                    # 处理化牛绵掌：消耗资产，打击目标，施加化骨debuff
+                    # 处理化牛绵掌：消耗资产，打击目标，施加含笑五步癫
                     if ctx.extra.get('huaniu_mianzhang'):
                         huaniu = ctx.extra['huaniu_mianzhang']
                         target_id = huaniu['target_id']
@@ -1940,13 +1940,13 @@ class NiuniuShop:
                             stock.save_stock_data(stock_data)
                             result_msg.append(f"📉 强制卖出股票：{shares_to_sell}股")
 
-                        # 施加化骨debuff（不修改目标长度/硬度，只施加debuff）
+                        # 施加含笑五步癫（不修改目标长度/硬度，只施加debuff）
                         if target_id in group_data:
                             import time
                             from niuniu_config import HuaniuMianzhangConfig
                             group_data[target_id]['huagu_debuff'] = {
                                 'active': True,
-                                'remaining_times': HuaniuMianzhangConfig.DEBUFF_TIMES,  # 4次
+                                'remaining_times': HuaniuMianzhangConfig.DEBUFF_TIMES,  # 5次（含笑五步癫）
                                 'snapshot_length': huaniu.get('snapshot_length', 0),
                                 'snapshot_hardness': huaniu.get('snapshot_hardness', 1),
                                 'snapshot_asset': huaniu.get('snapshot_asset', 0),  # 总资产=金币+股票
@@ -2064,7 +2064,7 @@ class NiuniuShop:
                 if stock_msg:
                     result_msg.append(stock_msg)
 
-            # ===== 化骨debuff触发：购买道具也算行动 =====
+            # ===== 含笑五步癫触发：购买道具也算行动 =====
             huagu_msgs = self.main._trigger_huagu_debuff(group_id, user_id)
             result_msg.extend(huagu_msgs)
 
@@ -2169,7 +2169,7 @@ class NiuniuShop:
             beneficiary_name = parasite.get('beneficiary_name', '某人')
             result_list.append(f"🦠【寄】寄生牛牛来自：{beneficiary_name}（使用驱牛药可清除）")
 
-        # 显示化骨debuff状态
+        # 显示含笑五步癫状态
         huagu_debuff = user_data.get('huagu_debuff')
         if huagu_debuff and huagu_debuff.get('active'):
             remaining = huagu_debuff.get('remaining_times', 0)
@@ -2179,7 +2179,7 @@ class NiuniuShop:
             from niuniu_config import HuaniuMianzhangConfig
             dmg_pct = round(HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT * 100, 1)
             walked = HuaniuMianzhangConfig.DEBUFF_TIMES - remaining
-            result_list.append(f"【癫】含笑五步癫：已走{walked}步，剩余{remaining}步（每步损失{dmg_pct}%快照）")
+            result_list.append(f"【🤪癫】含笑五步癫：已走{walked}步，剩余{remaining}步（每步损失{dmg_pct}%快照）")
             result_list.append(f"   快照：{snapshot_length}cm / {snapshot_hardness}硬 / {snapshot_asset}资产")
 
         if not items and shield_charges == 0 and risk_transfer_charges == 0 and reflect_charges == 0 and insurance_charges == 0 and not has_subscriptions and not parasite and not huagu_debuff:

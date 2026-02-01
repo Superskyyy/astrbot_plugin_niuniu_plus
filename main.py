@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.4")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.5")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -471,7 +471,7 @@ class NiuniuPlugin(Star):
         if not user_data:
             return messages
 
-        # 检查是否有化骨debuff
+        # 检查是否有含笑五步癫
         huagu_debuff = user_data.get('huagu_debuff')
         if not huagu_debuff or not huagu_debuff.get('active'):
             return messages
@@ -519,7 +519,7 @@ class NiuniuPlugin(Star):
 
         shares_sold = 0
         if remaining_asset_damage > 0 and user_shares > 0:
-            # 需要强制卖出股票补足（化骨debuff强制清算）
+            # 需要强制卖出股票补足（含笑五步癫强制清算）
             shares_needed = min(user_shares, int(remaining_asset_damage / stock_price) + 1)
             while shares_needed * stock_price < remaining_asset_damage and shares_needed < user_shares:
                 shares_needed += 1
@@ -879,7 +879,7 @@ class NiuniuPlugin(Star):
                 return
             async for result in self.games.start_rush(event):
                 yield result
-            # 化骨debuff触发
+            # 含笑五步癫触发
             huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
             for msg_text in huagu_msgs:
                 yield event.plain_result(msg_text)
@@ -894,7 +894,7 @@ class NiuniuPlugin(Star):
                 return
             async for result in self.games.stop_rush(event):
                 yield result
-            # 化骨debuff触发
+            # 含笑五步癫触发
             huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
             for msg_text in huagu_msgs:
                 yield event.plain_result(msg_text)
@@ -906,7 +906,7 @@ class NiuniuPlugin(Star):
 
             async for result in self.games.fly_plane(event):
                 yield result
-            # 化骨debuff触发
+            # 含笑五步癫触发
             huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
             for msg_text in huagu_msgs:
                 yield event.plain_result(msg_text)
@@ -1458,7 +1458,7 @@ class NiuniuPlugin(Star):
                 if is_soha:
                     message = f"🎰 梭哈模式！投入95%财富\n{message}"
             yield event.plain_result(message)
-            # 化骨debuff触发（买股票也算行动）
+            # 含笑五步癫触发（买股票也算行动）
             if success:
                 huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
                 for msg_text in huagu_msgs:
@@ -1491,7 +1491,7 @@ class NiuniuPlugin(Star):
                 user_data['coins'] = round(user_coins + coins)  # 取整避免精度问题
                 self.update_user_data(group_id, user_id, {'coins': user_data['coins']})
             yield event.plain_result(message)
-            # 化骨debuff触发（卖股票也算行动）
+            # 含笑五步癫触发（卖股票也算行动）
             if success:
                 huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
                 for msg_text in huagu_msgs:
@@ -1901,7 +1901,7 @@ class NiuniuPlugin(Star):
 
         self.update_user_data(group_id, user_id, updated_data)
 
-        # ===== 化骨debuff触发：每次行动后扣除快照值的24.5% =====
+        # ===== 含笑五步癫触发：每次行动后扣除快照值的19.6% =====
         huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
         result_msgs.extend(huagu_msgs)
 
@@ -2880,13 +2880,8 @@ class NiuniuPlugin(Star):
                 parasite_msgs = self._check_and_trigger_parasite(group_id, target_id, target_length_gain, processed_ids=set())
                 result_msg.extend(parasite_msgs)
 
-            # ===== 化骨debuff触发：每次行动后扣除快照值的24.5% =====
-            # 用户触发化骨
+            # ===== 含笑五步癫触发：只有主动发起命令的人才触发 =====
             huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
-            result_msg.extend(huagu_msgs)
-
-            # 目标触发化骨（被动参与比划也算行动）
-            huagu_msgs = self._trigger_huagu_debuff(group_id, target_id)
             result_msg.extend(huagu_msgs)
 
             # 股市钩子 - 用赢家的增益作为变化量
@@ -3067,6 +3062,10 @@ class NiuniuPlugin(Star):
             # 添加调试信息
             debug_info = f"\n📊 胜率: {win_prob:.1%} | ⏰ CD已更新: {RobberyConfig.COOLDOWN//60}分钟"
             yield event.plain_result(fail_text + debug_info)
+            # 含笑五步癫触发（抢劫失败也算行动）
+            huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
+            for msg_text in huagu_msgs:
+                yield event.plain_result(msg_text)
             return
 
         # === 抢劫成功！===
@@ -3147,6 +3146,68 @@ class NiuniuPlugin(Star):
         if robbery_amount <= 0:
             robbery_amount = 1  # 至少抢1枚
 
+        # === 检查目标的防护道具 ===
+        protection_msg = []
+        actual_victim_id = target_id
+        actual_victim_name = target_data['nickname']
+
+        # 1. 检查护盾（优先级最高）
+        target_shield = target_data.get('shield_charges', 0)
+        if target_shield > 0:
+            # 护盾抵挡抢劫
+            self.update_user_data(group_id, target_id, {
+                'shield_charges': target_shield - 1
+            })
+            # 构建打斗信息（如果有）
+            fight_result = []
+            if fight_info:
+                fight_result = fight_info + [""]
+
+            result_lines = [
+                "💰 ══ 牛牛抢劫结果 ══ 💰",
+                f"🎯 {nickname} 试图抢劫 {target_data['nickname']}！",
+                "",
+            ] + fight_result + [
+                f"🛡️ 但是 {target_data['nickname']} 的护盾抵挡了抢劫！",
+                f"📊 护盾剩余：{target_shield - 1} 层",
+                f"💨 {nickname} 空手而归...",
+                "═══════════════════"
+            ]
+            yield event.plain_result("\n".join(result_lines))
+            return
+
+        # 2. 检查祸水东引（护盾之后检查）
+        target_transfer = target_data.get('risk_transfer_charges', 0)
+        if target_transfer > 0 and robbery_amount >= 50:  # 只有损失>=50才触发转嫁
+            # 找一个随机群友来承担
+            all_users = self.get_group_data(group_id)
+            valid_targets = [
+                (uid, data) for uid, data in all_users.items()
+                if isinstance(data, dict) and 'length' in data
+                and uid != target_id and uid != user_id  # 排除原目标和抢劫者
+            ]
+            if valid_targets:
+                new_victim_id, new_victim_data = random.choice(valid_targets)
+                new_victim_name = new_victim_data.get('nickname', new_victim_id)
+                new_victim_coins = self.shop.get_user_coins(group_id, new_victim_id)
+
+                # 消耗转嫁次数
+                self.update_user_data(group_id, target_id, {
+                    'risk_transfer_charges': target_transfer - 1
+                })
+
+                # 更新实际受害者
+                actual_victim_id = new_victim_id
+                actual_victim_name = new_victim_name
+                target_coins = new_victim_coins  # 更新可抢金币
+
+                # 重新计算抢劫金额（基于新目标）
+                robbery_amount = int(target_coins * robbery_percent)
+                if robbery_amount <= 0:
+                    robbery_amount = 1
+
+                protection_msg.append(f"🔄 {target_data['nickname']} 触发祸水东引！抢劫转嫁给 {new_victim_name}！（剩余{target_transfer - 1}次）")
+
         # === 触发抢劫后事件 ===
         # 选择事件
         event_rand = random.random()
@@ -3206,20 +3267,25 @@ class NiuniuPlugin(Star):
             event_desc = "🏃 完美逃脱！（未知事件类型，请联系管理员）"
             print(f"[WARNING] Unknown robbery event type: {event_id}, params: {event_params}")
 
-        # 执行金币转移
-        self.shop.modify_coins(group_id, target_id, -robbery_amount)  # 扣除受害者金币
+        # 执行金币转移（使用实际受害者ID）
+        self.shop.modify_coins(group_id, actual_victim_id, -robbery_amount)  # 扣除受害者金币
         if return_to_victim > 0:
-            self.shop.modify_coins(group_id, target_id, return_to_victim)  # 归还部分
+            self.shop.modify_coins(group_id, actual_victim_id, return_to_victim)  # 归还部分
         if final_gain > 0:
             self.shop.modify_coins(group_id, user_id, final_gain)  # 给抢劫者
 
         # 构建结果消息
         result_lines = [
             "💰 ══ 牛牛抢劫结果 ══ 💰",
-            f"🎯 {nickname} 抢劫 {target_data['nickname']} 成功！",
+            f"🎯 {nickname} 抢劫 {actual_victim_name} 成功！",
             f"💵 抢到：{robbery_amount} 枚金币（{robbery_percent*100:.1f}%）",
             ""
         ]
+
+        # 添加祸水东引信息
+        if protection_msg:
+            result_lines.extend(protection_msg)
+            result_lines.append("")
 
         # 添加打斗信息
         if fight_info:
@@ -3231,7 +3297,7 @@ class NiuniuPlugin(Star):
         result_lines.append("")
 
         if return_to_victim > 0:
-            result_lines.append(f"↩️ 归还给 {target_data['nickname']}：{return_to_victim} 枚")
+            result_lines.append(f"↩️ 归还给 {actual_victim_name}：{return_to_victim} 枚")
         if final_gain > 0:
             result_lines.append(f"✅ {nickname} 最终获得：{final_gain} 枚金币")
         elif final_gain == 0:
@@ -3245,7 +3311,7 @@ class NiuniuPlugin(Star):
 
         yield event.plain_result("\n".join(result_lines))
 
-        # 化骨debuff触发（抢劫者和被抢者都算行动）
+        # 含笑五步癫触发（抢劫者和被抢者都算行动）
         huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
         for msg_text in huagu_msgs:
             yield event.plain_result(msg_text)
@@ -3368,8 +3434,8 @@ class NiuniuPlugin(Star):
             for idx, (uid, data) in enumerate(bottom_users, bottom_start + 1):
                 hardness = data.get('hardness', 1)
                 coins = data.get('coins', 0)
-                parasite_info = " 【寄】" if data.get('parasite') else ""
-                dian_info = "【癫】" if data.get('huagu_debuff') else ""
+                parasite_info = " 【🐛寄】" if data.get('parasite') else ""
+                dian_info = "【🤪癫】" if data.get('huagu_debuff') else ""
                 nickname_display = dian_info + data['nickname']
 
                 if rank_type == "金币":
