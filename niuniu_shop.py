@@ -56,11 +56,12 @@ class NiuniuShop:
         nodes = []
         bot_id = event.get_self_id() or "0"
 
-        # 获取用户数据用于动态定价
+        # 获取用户数据用于动态定价和消费税计算
         group_id = str(event.message_obj.group_id)
         user_id = str(event.get_sender_id())
         user_data = self._get_user_data(group_id, user_id)
         user_length = user_data.get('length', 0)
+        user_coins = self.get_user_coins(group_id, user_id)
 
         # 道具类型emoji映射
         type_emoji = {
@@ -80,7 +81,9 @@ class NiuniuShop:
                 if item['name'] == '绝对值！':
                     if user_length < 0:
                         dynamic_price = int(abs(user_length) * 0.1)
-                        price_str = f"{dynamic_price} 💰 (你的价格)"
+                        tax = self._calculate_purchase_tax(user_coins, dynamic_price)
+                        total_price = dynamic_price + tax
+                        price_str = f"{total_price} 💰 (含税)"
                     else:
                         price_str = "仅限负数牛牛"
                 # 牛牛均富/负卡的动态价格计算
@@ -101,7 +104,15 @@ class NiuniuShop:
                 else:
                     price_str = "动态定价"
             else:
-                price_str = f"{item['price']} 💰"
+                # 计算含税价格
+                base_price = item['price']
+                tax = self._calculate_purchase_tax(user_coins, base_price)
+                total_price = base_price + tax
+                if tax > 0:
+                    digit_count = len(str(base_price))
+                    price_str = f"{total_price} 💰 (含{digit_count}%税)"
+                else:
+                    price_str = f"{base_price} 💰"
 
             content_text = (
                 f"{emoji} [{item['id']}] {item['name']}\n"
