@@ -3871,12 +3871,12 @@ class HuaniuMianzhangEffect(ItemEffect):
         # 动态价格设为0（已在extra中处理扣除）
         ctx.extra['dynamic_price'] = 0
 
-        # 计算每次化骨伤害
+        # 计算每次含笑五步癫伤害
         damage_per_time_length = int(abs(target_data.get('length', 0)) * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
         damage_per_time_hardness = int(target_data.get('hardness', 1) * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
         damage_per_time_asset = int(target_total_asset * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
 
-        # 生成消息（只施加化骨debuff，不立即修改目标长度/硬度）
+        # 生成消息（只施加含笑五步癫，不立即修改目标长度/硬度）
         ctx.messages.extend([
             "😈 ══ 化牛绵掌 ══ 😈",
             random.choice(HuaniuMianzhangConfig.SUCCESS_TEXTS).format(user=nickname, target=target_name),

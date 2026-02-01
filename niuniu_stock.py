@@ -920,7 +920,7 @@ class NiuniuStock:
 
     def force_liquidate(self, group_id: str, user_id: str, shares: float) -> bool:
         """
-        强制清算股票（化骨debuff等场景使用）
+        强制清算股票（含笑五步癫等场景使用）
         股票被强制销毁，用户不获得任何收益，记录为纯损失
 
         Args:

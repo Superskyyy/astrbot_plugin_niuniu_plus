@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.5")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.6")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -3196,17 +3196,12 @@ class NiuniuPlugin(Star):
                     'risk_transfer_charges': target_transfer - 1
                 })
 
-                # 更新实际受害者
+                # 更新实际受害者（保持原抢劫金额不变，只是换人承担）
                 actual_victim_id = new_victim_id
                 actual_victim_name = new_victim_name
-                target_coins = new_victim_coins  # 更新可抢金币
+                # 注意：不重新计算robbery_amount，转嫁的是固定金额
 
-                # 重新计算抢劫金额（基于新目标）
-                robbery_amount = int(target_coins * robbery_percent)
-                if robbery_amount <= 0:
-                    robbery_amount = 1
-
-                protection_msg.append(f"🔄 {target_data['nickname']} 触发祸水东引！抢劫转嫁给 {new_victim_name}！（剩余{target_transfer - 1}次）")
+                protection_msg.append(f"🔄 {target_data['nickname']} 触发祸水东引！{robbery_amount}金币抢劫转嫁给 {new_victim_name}！（剩余{target_transfer - 1}次）")
 
         # === 触发抢劫后事件 ===
         # 选择事件
@@ -3311,11 +3306,8 @@ class NiuniuPlugin(Star):
 
         yield event.plain_result("\n".join(result_lines))
 
-        # 含笑五步癫触发（抢劫者和被抢者都算行动）
+        # 含笑五步癫触发（只有主动发起命令的人才触发）
         huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
-        for msg_text in huagu_msgs:
-            yield event.plain_result(msg_text)
-        huagu_msgs = self._trigger_huagu_debuff(group_id, target_id)
         for msg_text in huagu_msgs:
             yield event.plain_result(msg_text)
 
