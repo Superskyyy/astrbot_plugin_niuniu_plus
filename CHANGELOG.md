@@ -1,5 +1,20 @@
 # Changelog
 
+## [v4.22.1] - 2026-02-01
+
+### 重命名
+- **「化牛绵掌」正式更名为「含笑五步癫」**
+  - 道具名、类名、变量名全部统一
+  - HuaniuMianzhangConfig → HanxiaoWubudianConfig
+  - HuaniuMianzhangEffect → HanxiaoWubudianEffect
+
+### 数值调整
+- **含笑五步癫消耗比例调整**
+  - 资产消耗从 99% 降低至 95%
+  - 使用者保留更多资产，降低使用门槛
+
+---
+
 ## [v4.22.0] - 2026-02-01
 
 ### 机制调整

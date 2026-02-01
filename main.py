@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.22.0")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.22.1")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -462,7 +462,7 @@ class NiuniuPlugin(Star):
         Returns:
             消息列表
         """
-        from niuniu_config import HuaniuMianzhangConfig
+        from niuniu_config import HanxiaoWubudianConfig
         from niuniu_stock import NiuniuStock
 
         messages = []
@@ -488,9 +488,9 @@ class NiuniuPlugin(Star):
         snapshot_asset = huagu_debuff.get('snapshot_asset', 0)
 
         # 计算伤害（快照值的19.6%）
-        length_damage = int(snapshot_length * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
-        hardness_damage = int(snapshot_hardness * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
-        asset_damage = int(snapshot_asset * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
+        length_damage = int(snapshot_length * HanxiaoWubudianConfig.DEBUFF_DAMAGE_PERCENT)
+        hardness_damage = int(snapshot_hardness * HanxiaoWubudianConfig.DEBUFF_DAMAGE_PERCENT)
+        asset_damage = int(snapshot_asset * HanxiaoWubudianConfig.DEBUFF_DAMAGE_PERCENT)
 
         nickname = user_data.get('nickname', user_id)
 
@@ -544,8 +544,8 @@ class NiuniuPlugin(Star):
             asset_loss_str = f"{actual_coins_deducted}币"
             if shares_sold > 0:
                 asset_loss_str += f"+{shares_sold}股"
-            step = HuaniuMianzhangConfig.DEBUFF_TIMES  # 第5步
-            messages.append(random.choice(HuaniuMianzhangConfig.DEBUFF_TRIGGER_TEXTS).format(
+            step = HanxiaoWubudianConfig.DEBUFF_TIMES  # 第5步
+            messages.append(random.choice(HanxiaoWubudianConfig.DEBUFF_TRIGGER_TEXTS).format(
                 nickname=nickname,
                 length_loss=length_damage,
                 hardness_loss=hardness_damage,
@@ -553,7 +553,7 @@ class NiuniuPlugin(Star):
                 remaining=0,
                 step=step
             ))
-            messages.append(random.choice(HuaniuMianzhangConfig.DEBUFF_END_TEXTS).format(nickname=nickname))
+            messages.append(random.choice(HanxiaoWubudianConfig.DEBUFF_END_TEXTS).format(nickname=nickname))
         else:
             # 还有剩余次数
             huagu_debuff['remaining_times'] = new_remaining
@@ -568,8 +568,8 @@ class NiuniuPlugin(Star):
             asset_loss_str = f"{actual_coins_deducted}币"
             if shares_sold > 0:
                 asset_loss_str += f"+{shares_sold}股"
-            step = HuaniuMianzhangConfig.DEBUFF_TIMES - new_remaining  # 当前是第几步
-            messages.append(random.choice(HuaniuMianzhangConfig.DEBUFF_TRIGGER_TEXTS).format(
+            step = HanxiaoWubudianConfig.DEBUFF_TIMES - new_remaining  # 当前是第几步
+            messages.append(random.choice(HanxiaoWubudianConfig.DEBUFF_TRIGGER_TEXTS).format(
                 nickname=nickname,
                 length_loss=length_damage,
                 hardness_loss=hardness_damage,

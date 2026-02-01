@@ -116,21 +116,21 @@ class NiuniuShop:
                             price_str = f"{total_price} 💰 ❌买不起(差{shortfall:,})"
                     else:
                         price_str = f"需≥{JunfukaConfig.MIN_PLAYERS}人"
-                # 化牛绵掌的动态价格计算
-                elif item['name'] == '化牛绵掌':
-                    from niuniu_config import HuaniuMianzhangConfig
+                # 含笑五步癫的动态价格计算
+                elif item['name'] == '含笑五步癫':
+                    from niuniu_config import HanxiaoWubudianConfig
                     from niuniu_stock import NiuniuStock
                     stock = NiuniuStock.get()
                     user_shares = stock.get_holdings(group_id, user_id)
                     stock_price = stock.get_price(group_id)
                     stock_value = user_shares * stock_price
                     total_asset = user_coins + stock_value
-                    min_asset = HuaniuMianzhangConfig.MIN_ASSET
+                    min_asset = HanxiaoWubudianConfig.MIN_ASSET
 
                     if total_asset >= min_asset:
-                        # 计算实际消耗 = max(底价, 99%资产)
-                        actual_cost = max(min_asset, int(total_asset * HuaniuMianzhangConfig.ASSET_CONSUME_PERCENT))
-                        price_str = f"99%资产={actual_cost:,} 💰"
+                        # 计算实际消耗 = max(底价, 95%资产)
+                        actual_cost = max(min_asset, int(total_asset * HanxiaoWubudianConfig.ASSET_CONSUME_PERCENT))
+                        price_str = f"95%资产={actual_cost:,} 💰"
                     else:
                         # 资产不足
                         shortfall = int(min_asset - total_asset)
@@ -926,7 +926,7 @@ class NiuniuShop:
 
                 # 复杂道具列表（有特殊逻辑或动态效果，不支持批量购买）
                 # 移除了：祸水东引、上保险、牛牛反弹、巴黎牛家、赌徒骰子、穷牛一生（改为支持批量购买）
-                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '绝对值！', '牛牛寄生', '驱牛药', '牛牛均富/负卡', '化牛绵掌']
+                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '绝对值！', '牛牛寄生', '驱牛药', '牛牛均富/负卡', '含笑五步癫']
                 # 需要循环触发的道具（每次效果独立，不能简单乘以次数）
                 loop_trigger_items = ['祸水东引', '上保险', '牛牛反弹', '巴黎牛家', '赌徒骰子', '穷牛一生']
                 is_simple_item = selected_item['name'] not in complex_items
@@ -1283,8 +1283,8 @@ class NiuniuShop:
                         return
                     extra_data['target_id'] = target_id
 
-                # 化牛绵掌需要指定目标
-                if selected_item['name'] == '化牛绵掌':
+                # 含笑五步癫需要指定目标
+                if selected_item['name'] == '含笑五步癫':
                     target_id = None
                     # 解析@目标
                     for comp in event.message_obj.message:
@@ -1295,7 +1295,7 @@ class NiuniuShop:
                         yield event.plain_result("❌ 请指定目标！\n格式：牛牛购买 0 @目标")
                         return
                     if target_id == user_id:
-                        yield event.plain_result("❌ 不能对自己使用「化牛绵掌」！")
+                        yield event.plain_result("❌ 不能对自己使用「含笑五步癫」！")
                         return
                     extra_data['target_id'] = target_id
 
@@ -1312,7 +1312,7 @@ class NiuniuShop:
                     extra_data['target_shares'] = stock.get_holdings(group_id, target_id)
 
                 # 需要群组数据的道具
-                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生', '牛牛均富/负卡', '化牛绵掌']:
+                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生', '牛牛均富/负卡', '含笑五步癫']:
                     niuniu_data = self._load_niuniu_data()
                     extra_data['group_data'] = niuniu_data.get(group_id, {})
 
@@ -1914,12 +1914,12 @@ class NiuniuShop:
                             user_data['length'] = avg_length
                             user_data['hardness'] = avg_hardness
 
-                    # 处理化牛绵掌：消耗资产，打击目标，施加含笑五步癫
-                    if ctx.extra.get('huaniu_mianzhang'):
-                        huaniu = ctx.extra['huaniu_mianzhang']
-                        target_id = huaniu['target_id']
-                        coins_to_deduct = huaniu['coins_to_deduct']
-                        shares_to_sell = huaniu['shares_to_sell']
+                    # 处理含笑五步癫：消耗资产，打击目标，施加含笑五步癫
+                    if ctx.extra.get('hanxiao_wubudian'):
+                        hanxiao = ctx.extra['hanxiao_wubudian']
+                        target_id = hanxiao['target_id']
+                        coins_to_deduct = hanxiao['coins_to_deduct']
+                        shares_to_sell = hanxiao['shares_to_sell']
 
                         niuniu_data = self._load_niuniu_data()
                         group_data = niuniu_data.setdefault(group_id, {})
@@ -1938,13 +1938,13 @@ class NiuniuShop:
                         # 施加含笑五步癫（不修改目标长度/硬度，只施加debuff）
                         if target_id in group_data:
                             import time
-                            from niuniu_config import HuaniuMianzhangConfig
+                            from niuniu_config import HanxiaoWubudianConfig
                             group_data[target_id]['huagu_debuff'] = {
                                 'active': True,
-                                'remaining_times': HuaniuMianzhangConfig.DEBUFF_TIMES,  # 5次（含笑五步癫）
-                                'snapshot_length': huaniu.get('snapshot_length', 0),
-                                'snapshot_hardness': huaniu.get('snapshot_hardness', 1),
-                                'snapshot_asset': huaniu.get('snapshot_asset', 0),  # 总资产=金币+股票
+                                'remaining_times': HanxiaoWubudianConfig.DEBUFF_TIMES,  # 5次（含笑五步癫）
+                                'snapshot_length': hanxiao.get('snapshot_length', 0),
+                                'snapshot_hardness': hanxiao.get('snapshot_hardness', 1),
+                                'snapshot_asset': hanxiao.get('snapshot_asset', 0),  # 总资产=金币+股票
                                 'applied_at': int(time.time()),
                                 'applied_by': user_id
                             }
@@ -2171,9 +2171,9 @@ class NiuniuShop:
             snapshot_length = huagu_debuff.get('snapshot_length', 0)
             snapshot_hardness = huagu_debuff.get('snapshot_hardness', 0)
             snapshot_asset = huagu_debuff.get('snapshot_asset', 0)
-            from niuniu_config import HuaniuMianzhangConfig
-            dmg_pct = round(HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT * 100, 1)
-            walked = HuaniuMianzhangConfig.DEBUFF_TIMES - remaining
+            from niuniu_config import HanxiaoWubudianConfig
+            dmg_pct = round(HanxiaoWubudianConfig.DEBUFF_DAMAGE_PERCENT * 100, 1)
+            walked = HanxiaoWubudianConfig.DEBUFF_TIMES - remaining
             result_list.append(f"【🤪癫】含笑五步癫：已走{walked}步，剩余{remaining}步（每步损失{dmg_pct}%快照）")
             result_list.append(f"   快照：{snapshot_length}cm / {snapshot_hardness}硬 / {snapshot_asset}资产")
 

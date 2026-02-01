@@ -3741,12 +3741,12 @@ class JunfukaEffect(ItemEffect):
 
 
 # =============================================================================
-# 化牛绵掌 Effect
+# 含笑五步癫 Effect
 # =============================================================================
 
-class HuaniuMianzhangEffect(ItemEffect):
-    """化牛绵掌 - Ultimate Attack: consume 99% assets to destroy target"""
-    name = "化牛绵掌"
+class HanxiaoWubudianEffect(ItemEffect):
+    """含笑五步癫 - Ultimate Attack: consume 95% assets to destroy target"""
+    name = "含笑五步癫"
     triggers = [EffectTrigger.ON_PURCHASE]
     consume_on_use = False  # Active item, no inventory
 
@@ -3755,20 +3755,20 @@ class HuaniuMianzhangEffect(ItemEffect):
         "volatility": (0.15, 0.35),
         "templates": {
             "up": [
-                "☠️ {nickname} 发动「化牛绵掌」！股市为之震颤！",
-                "💀 禁术「化牛绵掌」现世！股价暴涨！",
+                "☠️ {nickname} 发动「含笑五步癫」！股市为之震颤！",
+                "💀 禁术「含笑五步癫」现世！股价暴涨！",
                 "🩸 {nickname} 倾家荡产的一击！股市狂欢！",
             ],
             "down": [
-                "☠️ {nickname} 发动「化牛绵掌」！股市恐慌！",
-                "💀 禁术「化牛绵掌」现世！股价暴跌！",
+                "☠️ {nickname} 发动「含笑五步癫」！股市恐慌！",
+                "💀 禁术「含笑五步癫」现世！股价暴跌！",
                 "🩸 {nickname} 的疯狂之举吓坏了股市！",
             ],
         }
     }
 
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
-        from niuniu_config import HuaniuMianzhangConfig, format_length
+        from niuniu_config import HanxiaoWubudianConfig, format_length
 
         group_data = ctx.extra.get('group_data', {})
         user_id = ctx.user_id
@@ -3779,7 +3779,7 @@ class HuaniuMianzhangEffect(ItemEffect):
         target_id = ctx.extra.get('target_id')
         if not target_id:
             ctx.messages.extend([
-                "❌ ══ 化牛绵掌 ══ ❌",
+                "❌ ══ 含笑五步癫 ══ ❌",
                 "⚠️ 未指定目标！",
                 "💡 格式：牛牛购买 0 @目标",
                 "═══════════════════"
@@ -3791,8 +3791,8 @@ class HuaniuMianzhangEffect(ItemEffect):
         # 不能对自己使用
         if target_id == user_id:
             ctx.messages.extend([
-                "❌ ══ 化牛绵掌 ══ ❌",
-                "⚠️ 不能对自己使用「化牛绵掌」！",
+                "❌ ══ 含笑五步癫 ══ ❌",
+                "⚠️ 不能对自己使用「含笑五步癫」！",
                 "═══════════════════"
             ])
             ctx.extra['refund'] = True
@@ -3803,7 +3803,7 @@ class HuaniuMianzhangEffect(ItemEffect):
         target_data = group_data.get(target_id)
         if not target_data or not isinstance(target_data, dict) or 'length' not in target_data:
             ctx.messages.extend([
-                "❌ ══ 化牛绵掌 ══ ❌",
+                "❌ ══ 含笑五步癫 ══ ❌",
                 "⚠️ 该用户大概是没有牛牛的！",
                 "═══════════════════"
             ])
@@ -3820,20 +3820,20 @@ class HuaniuMianzhangEffect(ItemEffect):
         total_asset = user_coins + stock_value
 
         # 检查总资产是否达到底价100万
-        if total_asset < HuaniuMianzhangConfig.MIN_ASSET:
+        if total_asset < HanxiaoWubudianConfig.MIN_ASSET:
             ctx.messages.extend([
-                "❌ ══ 化牛绵掌 ══ ❌",
-                random.choice(HuaniuMianzhangConfig.INSUFFICIENT_ASSET_TEXTS).format(asset=int(total_asset)),
+                "❌ ══ 含笑五步癫 ══ ❌",
+                random.choice(HanxiaoWubudianConfig.INSUFFICIENT_ASSET_TEXTS).format(asset=int(total_asset)),
                 f"📊 你的总资产：{int(user_coins)}金币 + {int(stock_value)}股票 = {int(total_asset)}",
-                f"📈 需要至少：{HuaniuMianzhangConfig.MIN_ASSET:,}",
+                f"📈 需要至少：{HanxiaoWubudianConfig.MIN_ASSET:,}",
                 "═══════════════════"
             ])
             ctx.extra['refund'] = True
             ctx.intercept = True
             return ctx
 
-        # 计算消耗 = max(100万, 总资产 * 99%)
-        asset_consume = max(HuaniuMianzhangConfig.MIN_ASSET, int(total_asset * HuaniuMianzhangConfig.ASSET_CONSUME_PERCENT))
+        # 计算消耗 = max(10亿, 总资产 * 95%)
+        asset_consume = max(HanxiaoWubudianConfig.MIN_ASSET, int(total_asset * HanxiaoWubudianConfig.ASSET_CONSUME_PERCENT))
 
         # 计算需要扣除的金币和股票
         coins_to_deduct = min(user_coins, asset_consume)
@@ -3855,7 +3855,7 @@ class HuaniuMianzhangEffect(ItemEffect):
 
         # 存储扣除信息，由 shop 统一处理
         # 快照数据：记录目标受击时的长度、硬度、总资产，用于后续含笑五步癫伤害计算
-        ctx.extra['huaniu_mianzhang'] = {
+        ctx.extra['hanxiao_wubudian'] = {
             'target_id': target_id,
             'target_name': target_name,
             'coins_to_deduct': int(coins_to_deduct),
@@ -3871,17 +3871,17 @@ class HuaniuMianzhangEffect(ItemEffect):
         ctx.extra['dynamic_price'] = 0
 
         # 计算每次含笑五步癫伤害
-        damage_per_time_length = int(abs(target_data.get('length', 0)) * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
-        damage_per_time_hardness = int(target_data.get('hardness', 1) * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
-        damage_per_time_asset = int(target_total_asset * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
+        damage_per_time_length = int(abs(target_data.get('length', 0)) * HanxiaoWubudianConfig.DEBUFF_DAMAGE_PERCENT)
+        damage_per_time_hardness = int(target_data.get('hardness', 1) * HanxiaoWubudianConfig.DEBUFF_DAMAGE_PERCENT)
+        damage_per_time_asset = int(target_total_asset * HanxiaoWubudianConfig.DEBUFF_DAMAGE_PERCENT)
 
         # 生成消息（只施加含笑五步癫，不立即修改目标长度/硬度）
         ctx.messages.extend([
-            "😈 ══ 化牛绵掌 ══ 😈",
-            random.choice(HuaniuMianzhangConfig.SUCCESS_TEXTS).format(user=nickname, target=target_name),
+            "😈 ══ 含笑五步癫 ══ 😈",
+            random.choice(HanxiaoWubudianConfig.SUCCESS_TEXTS).format(user=nickname, target=target_name),
             f"💸 消耗资产：{asset_consume:,}（金币{int(coins_to_deduct):,} + 股票{shares_to_sell}股）",
             "",
-            random.choice(HuaniuMianzhangConfig.DEBUFF_TEXTS).format(target=target_name),
+            random.choice(HanxiaoWubudianConfig.DEBUFF_TEXTS).format(target=target_name),
             f"📊 快照记录（{target_name}当前状态）：",
             f"   长度：{format_length(target_data.get('length', 0))}",
             f"   硬度：{target_data.get('hardness', 1)}",
@@ -3925,6 +3925,6 @@ def create_effect_manager() -> EffectManager:
     manager.register(NiuniuJishengEffect())
     manager.register(QuniuyaoEffect())
     manager.register(JunfukaEffect())
-    manager.register(HuaniuMianzhangEffect())
+    manager.register(HanxiaoWubudianEffect())
 
     return manager
