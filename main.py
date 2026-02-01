@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.22.1")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.22.2")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -3439,8 +3439,6 @@ class NiuniuPlugin(Star):
                 else:
                     ranking.append(f"{idx}. {nickname_display} ➜ {self.format_length(data['length'])} 💪{hardness}")
                     ranking.append(f"   💰 {self.format_coins(coins)}{parasite_info}")
-
-        yield event.plain_result("\n".join(ranking))
 
         yield event.plain_result("\n".join(ranking))
 
