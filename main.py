@@ -3196,12 +3196,18 @@ class NiuniuPlugin(Star):
                     'risk_transfer_charges': target_transfer - 1
                 })
 
-                # 更新实际受害者（保持原抢劫金额不变，只是换人承担）
+                # 更新实际受害者
                 actual_victim_id = new_victim_id
                 actual_victim_name = new_victim_name
-                # 注意：不重新计算robbery_amount，转嫁的是固定金额
 
-                protection_msg.append(f"🔄 {target_data['nickname']} 触发祸水东引！{robbery_amount}金币抢劫转嫁给 {new_victim_name}！（剩余{target_transfer - 1}次）")
+                # 基于新目标重新计算抢劫金额（按比例，防止弱者被抢巨额固定金额）
+                old_robbery_amount = robbery_amount
+                robbery_amount = int(new_victim_coins * robbery_percent)
+                if robbery_amount <= 0:
+                    robbery_amount = 1
+
+                protection_msg.append(f"🔄 {target_data['nickname']} 触发祸水东引！抢劫转嫁给 {new_victim_name}！（剩余{target_transfer - 1}次）")
+                protection_msg.append(f"📊 原抢{old_robbery_amount}→重算{robbery_amount}（{new_victim_name}的{robbery_percent*100:.1f}%）")
 
         # === 触发抢劫后事件 ===
         # 选择事件
