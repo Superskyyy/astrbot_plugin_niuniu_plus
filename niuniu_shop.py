@@ -1009,6 +1009,34 @@ class NiuniuShop:
 
                     # 扣除金币（含税）
                     self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
+
+                    # 股市钩子 - 批量购买也要影响股价
+                    item_name = selected_item.get('name', '')
+                    stock_msg = None
+                    if effect and hasattr(effect, 'stock_config') and effect.stock_config:
+                        stock_cfg = effect.stock_config
+                        stock_msg = stock_hook(
+                            group_id, nickname,
+                            item_name=item_name,
+                            length_change=total_length_change,
+                            hardness_change=total_hardness_change,
+                            volatility=stock_cfg.get('volatility', (0.01, 0.05)),
+                            templates=stock_cfg.get('templates'),
+                            mean_reversion=stock_cfg.get('mean_reversion', True)
+                        )
+                    else:
+                        stock_msg = stock_hook(
+                            group_id, nickname,
+                            item_name=item_name,
+                            length_change=total_length_change,
+                            hardness_change=total_hardness_change,
+                            volatility=(0.001, 0.005),
+                            templates={"plain": ["{nickname} 批量使用了 {item_name}，股市反应平淡 {change}"]},
+                            mean_reversion=True
+                        )
+                    if stock_msg:
+                        result_msg.append(stock_msg)
+
                     yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
                     return
 
@@ -1082,6 +1110,20 @@ class NiuniuShop:
                     total_cost = price_per_buy * actual_buy_count
                     total_cost_with_tax = total_cost + purchase_tax
                     self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
+
+                    # 股市钩子 - 牛牛盾牌批量购买也要影响股价
+                    stock_msg = stock_hook(
+                        group_id, nickname,
+                        item_name='牛牛盾牌',
+                        length_change=length_change,
+                        hardness_change=hardness_change,
+                        volatility=(0.01, 0.03),
+                        templates={"plain": ["{nickname} 批量购买了牛牛盾牌，股市微微波动 {change}"]},
+                        mean_reversion=True
+                    )
+                    if stock_msg:
+                        result_msg.append(stock_msg)
+
                     yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
                     return
 
