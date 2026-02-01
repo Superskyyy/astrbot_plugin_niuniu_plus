@@ -2177,8 +2177,9 @@ class NiuniuShop:
             snapshot_hardness = huagu_debuff.get('snapshot_hardness', 0)
             snapshot_asset = huagu_debuff.get('snapshot_asset', 0)
             from niuniu_config import HuaniuMianzhangConfig
-            dmg_pct = int(HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT * 100)
-            result_list.append(f"🦴【化骨】剩余{remaining}次，每次损失{dmg_pct}%快照值")
+            dmg_pct = round(HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT * 100, 1)
+            walked = HuaniuMianzhangConfig.DEBUFF_TIMES - remaining
+            result_list.append(f"【癫】含笑五步癫：已走{walked}步，剩余{remaining}步（每步损失{dmg_pct}%快照）")
             result_list.append(f"   快照：{snapshot_length}cm / {snapshot_hardness}硬 / {snapshot_asset}资产")
 
         if not items and shield_charges == 0 and risk_transfer_charges == 0 and reflect_charges == 0 and insurance_charges == 0 and not has_subscriptions and not parasite and not huagu_debuff:

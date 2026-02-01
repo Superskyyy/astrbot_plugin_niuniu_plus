@@ -3878,7 +3878,7 @@ class HuaniuMianzhangEffect(ItemEffect):
 
         # 生成消息（只施加化骨debuff，不立即修改目标长度/硬度）
         ctx.messages.extend([
-            "☠️ ══ 化牛绵掌 ══ ☠️",
+            "😈 ══ 化牛绵掌 ══ 😈",
             random.choice(HuaniuMianzhangConfig.SUCCESS_TEXTS).format(user=nickname, target=target_name),
             f"💸 消耗资产：{asset_consume:,}（金币{int(coins_to_deduct):,} + 股票{shares_to_sell}股）",
             "",
@@ -3887,7 +3887,7 @@ class HuaniuMianzhangEffect(ItemEffect):
             f"   长度：{format_length(target_data.get('length', 0))}",
             f"   硬度：{target_data.get('hardness', 1)}",
             f"   资产：{target_coins}币+{target_shares}股={target_total_asset:,}",
-            f"💀 化骨伤害预览：每次行动将损失约 {damage_per_time_length}cm / {damage_per_time_hardness}硬 / {damage_per_time_asset}资产",
+            f"🤪 含笑五步癫预览：每走一步损失约 {damage_per_time_length}cm / {damage_per_time_hardness}硬 / {damage_per_time_asset}资产",
             "═══════════════════"
         ])
 

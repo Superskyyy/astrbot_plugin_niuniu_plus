@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.3")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.4")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -450,10 +450,10 @@ class NiuniuPlugin(Star):
 
     def _trigger_huagu_debuff(self, group_id: str, user_id: str) -> list:
         """
-        触发化骨debuff效果（在每次命令执行后调用）
+        触发「含笑五步癫」效果（在每次命令执行后调用）
 
-        每次触发扣除快照值的24.5%长度、硬度、总资产（金币+股票），共4次
-        化骨效果无法被任何东西抵挡
+        每次触发扣除快照值的19.6%长度、硬度、总资产（金币+股票），共5次（98%总量）
+        含笑五步癫效果无法被任何东西抵挡
 
         Args:
             group_id: 群组ID
@@ -541,16 +541,18 @@ class NiuniuPlugin(Star):
             })
             self.shop.update_user_coins(group_id, user_id, new_coins)
 
-            # 生成消息
+            # 生成消息（第5步 = 最后一步）
             asset_loss_str = f"{actual_coins_deducted}币"
             if shares_sold > 0:
                 asset_loss_str += f"+{shares_sold}股"
+            step = HuaniuMianzhangConfig.DEBUFF_TIMES  # 第5步
             messages.append(random.choice(HuaniuMianzhangConfig.DEBUFF_TRIGGER_TEXTS).format(
                 nickname=nickname,
                 length_loss=length_damage,
                 hardness_loss=hardness_damage,
                 asset_loss=asset_loss_str,
-                remaining=0
+                remaining=0,
+                step=step
             ))
             messages.append(random.choice(HuaniuMianzhangConfig.DEBUFF_END_TEXTS).format(nickname=nickname))
         else:
@@ -567,12 +569,14 @@ class NiuniuPlugin(Star):
             asset_loss_str = f"{actual_coins_deducted}币"
             if shares_sold > 0:
                 asset_loss_str += f"+{shares_sold}股"
+            step = HuaniuMianzhangConfig.DEBUFF_TIMES - new_remaining  # 当前是第几步
             messages.append(random.choice(HuaniuMianzhangConfig.DEBUFF_TRIGGER_TEXTS).format(
                 nickname=nickname,
                 length_loss=length_damage,
                 hardness_loss=hardness_damage,
                 asset_loss=asset_loss_str,
-                remaining=new_remaining
+                remaining=new_remaining,
+                step=step
             ))
 
         return messages
@@ -3345,9 +3349,9 @@ class NiuniuPlugin(Star):
         for idx, (uid, data) in enumerate(top_users, 1):
             hardness = data.get('hardness', 1)
             coins = data.get('coins', 0)
-            parasite_info = " 🪱寄生牛牛" if data.get('parasite') else ""
-            huagu_info = " 🦴化骨" if data.get('huagu_debuff') else ""
-            nickname_display = data['nickname'] + huagu_info
+            parasite_info = " 【🐛寄】" if data.get('parasite') else ""
+            dian_info = "【🤪癫】" if data.get('huagu_debuff') else ""
+            nickname_display = dian_info + data['nickname']
 
             if rank_type == "金币":
                 ranking.append(f"{idx}. {nickname_display} ➜ 💰{self.format_coins(coins)}")
@@ -3364,9 +3368,9 @@ class NiuniuPlugin(Star):
             for idx, (uid, data) in enumerate(bottom_users, bottom_start + 1):
                 hardness = data.get('hardness', 1)
                 coins = data.get('coins', 0)
-                parasite_info = " 🪱寄生牛牛" if data.get('parasite') else ""
-                huagu_info = " 🦴化骨" if data.get('huagu_debuff') else ""
-                nickname_display = data['nickname'] + huagu_info
+                parasite_info = " 【寄】" if data.get('parasite') else ""
+                dian_info = "【癫】" if data.get('huagu_debuff') else ""
+                nickname_display = dian_info + data['nickname']
 
                 if rank_type == "金币":
                     ranking.append(f"{idx}. {nickname_display} ➜ 💰{self.format_coins(coins)}")
