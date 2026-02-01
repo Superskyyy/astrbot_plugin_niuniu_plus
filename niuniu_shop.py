@@ -891,7 +891,7 @@ class NiuniuShop:
 
                 # 复杂道具列表（有特殊逻辑或动态效果，不支持批量购买）
                 # 移除了：祸水东引、上保险、牛牛反弹、巴黎牛家、赌徒骰子、穷牛一生（改为支持批量购买）
-                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '绝对值！', '牛牛寄生', '驱牛药', '牛牛均富/负卡']
+                complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '绝对值！', '牛牛寄生', '驱牛药', '牛牛均富/负卡', '化牛绵掌']
                 # 需要循环触发的道具（每次效果独立，不能简单乘以次数）
                 loop_trigger_items = ['祸水东引', '上保险', '牛牛反弹', '巴黎牛家', '赌徒骰子', '穷牛一生']
                 is_simple_item = selected_item['name'] not in complex_items
@@ -1248,8 +1248,30 @@ class NiuniuShop:
                         return
                     extra_data['target_id'] = target_id
 
+                # 化牛绵掌需要指定目标
+                if selected_item['name'] == '化牛绵掌':
+                    target_id = None
+                    # 解析@目标
+                    for comp in event.message_obj.message:
+                        if isinstance(comp, At):
+                            target_id = str(comp.qq)
+                            break
+                    if not target_id:
+                        yield event.plain_result("❌ 请指定目标！\n格式：牛牛购买 22 @目标")
+                        return
+                    if target_id == user_id:
+                        yield event.plain_result("❌ 不能对自己使用「化牛绵掌」！")
+                        return
+                    extra_data['target_id'] = target_id
+
+                    # 获取股票数据用于计算总资产
+                    from niuniu_stock import NiuniuStock
+                    stock = NiuniuStock(group_id)
+                    stock_data = stock.get_stock_data()
+                    extra_data['stock_data'] = stock_data
+
                 # 需要群组数据的道具
-                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生', '牛牛均富/负卡']:
+                if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生', '牛牛均富/负卡', '化牛绵掌']:
                     niuniu_data = self._load_niuniu_data()
                     extra_data['group_data'] = niuniu_data.get(group_id, {})
 
@@ -1493,9 +1515,13 @@ class NiuniuShop:
                                     shortest_name = group_data[shortest_uid].get('nickname', shortest_uid)
                                     longest_name = group_data[longest_uid].get('nickname', longest_uid)
 
+                                    # 最短者检查化骨debuff（负数且有debuff时不能归零到0）
+                                    shortest_has_huagu = group_data[shortest_uid].get('huagu_debuff') and old_shortest < 0
                                     # 最短者检查护盾（归零是负面的）
                                     shortest_shield = group_data[shortest_uid].get('shield_charges', 0)
-                                    if shortest_shield > 0:
+                                    if shortest_has_huagu:
+                                        result_msg.append(f"⚖️ 末日审判：🦴 {shortest_name} 的「化骨debuff」阻止了归零！")
+                                    elif shortest_shield > 0:
                                         group_data[shortest_uid]['shield_charges'] = shortest_shield - 1
                                         result_msg.append(f"⚖️ 末日审判：🛡️ {shortest_name} 护盾抵挡了归零！（剩余{shortest_shield - 1}次）")
                                     else:
@@ -1524,6 +1550,12 @@ class NiuniuShop:
                                     longest_uid, longest_len = lengths[-1]
                                     shortest_name = group_data[shortest_uid].get('nickname', shortest_uid)
                                     longest_name = group_data[longest_uid].get('nickname', longest_uid)
+
+                                    # 最短者检查化骨debuff（负数且有debuff时不能被交换到正数）
+                                    shortest_has_huagu = group_data[shortest_uid].get('huagu_debuff') and shortest_len < 0 and longest_len >= 0
+                                    if shortest_has_huagu:
+                                        result_msg.append(f"🔄 反向天赋：🦴 {shortest_name} 的「化骨debuff」阻止了互换！")
+                                        continue
 
                                     # 最长者检查护盾（变短是负面的）
                                     longest_shield = group_data[longest_uid].get('shield_charges', 0)
@@ -1850,6 +1882,51 @@ class NiuniuShop:
                         if user_change:
                             user_data['length'] = avg_length
                             user_data['hardness'] = avg_hardness
+
+                    # 处理化牛绵掌：消耗资产，打击目标，施加化骨debuff
+                    if ctx.extra.get('huaniu_mianzhang'):
+                        huaniu = ctx.extra['huaniu_mianzhang']
+                        target_id = huaniu['target_id']
+                        coins_to_deduct = huaniu['coins_to_deduct']
+                        shares_to_sell = huaniu['shares_to_sell']
+
+                        niuniu_data = self._load_niuniu_data()
+                        group_data = niuniu_data.setdefault(group_id, {})
+
+                        # 扣除金币
+                        current_coins = self.get_user_coins(group_id, user_id)
+                        self.update_user_coins(group_id, user_id, current_coins - coins_to_deduct)
+
+                        # 强制卖出股票
+                        if shares_to_sell > 0:
+                            from niuniu_stock import NiuniuStock
+                            stock = NiuniuStock(group_id)
+                            stock_data = stock.get_stock_data()
+                            user_shares = stock_data.get('shares', {}).get(user_id, 0)
+                            new_shares = max(0, user_shares - shares_to_sell)
+                            stock_data.setdefault('shares', {})[user_id] = new_shares
+                            # 清除持仓时间记录（如果全部卖出）
+                            if new_shares == 0 and user_id in stock_data.get('buy_times', {}):
+                                del stock_data['buy_times'][user_id]
+                            stock.save_stock_data(stock_data)
+                            result_msg.append(f"📉 强制卖出股票：{shares_to_sell}股")
+
+                        # 修改目标的长度和硬度
+                        if target_id in group_data:
+                            group_data[target_id]['length'] = huaniu['target_new_length']
+                            group_data[target_id]['hardness'] = huaniu['target_new_hardness']
+                            # 施加化骨debuff
+                            import time
+                            group_data[target_id]['huagu_debuff'] = {
+                                'active': True,
+                                'applied_at': int(time.time()),
+                                'applied_by': user_id
+                            }
+
+                        self._save_niuniu_data(niuniu_data)
+
+                        # 设置final_price为0，已在extra中处理扣除
+                        final_price = 0
 
                     # Apply changes to current user
                     old_length = user_data.get('length', 0)

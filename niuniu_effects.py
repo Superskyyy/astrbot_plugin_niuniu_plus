@@ -2128,9 +2128,13 @@ class HundunFengbaoEffect(ItemEffect):
                 event_text = f"😶 {nickname}: {random.choice(self.NOTHING_TEXTS)}"
 
             elif event_id == 'reverse_sign':
-                new_len = -old_length
-                length_change = new_len - old_length
-                event_text = f"🔀 {nickname}: {random.choice(self.REVERSE_TEXTS)} {old_length}cm → {new_len}cm！"
+                # 检查化骨debuff：负数牛牛不能被意外翻正
+                if data.get('huagu_debuff') and old_length < 0:
+                    event_text = f"🦴 {nickname}: 「化骨debuff」阻止了正负反转！混沌之力被诅咒抵消！"
+                else:
+                    new_len = -old_length
+                    length_change = new_len - old_length
+                    event_text = f"🔀 {nickname}: {random.choice(self.REVERSE_TEXTS)} {old_length}cm → {new_len}cm！"
 
             elif event_id == 'full_swap':
                 # 全属性互换（长度+硬度）
@@ -2309,7 +2313,10 @@ class HundunFengbaoEffect(ItemEffect):
 
             elif event_id == 'resurrection':
                 # 牛牛复活：负数变正数
-                if old_length <= 0:
+                # 检查化骨debuff：有debuff的负数牛牛不能被复活
+                if data.get('huagu_debuff') and old_length < 0:
+                    event_text = f"🦴 {nickname}: 「化骨debuff」阻止了复活！混沌之力被诅咒吞噬！"
+                elif old_length <= 0:
                     new_len = random.randint(params['min'], params['max'])
                     length_change = new_len - old_length
                     event_text = f"✨ {nickname}: 「凤凰涅槃」！牛牛从负数中复活！{old_length}cm → {new_len}cm！重获新生！"
@@ -3336,6 +3343,19 @@ class JueduizhiEffect(ItemEffect):
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
         current_length = ctx.user_length
 
+        # 检查是否有化骨debuff
+        if ctx.user_data.get('huagu_debuff'):
+            ctx.messages.extend([
+                "❌ ══ 绝对值！ ══ ❌",
+                f"🦴 {ctx.nickname} 你身上有「化骨debuff」！",
+                "💔 无法使用「绝对值！」翻身！",
+                "💡 只能靠自己的努力（打胶/比划获胜）把长度打回正数！",
+                "═══════════════════"
+            ])
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
         # 检查是否是负数
         if current_length >= 0:
             ctx.messages.extend([
@@ -3741,6 +3761,146 @@ class JunfukaEffect(ItemEffect):
 
 
 # =============================================================================
+# 化牛绵掌 Effect
+# =============================================================================
+
+class HuaniuMianzhangEffect(ItemEffect):
+    """化牛绵掌 - Ultimate Attack: consume 99% assets to destroy target"""
+    name = "化牛绵掌"
+    triggers = [EffectTrigger.ON_PURCHASE]
+    consume_on_use = False  # Active item, no inventory
+
+    # 股市配置 - 极端事件，超高波动
+    stock_config = {
+        "volatility": (0.15, 0.35),
+        "templates": {
+            "up": [
+                "☠️ {nickname} 发动「化牛绵掌」！股市为之震颤！",
+                "💀 禁术「化牛绵掌」现世！股价暴涨！",
+                "🩸 {nickname} 倾家荡产的一击！股市狂欢！",
+            ],
+            "down": [
+                "☠️ {nickname} 发动「化牛绵掌」！股市恐慌！",
+                "💀 禁术「化牛绵掌」现世！股价暴跌！",
+                "🩸 {nickname} 的疯狂之举吓坏了股市！",
+            ],
+        }
+    }
+
+    def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
+        from niuniu_config import HuaniuMianzhangConfig, format_length
+
+        group_data = ctx.extra.get('group_data', {})
+        user_id = ctx.user_id
+        nickname = ctx.nickname
+        user_coins = ctx.extra.get('user_coins', 0)
+
+        # 获取指定的目标
+        target_id = ctx.extra.get('target_id')
+        if not target_id:
+            ctx.messages.extend([
+                "❌ ══ 化牛绵掌 ══ ❌",
+                "⚠️ 未指定目标！",
+                "💡 格式：牛牛购买 22 @目标",
+                "═══════════════════"
+            ])
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        # 不能对自己使用
+        if target_id == user_id:
+            ctx.messages.extend([
+                "❌ ══ 化牛绵掌 ══ ❌",
+                "⚠️ 不能对自己使用「化牛绵掌」！",
+                "═══════════════════"
+            ])
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        # 检查目标是否存在且已注册
+        target_data = group_data.get(target_id)
+        if not target_data or not isinstance(target_data, dict) or 'length' not in target_data:
+            ctx.messages.extend([
+                "❌ ══ 化牛绵掌 ══ ❌",
+                "⚠️ 该用户大概是没有牛牛的！",
+                "═══════════════════"
+            ])
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        target_name = target_data.get('nickname', target_id)
+
+        # 计算总资产 = 金币 + 股票市值
+        stock_data = ctx.extra.get('stock_data', {})
+        user_shares = stock_data.get('shares', {}).get(user_id, 0)
+        stock_price = stock_data.get('price', 100)
+        stock_value = user_shares * stock_price
+        total_asset = user_coins + stock_value
+
+        # 检查总资产是否达到底价100万
+        if total_asset < HuaniuMianzhangConfig.MIN_ASSET:
+            ctx.messages.extend([
+                "❌ ══ 化牛绵掌 ══ ❌",
+                random.choice(HuaniuMianzhangConfig.INSUFFICIENT_ASSET_TEXTS).format(asset=int(total_asset)),
+                f"📊 你的总资产：{int(user_coins)}金币 + {int(stock_value)}股票 = {int(total_asset)}",
+                f"📈 需要至少：{HuaniuMianzhangConfig.MIN_ASSET:,}",
+                "═══════════════════"
+            ])
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
+        # 计算消耗 = max(100万, 总资产 * 99%)
+        asset_consume = max(HuaniuMianzhangConfig.MIN_ASSET, int(total_asset * HuaniuMianzhangConfig.ASSET_CONSUME_PERCENT))
+
+        # 计算需要扣除的金币和股票
+        coins_to_deduct = min(user_coins, asset_consume)
+        remaining_to_deduct = asset_consume - coins_to_deduct
+        shares_to_sell = 0
+
+        if remaining_to_deduct > 0 and user_shares > 0:
+            # 需要卖出股票补足
+            shares_to_sell = min(user_shares, int(remaining_to_deduct / stock_price) + 1)
+            # 确保卖出足够的股票
+            while shares_to_sell * stock_price < remaining_to_deduct and shares_to_sell < user_shares:
+                shares_to_sell += 1
+
+        # 存储扣除信息，由 shop 统一处理
+        ctx.extra['huaniu_mianzhang'] = {
+            'target_id': target_id,
+            'target_name': target_name,
+            'target_old_length': target_data.get('length', 0),
+            'target_old_hardness': target_data.get('hardness', 1),
+            'target_new_length': HuaniuMianzhangConfig.TARGET_LENGTH,
+            'target_new_hardness': HuaniuMianzhangConfig.TARGET_HARDNESS,
+            'coins_to_deduct': int(coins_to_deduct),
+            'shares_to_sell': shares_to_sell,
+            'total_asset_consumed': asset_consume,
+        }
+
+        # 动态价格设为0（已在extra中处理扣除）
+        ctx.extra['dynamic_price'] = 0
+
+        # 生成消息
+        ctx.messages.extend([
+            "☠️ ══ 化牛绵掌 ══ ☠️",
+            random.choice(HuaniuMianzhangConfig.SUCCESS_TEXTS).format(user=nickname, target=target_name),
+            f"💸 消耗资产：{asset_consume:,}（金币{int(coins_to_deduct):,} + 股票{shares_to_sell}股）",
+            f"📉 {target_name} 的牛牛：",
+            f"   长度：{format_length(target_data.get('length', 0))} → {format_length(HuaniuMianzhangConfig.TARGET_LENGTH)}",
+            f"   硬度：{target_data.get('hardness', 1)} → {HuaniuMianzhangConfig.TARGET_HARDNESS}",
+            "",
+            random.choice(HuaniuMianzhangConfig.DEBUFF_TEXTS).format(target=target_name),
+            "═══════════════════"
+        ])
+
+        return ctx
+
+
+# =============================================================================
 # Effect Manager Factory
 # =============================================================================
 
@@ -3772,5 +3932,6 @@ def create_effect_manager() -> EffectManager:
     manager.register(NiuniuJishengEffect())
     manager.register(QuniuyaoEffect())
     manager.register(JunfukaEffect())
+    manager.register(HuaniuMianzhangEffect())
 
     return manager

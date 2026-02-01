@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.20.5")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.0")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -445,6 +445,40 @@ class NiuniuPlugin(Star):
                 group_id, beneficiary_id, drain_length, processed_ids
             )
             messages.extend(chain_messages)
+
+        return messages
+
+    def _check_and_clear_huagu_debuff(self, group_id: str, user_id: str, old_length: float, new_length: float) -> list:
+        """
+        检查并清除化骨debuff（当长度从负数变为>=0时）
+
+        Args:
+            group_id: 群组ID
+            user_id: 用户ID
+            old_length: 变化前的长度
+            new_length: 变化后的长度
+
+        Returns:
+            消息列表（如果debuff被清除）
+        """
+        messages = []
+        user_data = self.get_user_data(group_id, user_id)
+
+        if not user_data:
+            return messages
+
+        # 检查是否有化骨debuff
+        huagu_debuff = user_data.get('huagu_debuff')
+        if not huagu_debuff:
+            return messages
+
+        # 检查是否从负数变为>=0
+        if old_length < 0 and new_length >= 0:
+            # 清除debuff
+            self.update_user_data(group_id, user_id, {'huagu_debuff': None})
+            nickname = user_data.get('nickname', user_id)
+            messages.append(f"🎊 {nickname} 成功把长度打回正数！「化骨debuff」已解除！")
+            messages.append("✨ 重获新生！现在可以正常使用「绝对值！」道具了！")
 
         return messages
 
@@ -1746,6 +1780,12 @@ class NiuniuPlugin(Star):
 
         self.update_user_data(group_id, user_id, updated_data)
 
+        # ===== 化骨debuff检测：如果有debuff且长度从负变正，解除debuff =====
+        old_length_before_dajiao = user_data['length']
+        new_length_after_dajiao = old_length_before_dajiao + total_change
+        huagu_msgs = self._check_and_clear_huagu_debuff(group_id, user_id, old_length_before_dajiao, new_length_after_dajiao)
+        result_msgs.extend(huagu_msgs)
+
         # ===== 寄生牛牛效果：如果有人在我身上种了寄生牛牛，检查是否触发抽取 =====
         if total_change > 0:
             parasite_msgs = self._check_and_trigger_parasite(
@@ -2720,6 +2760,15 @@ class NiuniuPlugin(Star):
             if target_length_gain > 0:
                 parasite_msgs = self._check_and_trigger_parasite(group_id, target_id, target_length_gain, processed_ids=set())
                 result_msg.extend(parasite_msgs)
+
+            # ===== 化骨debuff检测 =====
+            # 检查用户：如果有debuff且长度从负变正，解除debuff
+            huagu_msgs = self._check_and_clear_huagu_debuff(group_id, user_id, old_u_len, final_user['length'])
+            result_msg.extend(huagu_msgs)
+
+            # 检查目标：如果有debuff且长度从负变正，解除debuff
+            huagu_msgs = self._check_and_clear_huagu_debuff(group_id, target_id, old_t_len, final_target['length'])
+            result_msg.extend(huagu_msgs)
 
             # 股市钩子 - 用赢家的增益作为变化量
             compare_change = user_length_gain if user_length_gain > 0 else -target_length_gain
