@@ -3218,6 +3218,16 @@ class NiuniuDunpaiEffect(ItemEffect):
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
         from niuniu_config import NiuniuDunpaiConfig
 
+        # 检查护盾上限
+        current_charges = ctx.user_data.get('shield_charges', 0)
+        if current_charges >= NiuniuDunpaiConfig.SHIELD_MAX:
+            ctx.success = False
+            ctx.messages.append("🛡️ ══ 牛牛盾牌 ══ 🛡️")
+            ctx.messages.append(f"❌ 购买失败！护盾已达上限 {NiuniuDunpaiConfig.SHIELD_MAX} 层")
+            ctx.messages.append(f"📊 当前护盾：{current_charges} 层")
+            ctx.messages.append("═══════════════════")
+            return ctx
+
         # 扣除50%长度和硬度作为代价
         old_length = ctx.user_length
         old_hardness = ctx.user_hardness
@@ -3229,21 +3239,23 @@ class NiuniuDunpaiEffect(ItemEffect):
             ctx.length_change = length_cost  # 负数长度：扣代价让它更接近0
         ctx.hardness_change = -hardness_cost
 
-        # 增加护盾次数
-        current_charges = ctx.user_data.get('shield_charges', 0)
-        new_charges = current_charges + NiuniuDunpaiConfig.SHIELD_CHARGES
+        # 增加护盾次数（限制上限）
+        new_charges = min(current_charges + NiuniuDunpaiConfig.SHIELD_CHARGES, NiuniuDunpaiConfig.SHIELD_MAX)
+        actual_add = new_charges - current_charges
 
-        ctx.extra['add_shield_charges'] = NiuniuDunpaiConfig.SHIELD_CHARGES
+        ctx.extra['add_shield_charges'] = actual_add
 
         ctx.messages.append("🛡️ ══ 牛牛盾牌 ══ 🛡️")
         ctx.messages.append(f"✨ {ctx.nickname} 购买了牛牛盾牌！")
         ctx.messages.append(f"⚠️ 代价：长度 {old_length}cm → {old_length + ctx.length_change}cm ({ctx.length_change:+}cm)")
         ctx.messages.append(f"⚠️ 代价：硬度 {old_hardness} → {old_hardness + ctx.hardness_change} ({ctx.hardness_change:+})")
-        ctx.messages.append(f"🔒 获得 {NiuniuDunpaiConfig.SHIELD_CHARGES} 次护盾防护")
+        ctx.messages.append(f"🔒 获得 {actual_add} 次护盾防护")
         if current_charges > 0:
             ctx.messages.append(f"📊 当前护盾：{current_charges} → {new_charges}")
         else:
             ctx.messages.append(f"📊 当前护盾：{new_charges}")
+        if new_charges >= NiuniuDunpaiConfig.SHIELD_MAX:
+            ctx.messages.append(f"⚠️ 护盾已达上限 {NiuniuDunpaiConfig.SHIELD_MAX} 层！")
         ctx.messages.append("")
         ctx.messages.append("💡 护盾可抵挡：")
         ctx.messages.append("  • 劫富济贫（被抢时）")
