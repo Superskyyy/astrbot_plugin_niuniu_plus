@@ -938,20 +938,7 @@ class NiuniuShop:
                     price_per_buy = selected_item['price']
                     max_buys_by_coins = self._calculate_max_purchases_with_tax(user_coins, price_per_buy)
 
-                    # 检查硬度上限限制可购买次数
-                    max_buys_by_hardness = buy_count
-                    if effect and hasattr(effect, 'hardness_change') and effect.hardness_change > 0:
-                        current_hardness = user_data.get('hardness', 1)
-                        if current_hardness >= DajiaoConfig.MAX_HARDNESS:
-                            yield event.plain_result(f"⚠️ 硬度已达上限（{DajiaoConfig.MAX_HARDNESS}），无法购买增加硬度的道具")
-                            return
-                        # 计算最多能买几次才达到硬度上限
-                        remaining_hardness = DajiaoConfig.MAX_HARDNESS - current_hardness
-                        max_buys_by_hardness = remaining_hardness // effect.hardness_change
-                        if max_buys_by_hardness <= 0:
-                            max_buys_by_hardness = 1  # 至少能买1次
-
-                    actual_buy_count = min(buy_count, max_buys_by_coins, max_buys_by_hardness)
+                    actual_buy_count = min(buy_count, max_buys_by_coins)
 
                     if actual_buy_count <= 0:
                         # 计算第一次购买需要的总金额（含税）
@@ -995,10 +982,7 @@ class NiuniuShop:
                             result_msg.append(f"✨ 硬度减少了{-total_hardness_change}")
 
                     if actual_buy_count < buy_count:
-                        if max_buys_by_hardness < buy_count and max_buys_by_hardness <= max_buys_by_coins:
-                            result_msg.append(f"⚠️ 硬度已达上限，仅购买{actual_buy_count}次")
-                        else:
-                            result_msg.append(f"⚠️ 金币不足，仅购买{actual_buy_count}次")
+                        result_msg.append(f"⚠️ 金币不足，仅购买{actual_buy_count}次")
                     else:
                         result_msg.append(f"📦 批量购买{actual_buy_count}次")
 
@@ -1167,10 +1151,6 @@ class NiuniuShop:
 
                     successfully_bought = 0  # 实际成功购买次数
                     for i in range(actual_buy_count):
-                        # 检查硬度是否已达上限
-                        if current_hardness >= DajiaoConfig.MAX_HARDNESS:
-                            break  # 硬度已达上限，提前终止
-
                         # 创建效果上下文
                         extra_data = {
                             'item_name': selected_item['name'],
@@ -1209,11 +1189,6 @@ class NiuniuShop:
 
                             successfully_bought += 1
 
-                    # 如果一次都没购买成功，提示用户
-                    if successfully_bought == 0:
-                        yield event.plain_result(f"⚠️ 硬度已达上限（{DajiaoConfig.MAX_HARDNESS}），无法购买增加硬度的道具")
-                        return
-
                     # 应用最终效果
                     user_data['length'] = max(-999999, min(999999, original_length + total_length_change))
                     user_data['hardness'] = min(DajiaoConfig.MAX_HARDNESS, max(1, original_hardness + total_hardness_change))
@@ -1244,10 +1219,7 @@ class NiuniuShop:
                         result_msg.append(f"📋 累计获得保险：+{total_insurance_charges}次（当前{user_data['insurance_charges']}次）")
 
                     if successfully_bought < buy_count:
-                        if successfully_bought < actual_buy_count:
-                            result_msg.append(f"⚠️ 硬度已达上限，仅购买{successfully_bought}次")
-                        else:
-                            result_msg.append(f"⚠️ 金币不足，仅购买{successfully_bought}次")
+                        result_msg.append(f"⚠️ 金币不足，仅购买{successfully_bought}次")
 
                     # 计算批量购买的总税额（每次购买后金币递减）
                     purchase_tax, tax_list = self._calculate_batch_purchase_taxes(user_coins, price_per_buy, successfully_bought)
@@ -1294,13 +1266,6 @@ class NiuniuShop:
                 if not is_simple_item and not is_dunpai and not is_loop_trigger and buy_count > 1:
                     yield event.plain_result("⚠️ 该道具有特殊效果，不支持批量购买")
                     return
-
-                # 检查硬度上限 - 如果道具增加硬度且已达上限则拒绝购买
-                if effect and hasattr(effect, 'hardness_change') and effect.hardness_change > 0:
-                    current_hardness = user_data.get('hardness', 1)
-                    if current_hardness >= DajiaoConfig.MAX_HARDNESS:
-                        yield event.plain_result(f"⚠️ 硬度已达上限（{DajiaoConfig.MAX_HARDNESS}），无法购买增加硬度的道具")
-                        return
 
                 # Active items use effect system
                 extra_data = {
