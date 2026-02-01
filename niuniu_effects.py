@@ -3781,7 +3781,7 @@ class HuaniuMianzhangEffect(ItemEffect):
             ctx.messages.extend([
                 "❌ ══ 化牛绵掌 ══ ❌",
                 "⚠️ 未指定目标！",
-                "💡 格式：牛牛购买 22 @目标",
+                "💡 格式：牛牛购买 0 @目标",
                 "═══════════════════"
             ])
             ctx.extra['refund'] = True
@@ -3848,11 +3848,14 @@ class HuaniuMianzhangEffect(ItemEffect):
             while shares_to_sell * stock_price < remaining_to_deduct and shares_to_sell < user_shares:
                 shares_to_sell += 1
 
-        # 获取目标当前的金币（用于快照）
+        # 获取目标当前的总资产（金币 + 股票市值，用于快照）
         target_coins = ctx.extra.get('target_coins', 0)
+        target_shares = stock_data.get('shares', {}).get(target_id, 0)
+        target_stock_value = target_shares * stock_price
+        target_total_asset = target_coins + target_stock_value
 
         # 存储扣除信息，由 shop 统一处理
-        # 快照数据：记录目标受击时的长度、硬度、金币，用于后续化骨伤害计算
+        # 快照数据：记录目标受击时的长度、硬度、总资产，用于后续化骨伤害计算
         ctx.extra['huaniu_mianzhang'] = {
             'target_id': target_id,
             'target_name': target_name,
@@ -3863,10 +3866,10 @@ class HuaniuMianzhangEffect(ItemEffect):
             'coins_to_deduct': int(coins_to_deduct),
             'shares_to_sell': shares_to_sell,
             'total_asset_consumed': asset_consume,
-            # 快照数据用于化骨debuff
+            # 快照数据用于化骨debuff（资产=金币+股票市值）
             'snapshot_length': abs(target_data.get('length', 0)),  # 用绝对值作为基准
             'snapshot_hardness': target_data.get('hardness', 1),
-            'snapshot_coins': target_coins,
+            'snapshot_asset': target_total_asset,  # 改为总资产
         }
 
         # 动态价格设为0（已在extra中处理扣除）
@@ -3875,7 +3878,7 @@ class HuaniuMianzhangEffect(ItemEffect):
         # 计算每次化骨伤害
         damage_per_time_length = int(abs(target_data.get('length', 0)) * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
         damage_per_time_hardness = int(target_data.get('hardness', 1) * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
-        damage_per_time_coins = int(target_coins * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
+        damage_per_time_asset = int(target_total_asset * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
 
         # 生成消息
         ctx.messages.extend([
@@ -3887,7 +3890,8 @@ class HuaniuMianzhangEffect(ItemEffect):
             f"   硬度：{target_data.get('hardness', 1)} → {HuaniuMianzhangConfig.TARGET_HARDNESS}",
             "",
             random.choice(HuaniuMianzhangConfig.DEBUFF_TEXTS).format(target=target_name),
-            f"💀 化骨伤害预览：每次行动将损失约 {damage_per_time_length}cm / {damage_per_time_hardness}硬 / {damage_per_time_coins}币",
+            f"💀 化骨伤害预览：每次行动将损失约 {damage_per_time_length}cm / {damage_per_time_hardness}硬 / {damage_per_time_asset}资产",
+            f"   ({target_name}当前总资产：{target_coins}币+{target_shares}股={target_total_asset:,})",
             "═══════════════════"
         ])
 

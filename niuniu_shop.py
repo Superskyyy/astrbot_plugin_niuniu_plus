@@ -83,10 +83,14 @@ class NiuniuShop:
                         dynamic_price = int(abs(user_length) * 0.1)
                         tax = self._calculate_purchase_tax(user_coins, dynamic_price)
                         total_price = dynamic_price + tax
-                        if tax > 0:
-                            price_str = f"{dynamic_price}+{tax}税={total_price} 💰"
+                        if user_coins >= total_price:
+                            if tax > 0:
+                                price_str = f"{dynamic_price}+{tax}税={total_price} 💰"
+                            else:
+                                price_str = f"{dynamic_price} 💰"
                         else:
-                            price_str = f"{dynamic_price} 💰"
+                            shortfall = int(total_price - user_coins)
+                            price_str = f"{total_price} 💰 ❌买不起(差{shortfall:,})"
                     else:
                         price_str = "仅限负数牛牛"
                 # 牛牛均富/负卡的动态价格计算
@@ -101,9 +105,37 @@ class NiuniuShop:
                         total_diff = sum(abs(length - avg_length) for length in all_lengths)
                         base_dynamic_price = int(JunfukaConfig.BASE_PRICE + total_diff * JunfukaConfig.TOTAL_DIFF_COEFFICIENT)
                         base_dynamic_price = max(JunfukaConfig.MIN_PRICE, base_dynamic_price)
-                        price_str = f"{base_dynamic_price} 💰 + 你的金币×50% (动态)"
+                        # 均富卡实际价格 = base + 50%金币
+                        actual_price = int(base_dynamic_price + user_coins * 0.5)
+                        tax = self._calculate_purchase_tax(user_coins, actual_price)
+                        total_price = actual_price + tax
+                        if user_coins >= total_price:
+                            price_str = f"{base_dynamic_price}+50%金币={actual_price} 💰"
+                        else:
+                            shortfall = int(total_price - user_coins)
+                            price_str = f"{total_price} 💰 ❌买不起(差{shortfall:,})"
                     else:
                         price_str = f"需≥{JunfukaConfig.MIN_PLAYERS}人"
+                # 化牛绵掌的动态价格计算
+                elif item['name'] == '化牛绵掌':
+                    from niuniu_config import HuaniuMianzhangConfig
+                    from niuniu_stock import NiuniuStock
+                    stock = NiuniuStock(group_id)
+                    stock_data = stock.get_stock_data()
+                    user_shares = stock_data.get('shares', {}).get(user_id, 0)
+                    stock_price = stock_data.get('price', 100)
+                    stock_value = user_shares * stock_price
+                    total_asset = user_coins + stock_value
+                    min_asset = HuaniuMianzhangConfig.MIN_ASSET
+
+                    if total_asset >= min_asset:
+                        # 计算实际消耗 = max(底价, 99%资产)
+                        actual_cost = max(min_asset, int(total_asset * HuaniuMianzhangConfig.ASSET_CONSUME_PERCENT))
+                        price_str = f"99%资产={actual_cost:,} 💰"
+                    else:
+                        # 资产不足
+                        shortfall = int(min_asset - total_asset)
+                        price_str = f"❌买不起(差{shortfall:,}) 底价{min_asset//10000:,}万"
                 else:
                     price_str = "动态定价"
             else:
@@ -111,10 +143,14 @@ class NiuniuShop:
                 base_price = item['price']
                 tax = self._calculate_purchase_tax(user_coins, base_price)
                 total_price = base_price + tax
-                if tax > 0:
-                    price_str = f"{base_price}+{tax}税={total_price} 💰"
+                if user_coins >= total_price:
+                    if tax > 0:
+                        price_str = f"{base_price}+{tax}税={total_price} 💰"
+                    else:
+                        price_str = f"{base_price} 💰"
                 else:
-                    price_str = f"{base_price} 💰"
+                    shortfall = int(total_price - user_coins)
+                    price_str = f"{total_price} 💰 ❌买不起(差{shortfall:,})"
 
             content_text = (
                 f"{emoji} [{item['id']}] {item['name']}\n"
@@ -1257,7 +1293,7 @@ class NiuniuShop:
                             target_id = str(comp.qq)
                             break
                     if not target_id:
-                        yield event.plain_result("❌ 请指定目标！\n格式：牛牛购买 22 @目标")
+                        yield event.plain_result("❌ 请指定目标！\n格式：牛牛购买 0 @目标")
                         return
                     if target_id == user_id:
                         yield event.plain_result("❌ 不能对自己使用「化牛绵掌」！")
@@ -1916,7 +1952,7 @@ class NiuniuShop:
                                 'remaining_times': HuaniuMianzhangConfig.DEBUFF_TIMES,  # 4次
                                 'snapshot_length': huaniu.get('snapshot_length', 0),
                                 'snapshot_hardness': huaniu.get('snapshot_hardness', 1),
-                                'snapshot_coins': huaniu.get('snapshot_coins', 0),
+                                'snapshot_asset': huaniu.get('snapshot_asset', 0),  # 总资产=金币+股票
                                 'applied_at': int(time.time()),
                                 'applied_by': user_id
                             }
@@ -2142,11 +2178,11 @@ class NiuniuShop:
             remaining = huagu_debuff.get('remaining_times', 0)
             snapshot_length = huagu_debuff.get('snapshot_length', 0)
             snapshot_hardness = huagu_debuff.get('snapshot_hardness', 0)
-            snapshot_coins = huagu_debuff.get('snapshot_coins', 0)
+            snapshot_asset = huagu_debuff.get('snapshot_asset', 0)
             from niuniu_config import HuaniuMianzhangConfig
             dmg_pct = int(HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT * 100)
             result_list.append(f"🦴【化骨】剩余{remaining}次，每次损失{dmg_pct}%快照值")
-            result_list.append(f"   快照：{snapshot_length}cm / {snapshot_hardness}硬 / {snapshot_coins}币")
+            result_list.append(f"   快照：{snapshot_length}cm / {snapshot_hardness}硬 / {snapshot_asset}资产")
 
         if not items and shield_charges == 0 and risk_transfer_charges == 0 and reflect_charges == 0 and insurance_charges == 0 and not has_subscriptions and not parasite and not huagu_debuff:
             result_list.append("🛍️ 你的背包里还没有道具哦~")

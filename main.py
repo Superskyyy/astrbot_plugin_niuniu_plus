@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.1")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.2")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -452,7 +452,7 @@ class NiuniuPlugin(Star):
         """
         触发化骨debuff效果（在每次命令执行后调用）
 
-        每次触发扣除快照值的24.5%长度、硬度、金币，共4次
+        每次触发扣除快照值的24.5%长度、硬度、总资产（金币+股票），共4次
         化骨效果无法被任何东西抵挡
 
         Args:
@@ -463,6 +463,7 @@ class NiuniuPlugin(Star):
             消息列表
         """
         from niuniu_config import HuaniuMianzhangConfig
+        from niuniu_stock import NiuniuStock
 
         messages = []
         user_data = self.get_user_data(group_id, user_id)
@@ -484,27 +485,52 @@ class NiuniuPlugin(Star):
         # 获取快照数据
         snapshot_length = huagu_debuff.get('snapshot_length', 0)
         snapshot_hardness = huagu_debuff.get('snapshot_hardness', 0)
-        snapshot_coins = huagu_debuff.get('snapshot_coins', 0)
+        snapshot_asset = huagu_debuff.get('snapshot_asset', 0)
 
         # 计算伤害（快照值的24.5%）
         length_damage = int(snapshot_length * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
         hardness_damage = int(snapshot_hardness * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
-        coins_damage = int(snapshot_coins * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
+        asset_damage = int(snapshot_asset * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
 
         nickname = user_data.get('nickname', user_id)
 
-        # 应用伤害（扣到0为止）
+        # 获取当前状态
         current_length = user_data.get('length', 0)
         current_hardness = user_data.get('hardness', 1)
         current_coins = self.shop.get_user_coins(group_id, user_id)
+
+        # 获取股票信息
+        stock = NiuniuStock(group_id)
+        stock_data = stock.get_stock_data()
+        user_shares = stock_data.get('shares', {}).get(user_id, 0)
+        stock_price = stock_data.get('price', 100)
+        current_stock_value = user_shares * stock_price
 
         # 长度：直接减去（可以变负）
         new_length = current_length - length_damage
         # 硬度：最低为0
         new_hardness = max(0, current_hardness - hardness_damage)
-        # 金币：最低为0
-        actual_coins_damage = min(current_coins, coins_damage)
-        new_coins = max(0, current_coins - coins_damage)
+
+        # 资产扣除：先扣金币，不够再卖股票
+        remaining_asset_damage = asset_damage
+        actual_coins_deducted = min(current_coins, remaining_asset_damage)
+        new_coins = current_coins - actual_coins_deducted
+        remaining_asset_damage -= actual_coins_deducted
+
+        shares_sold = 0
+        if remaining_asset_damage > 0 and user_shares > 0:
+            # 需要卖出股票补足
+            shares_needed = min(user_shares, int(remaining_asset_damage / stock_price) + 1)
+            while shares_needed * stock_price < remaining_asset_damage and shares_needed < user_shares:
+                shares_needed += 1
+            shares_sold = shares_needed
+            new_shares = user_shares - shares_sold
+            stock_data.setdefault('shares', {})[user_id] = new_shares
+            if new_shares == 0 and user_id in stock_data.get('buy_times', {}):
+                del stock_data['buy_times'][user_id]
+            stock.save_stock_data(stock_data)
+
+        actual_asset_deducted = actual_coins_deducted + shares_sold * stock_price
 
         # 更新剩余次数
         new_remaining = remaining - 1
@@ -518,11 +544,14 @@ class NiuniuPlugin(Star):
             self.shop.update_user_coins(group_id, user_id, new_coins)
 
             # 生成消息
+            asset_loss_str = f"{actual_coins_deducted}币"
+            if shares_sold > 0:
+                asset_loss_str += f"+{shares_sold}股"
             messages.append(random.choice(HuaniuMianzhangConfig.DEBUFF_TRIGGER_TEXTS).format(
                 nickname=nickname,
                 length_loss=length_damage,
                 hardness_loss=hardness_damage,
-                coins_loss=actual_coins_damage,
+                asset_loss=asset_loss_str,
                 remaining=0
             ))
             messages.append(random.choice(HuaniuMianzhangConfig.DEBUFF_END_TEXTS).format(nickname=nickname))
@@ -537,11 +566,14 @@ class NiuniuPlugin(Star):
             self.shop.update_user_coins(group_id, user_id, new_coins)
 
             # 生成消息
+            asset_loss_str = f"{actual_coins_deducted}币"
+            if shares_sold > 0:
+                asset_loss_str += f"+{shares_sold}股"
             messages.append(random.choice(HuaniuMianzhangConfig.DEBUFF_TRIGGER_TEXTS).format(
                 nickname=nickname,
                 length_loss=length_damage,
                 hardness_loss=hardness_damage,
-                coins_loss=actual_coins_damage,
+                asset_loss=asset_loss_str,
                 remaining=new_remaining
             ))
 
@@ -845,6 +877,10 @@ class NiuniuPlugin(Star):
                 return
             async for result in self.games.start_rush(event):
                 yield result
+            # 化骨debuff触发
+            huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
+            for msg_text in huagu_msgs:
+                yield event.plain_result(msg_text)
         elif msg.startswith("停止开冲"):
             # 执行命令中间件
             errors = self.run_command_middleware(group_id, user_id)
@@ -856,6 +892,10 @@ class NiuniuPlugin(Star):
                 return
             async for result in self.games.stop_rush(event):
                 yield result
+            # 化骨debuff触发
+            huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
+            for msg_text in huagu_msgs:
+                yield event.plain_result(msg_text)
         elif msg.startswith("飞飞机"):
             # 执行命令中间件
             errors = self.run_command_middleware(group_id, user_id)
@@ -864,6 +904,10 @@ class NiuniuPlugin(Star):
 
             async for result in self.games.fly_plane(event):
                 yield result
+            # 化骨debuff触发
+            huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
+            for msg_text in huagu_msgs:
+                yield event.plain_result(msg_text)
         else:
             # 处理其他命令
             handler_map = {
@@ -1412,6 +1456,11 @@ class NiuniuPlugin(Star):
                 if is_soha:
                     message = f"🎰 梭哈模式！投入95%财富\n{message}"
             yield event.plain_result(message)
+            # 化骨debuff触发（买股票也算行动）
+            if success:
+                huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
+                for msg_text in huagu_msgs:
+                    yield event.plain_result(msg_text)
 
         elif subcmd == "出售":
             # 牛牛股市 出售 [数量/全部]
@@ -3188,6 +3237,14 @@ class NiuniuPlugin(Star):
         result_lines.append("═══════════════════")
 
         yield event.plain_result("\n".join(result_lines))
+
+        # 化骨debuff触发（抢劫者和被抢者都算行动）
+        huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
+        for msg_text in huagu_msgs:
+            yield event.plain_result(msg_text)
+        huagu_msgs = self._trigger_huagu_debuff(group_id, target_id)
+        for msg_text in huagu_msgs:
+            yield event.plain_result(msg_text)
 
     async def _show_status(self, event):
         """查看牛牛状态"""

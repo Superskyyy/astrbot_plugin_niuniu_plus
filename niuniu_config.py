@@ -376,6 +376,14 @@ class RushConfig:
 # =============================================================================
 DEFAULT_SHOP_ITEMS = [
     {
+        'id': 0,
+        'name': "化牛绵掌",
+        'type': 'active',
+        'desc': "消耗99%总资产(含股票持仓,底价10亿)！将目标打到-100m/-100硬度，并施加「化骨debuff」：目标每次行动都会损失被击时长度/硬度/总资产快照的24.5%（先扣币再卖股），共4次，无法抵挡！用法：牛牛购买 0 @目标",
+        'price': 0,
+        'dynamic_price': True
+    },
+    {
         'id': 1,
         'name': "巴黎牛家",
         'type': 'active',
@@ -523,14 +531,6 @@ DEFAULT_SHOP_ITEMS = [
         'desc': "获得1次反弹，受到>=50cm长度伤害时反弹给攻击者！以彼之道还施彼身！（无法反弹夺牛魔）",
         'price': 125
     },
-    {
-        'id': 22,
-        'name': "化牛绵掌",
-        'type': 'active',
-        'desc': "消耗99%总资产(含股票,底价100万)！将目标打到-100m/-100硬度，施加「化骨debuff」无法用绝对值！用法：牛牛购买 22 @目标",
-        'price': 0,
-        'dynamic_price': True
-    }
 ]
 
 # 下架道具统一退款金额
@@ -794,15 +794,15 @@ class HuaniuMianzhangConfig:
     # 化骨debuff 施加文案
     DEBUFF_TEXTS = [
         "🦴 {target} 被施加「化骨debuff」！接下来4次行动都会受到持续伤害！",
-        "💔 {target} 骨架尽碎！每次行动都会流失长度、硬度、金币！",
+        "💔 {target} 骨架尽碎！每次行动都会流失长度、硬度、资产(含股票)！",
         "🔒 {target} 被「化骨」诅咒！无法抵挡，只能承受4次24.5%的持续损伤！",
     ]
 
-    # 化骨触发文案
+    # 化骨触发文案（asset_loss 可能是 "100币" 或 "100币+5股"）
     DEBUFF_TRIGGER_TEXTS = [
-        "🦴 「化骨」发作！{nickname} 流失了 {length_loss} 长度、{hardness_loss} 硬度、{coins_loss} 金币！（剩余{remaining}次）",
-        "💀 「化骨」侵蚀！{nickname} 损失 {length_loss}/{hardness_loss}硬/{coins_loss}币！（{remaining}/4）",
-        "☠️ 骨质流失！{nickname} -{length_loss}cm -{hardness_loss}硬 -{coins_loss}币（还剩{remaining}次痛苦）",
+        "🦴 「化骨」发作！{nickname} 流失了 {length_loss}cm、{hardness_loss}硬度、{asset_loss}！（剩余{remaining}次）",
+        "💀 「化骨」侵蚀！{nickname} 损失 {length_loss}cm/{hardness_loss}硬/{asset_loss}！（{remaining}/4）",
+        "☠️ 骨质流失！{nickname} -{length_loss}cm -{hardness_loss}硬 -{asset_loss}（还剩{remaining}次痛苦）",
     ]
 
     # 化骨结束文案
