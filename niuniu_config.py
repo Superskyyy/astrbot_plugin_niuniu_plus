@@ -360,7 +360,7 @@ FLY_PLANE_EVENTS = [
     # 神秘事件
     {"desc": "👽 牛牛声称看到了UFO，虽然没人信但直播间涨了不少粉", "percent_min": 0.085, "percent_max": 0.115},
     {"desc": "🔮 飞机上的算命先生说牛牛有财运，果然下机就捡到钱", "percent_min": 0.04, "percent_max": 0.06},
-    {"desc": "🌀 牛牛的飞机穿过神秘云层，牛牛感觉时间变慢了，多赚了几小时工资", "percent_min": 0.095, "percent_max": 0.13},
+    {"desc": "🌀 牛牛的飞机穿过神秘云层，牛牛感觉时间变慢了，多赚了几小时工资", "percent_min": 0.065, "percent_max": 0.09},
     {"desc": "🎰 牛牛在飞机上刮彩票，三等奖！", "percent_min": 0.09, "percent_max": 0.12},
     {"desc": "🗝️ 牛牛在洗手间捡到一把神秘钥匙，后来发现是某个寄存柜的", "percent_min": 0.10, "percent_max": 0.13}
 ]
