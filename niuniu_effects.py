@@ -1121,7 +1121,6 @@ class BalishijiaEffect(ItemEffect):
     name = "巴黎牛家"
     triggers = [EffectTrigger.ON_PURCHASE]
     consume_on_use = False  # Active item, no inventory
-    hardness_change = 10  # 用于硬度上限检查
 
     # 股市配置 - 中等影响道具
     stock_config = {
