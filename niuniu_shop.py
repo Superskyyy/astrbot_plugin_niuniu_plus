@@ -885,8 +885,8 @@ class NiuniuShop:
                 is_dunpai = selected_item['name'] == '牛牛盾牌'  # 牛牛盾牌支持批量购买但需特殊处理
                 is_loop_trigger = selected_item['name'] in loop_trigger_items  # 需要循环触发
 
-                # 简单道具支持批量购买（排除需要循环触发的道具）
-                if is_simple_item and not is_loop_trigger and buy_count > 1:
+                # 简单道具支持批量购买（排除需要循环触发的道具和牛牛盾牌）
+                if is_simple_item and not is_loop_trigger and not is_dunpai and buy_count > 1:
                     price_per_buy = selected_item['price']
                     max_buys_by_coins = self._calculate_max_purchases_with_tax(user_coins, price_per_buy)
 
