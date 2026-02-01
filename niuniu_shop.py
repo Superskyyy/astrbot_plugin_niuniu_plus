@@ -1270,6 +1270,9 @@ class NiuniuShop:
                     stock_data = stock.get_stock_data()
                     extra_data['stock_data'] = stock_data
 
+                    # 获取目标的金币（用于化骨debuff快照）
+                    extra_data['target_coins'] = self.get_user_coins(group_id, target_id)
+
                 # 需要群组数据的道具
                 if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生', '牛牛均富/负卡', '化牛绵掌']:
                     niuniu_data = self._load_niuniu_data()
@@ -1515,13 +1518,9 @@ class NiuniuShop:
                                     shortest_name = group_data[shortest_uid].get('nickname', shortest_uid)
                                     longest_name = group_data[longest_uid].get('nickname', longest_uid)
 
-                                    # 最短者检查化骨debuff（负数且有debuff时不能归零到0）
-                                    shortest_has_huagu = group_data[shortest_uid].get('huagu_debuff') and old_shortest < 0
                                     # 最短者检查护盾（归零是负面的）
                                     shortest_shield = group_data[shortest_uid].get('shield_charges', 0)
-                                    if shortest_has_huagu:
-                                        result_msg.append(f"⚖️ 末日审判：🦴 {shortest_name} 的「化骨debuff」阻止了归零！")
-                                    elif shortest_shield > 0:
+                                    if shortest_shield > 0:
                                         group_data[shortest_uid]['shield_charges'] = shortest_shield - 1
                                         result_msg.append(f"⚖️ 末日审判：🛡️ {shortest_name} 护盾抵挡了归零！（剩余{shortest_shield - 1}次）")
                                     else:
@@ -1550,12 +1549,6 @@ class NiuniuShop:
                                     longest_uid, longest_len = lengths[-1]
                                     shortest_name = group_data[shortest_uid].get('nickname', shortest_uid)
                                     longest_name = group_data[longest_uid].get('nickname', longest_uid)
-
-                                    # 最短者检查化骨debuff（负数且有debuff时不能被交换到正数）
-                                    shortest_has_huagu = group_data[shortest_uid].get('huagu_debuff') and shortest_len < 0 and longest_len >= 0
-                                    if shortest_has_huagu:
-                                        result_msg.append(f"🔄 反向天赋：🦴 {shortest_name} 的「化骨debuff」阻止了互换！")
-                                        continue
 
                                     # 最长者检查护盾（变短是负面的）
                                     longest_shield = group_data[longest_uid].get('shield_charges', 0)
@@ -1915,10 +1908,15 @@ class NiuniuShop:
                         if target_id in group_data:
                             group_data[target_id]['length'] = huaniu['target_new_length']
                             group_data[target_id]['hardness'] = huaniu['target_new_hardness']
-                            # 施加化骨debuff
+                            # 施加化骨debuff（带快照数据）
                             import time
+                            from niuniu_config import HuaniuMianzhangConfig
                             group_data[target_id]['huagu_debuff'] = {
                                 'active': True,
+                                'remaining_times': HuaniuMianzhangConfig.DEBUFF_TIMES,  # 4次
+                                'snapshot_length': huaniu.get('snapshot_length', 0),
+                                'snapshot_hardness': huaniu.get('snapshot_hardness', 1),
+                                'snapshot_coins': huaniu.get('snapshot_coins', 0),
                                 'applied_at': int(time.time()),
                                 'applied_by': user_id
                             }
@@ -2033,6 +2031,10 @@ class NiuniuShop:
                 if stock_msg:
                     result_msg.append(stock_msg)
 
+            # ===== 化骨debuff触发：购买道具也算行动 =====
+            huagu_msgs = self.main._trigger_huagu_debuff(group_id, user_id)
+            result_msg.extend(huagu_msgs)
+
             yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
 
         except Exception as e:
@@ -2134,7 +2136,19 @@ class NiuniuShop:
             beneficiary_name = parasite.get('beneficiary_name', '某人')
             result_list.append(f"🦠【寄】寄生牛牛来自：{beneficiary_name}（使用驱牛药可清除）")
 
-        if not items and shield_charges == 0 and risk_transfer_charges == 0 and reflect_charges == 0 and insurance_charges == 0 and not has_subscriptions and not parasite:
+        # 显示化骨debuff状态
+        huagu_debuff = user_data.get('huagu_debuff')
+        if huagu_debuff and huagu_debuff.get('active'):
+            remaining = huagu_debuff.get('remaining_times', 0)
+            snapshot_length = huagu_debuff.get('snapshot_length', 0)
+            snapshot_hardness = huagu_debuff.get('snapshot_hardness', 0)
+            snapshot_coins = huagu_debuff.get('snapshot_coins', 0)
+            from niuniu_config import HuaniuMianzhangConfig
+            dmg_pct = int(HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT * 100)
+            result_list.append(f"🦴【化骨】剩余{remaining}次，每次损失{dmg_pct}%快照值")
+            result_list.append(f"   快照：{snapshot_length}cm / {snapshot_hardness}硬 / {snapshot_coins}币")
+
+        if not items and shield_charges == 0 and risk_transfer_charges == 0 and reflect_charges == 0 and insurance_charges == 0 and not has_subscriptions and not parasite and not huagu_debuff:
             result_list.append("🛍️ 你的背包里还没有道具哦~")
 
         # 显示金币总额

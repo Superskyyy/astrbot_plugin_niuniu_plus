@@ -19,7 +19,7 @@ SUBSCRIPTION_CONFIGS = {
         "name": "战斗大师",
         "price_per_day": 1000000,  # 100万/天
         "emoji": "🏆",
-        "description": "打胶冷却-75%，成功率+10%，比划胜率+5%",
+        "description": "打胶冷却-75%，成功率+10%，比划胜率+5%，抢劫成功率+5%",
     },
     "insurance_plan": {
         "name": "保险订阅",
@@ -2128,13 +2128,9 @@ class HundunFengbaoEffect(ItemEffect):
                 event_text = f"😶 {nickname}: {random.choice(self.NOTHING_TEXTS)}"
 
             elif event_id == 'reverse_sign':
-                # 检查化骨debuff：负数牛牛不能被意外翻正
-                if data.get('huagu_debuff') and old_length < 0:
-                    event_text = f"🦴 {nickname}: 「化骨debuff」阻止了正负反转！混沌之力被诅咒抵消！"
-                else:
-                    new_len = -old_length
-                    length_change = new_len - old_length
-                    event_text = f"🔀 {nickname}: {random.choice(self.REVERSE_TEXTS)} {old_length}cm → {new_len}cm！"
+                new_len = -old_length
+                length_change = new_len - old_length
+                event_text = f"🔀 {nickname}: {random.choice(self.REVERSE_TEXTS)} {old_length}cm → {new_len}cm！"
 
             elif event_id == 'full_swap':
                 # 全属性互换（长度+硬度）
@@ -2313,10 +2309,7 @@ class HundunFengbaoEffect(ItemEffect):
 
             elif event_id == 'resurrection':
                 # 牛牛复活：负数变正数
-                # 检查化骨debuff：有debuff的负数牛牛不能被复活
-                if data.get('huagu_debuff') and old_length < 0:
-                    event_text = f"🦴 {nickname}: 「化骨debuff」阻止了复活！混沌之力被诅咒吞噬！"
-                elif old_length <= 0:
+                if old_length <= 0:
                     new_len = random.randint(params['min'], params['max'])
                     length_change = new_len - old_length
                     event_text = f"✨ {nickname}: 「凤凰涅槃」！牛牛从负数中复活！{old_length}cm → {new_len}cm！重获新生！"
@@ -3343,19 +3336,6 @@ class JueduizhiEffect(ItemEffect):
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
         current_length = ctx.user_length
 
-        # 检查是否有化骨debuff
-        if ctx.user_data.get('huagu_debuff'):
-            ctx.messages.extend([
-                "❌ ══ 绝对值！ ══ ❌",
-                f"🦴 {ctx.nickname} 你身上有「化骨debuff」！",
-                "💔 无法使用「绝对值！」翻身！",
-                "💡 只能靠自己的努力（打胶/比划获胜）把长度打回正数！",
-                "═══════════════════"
-            ])
-            ctx.extra['refund'] = True
-            ctx.intercept = True
-            return ctx
-
         # 检查是否是负数
         if current_length >= 0:
             ctx.messages.extend([
@@ -3868,7 +3848,11 @@ class HuaniuMianzhangEffect(ItemEffect):
             while shares_to_sell * stock_price < remaining_to_deduct and shares_to_sell < user_shares:
                 shares_to_sell += 1
 
+        # 获取目标当前的金币（用于快照）
+        target_coins = ctx.extra.get('target_coins', 0)
+
         # 存储扣除信息，由 shop 统一处理
+        # 快照数据：记录目标受击时的长度、硬度、金币，用于后续化骨伤害计算
         ctx.extra['huaniu_mianzhang'] = {
             'target_id': target_id,
             'target_name': target_name,
@@ -3879,10 +3863,19 @@ class HuaniuMianzhangEffect(ItemEffect):
             'coins_to_deduct': int(coins_to_deduct),
             'shares_to_sell': shares_to_sell,
             'total_asset_consumed': asset_consume,
+            # 快照数据用于化骨debuff
+            'snapshot_length': abs(target_data.get('length', 0)),  # 用绝对值作为基准
+            'snapshot_hardness': target_data.get('hardness', 1),
+            'snapshot_coins': target_coins,
         }
 
         # 动态价格设为0（已在extra中处理扣除）
         ctx.extra['dynamic_price'] = 0
+
+        # 计算每次化骨伤害
+        damage_per_time_length = int(abs(target_data.get('length', 0)) * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
+        damage_per_time_hardness = int(target_data.get('hardness', 1) * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
+        damage_per_time_coins = int(target_coins * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
 
         # 生成消息
         ctx.messages.extend([
@@ -3894,6 +3887,7 @@ class HuaniuMianzhangEffect(ItemEffect):
             f"   硬度：{target_data.get('hardness', 1)} → {HuaniuMianzhangConfig.TARGET_HARDNESS}",
             "",
             random.choice(HuaniuMianzhangConfig.DEBUFF_TEXTS).format(target=target_name),
+            f"💀 化骨伤害预览：每次行动将损失约 {damage_per_time_length}cm / {damage_per_time_hardness}硬 / {damage_per_time_coins}币",
             "═══════════════════"
         ])
 

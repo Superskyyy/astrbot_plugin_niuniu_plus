@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.0")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.1")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -448,19 +448,22 @@ class NiuniuPlugin(Star):
 
         return messages
 
-    def _check_and_clear_huagu_debuff(self, group_id: str, user_id: str, old_length: float, new_length: float) -> list:
+    def _trigger_huagu_debuff(self, group_id: str, user_id: str) -> list:
         """
-        检查并清除化骨debuff（当长度从负数变为>=0时）
+        触发化骨debuff效果（在每次命令执行后调用）
+
+        每次触发扣除快照值的24.5%长度、硬度、金币，共4次
+        化骨效果无法被任何东西抵挡
 
         Args:
             group_id: 群组ID
             user_id: 用户ID
-            old_length: 变化前的长度
-            new_length: 变化后的长度
 
         Returns:
-            消息列表（如果debuff被清除）
+            消息列表
         """
+        from niuniu_config import HuaniuMianzhangConfig
+
         messages = []
         user_data = self.get_user_data(group_id, user_id)
 
@@ -469,16 +472,78 @@ class NiuniuPlugin(Star):
 
         # 检查是否有化骨debuff
         huagu_debuff = user_data.get('huagu_debuff')
-        if not huagu_debuff:
+        if not huagu_debuff or not huagu_debuff.get('active'):
             return messages
 
-        # 检查是否从负数变为>=0
-        if old_length < 0 and new_length >= 0:
+        remaining = huagu_debuff.get('remaining_times', 0)
+        if remaining <= 0:
             # 清除debuff
             self.update_user_data(group_id, user_id, {'huagu_debuff': None})
-            nickname = user_data.get('nickname', user_id)
-            messages.append(f"🎊 {nickname} 成功把长度打回正数！「化骨debuff」已解除！")
-            messages.append("✨ 重获新生！现在可以正常使用「绝对值！」道具了！")
+            return messages
+
+        # 获取快照数据
+        snapshot_length = huagu_debuff.get('snapshot_length', 0)
+        snapshot_hardness = huagu_debuff.get('snapshot_hardness', 0)
+        snapshot_coins = huagu_debuff.get('snapshot_coins', 0)
+
+        # 计算伤害（快照值的24.5%）
+        length_damage = int(snapshot_length * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
+        hardness_damage = int(snapshot_hardness * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
+        coins_damage = int(snapshot_coins * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
+
+        nickname = user_data.get('nickname', user_id)
+
+        # 应用伤害（扣到0为止）
+        current_length = user_data.get('length', 0)
+        current_hardness = user_data.get('hardness', 1)
+        current_coins = self.shop.get_user_coins(group_id, user_id)
+
+        # 长度：直接减去（可以变负）
+        new_length = current_length - length_damage
+        # 硬度：最低为0
+        new_hardness = max(0, current_hardness - hardness_damage)
+        # 金币：最低为0
+        actual_coins_damage = min(current_coins, coins_damage)
+        new_coins = max(0, current_coins - coins_damage)
+
+        # 更新剩余次数
+        new_remaining = remaining - 1
+        if new_remaining <= 0:
+            # 最后一次，清除debuff
+            self.update_user_data(group_id, user_id, {
+                'length': new_length,
+                'hardness': new_hardness,
+                'huagu_debuff': None
+            })
+            self.shop.update_user_coins(group_id, user_id, new_coins)
+
+            # 生成消息
+            messages.append(random.choice(HuaniuMianzhangConfig.DEBUFF_TRIGGER_TEXTS).format(
+                nickname=nickname,
+                length_loss=length_damage,
+                hardness_loss=hardness_damage,
+                coins_loss=actual_coins_damage,
+                remaining=0
+            ))
+            messages.append(random.choice(HuaniuMianzhangConfig.DEBUFF_END_TEXTS).format(nickname=nickname))
+        else:
+            # 还有剩余次数
+            huagu_debuff['remaining_times'] = new_remaining
+            self.update_user_data(group_id, user_id, {
+                'length': new_length,
+                'hardness': new_hardness,
+                'huagu_debuff': huagu_debuff
+            })
+            self.shop.update_user_coins(group_id, user_id, new_coins)
+
+            # 生成消息
+            messages.append(random.choice(HuaniuMianzhangConfig.DEBUFF_TRIGGER_TEXTS).format(
+                nickname=nickname,
+                length_loss=length_damage,
+                hardness_loss=hardness_damage,
+                coins_loss=actual_coins_damage,
+                remaining=new_remaining
+            ))
 
         return messages
 
@@ -1780,10 +1845,8 @@ class NiuniuPlugin(Star):
 
         self.update_user_data(group_id, user_id, updated_data)
 
-        # ===== 化骨debuff检测：如果有debuff且长度从负变正，解除debuff =====
-        old_length_before_dajiao = user_data['length']
-        new_length_after_dajiao = old_length_before_dajiao + total_change
-        huagu_msgs = self._check_and_clear_huagu_debuff(group_id, user_id, old_length_before_dajiao, new_length_after_dajiao)
+        # ===== 化骨debuff触发：每次行动后扣除快照值的24.5% =====
+        huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
         result_msgs.extend(huagu_msgs)
 
         # ===== 寄生牛牛效果：如果有人在我身上种了寄生牛牛，检查是否触发抽取 =====
@@ -2761,13 +2824,13 @@ class NiuniuPlugin(Star):
                 parasite_msgs = self._check_and_trigger_parasite(group_id, target_id, target_length_gain, processed_ids=set())
                 result_msg.extend(parasite_msgs)
 
-            # ===== 化骨debuff检测 =====
-            # 检查用户：如果有debuff且长度从负变正，解除debuff
-            huagu_msgs = self._check_and_clear_huagu_debuff(group_id, user_id, old_u_len, final_user['length'])
+            # ===== 化骨debuff触发：每次行动后扣除快照值的24.5% =====
+            # 用户触发化骨
+            huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
             result_msg.extend(huagu_msgs)
 
-            # 检查目标：如果有debuff且长度从负变正，解除debuff
-            huagu_msgs = self._check_and_clear_huagu_debuff(group_id, target_id, old_t_len, final_target['length'])
+            # 目标触发化骨（被动参与比划也算行动）
+            huagu_msgs = self._trigger_huagu_debuff(group_id, target_id)
             result_msg.extend(huagu_msgs)
 
             # 股市钩子 - 用赢家的增益作为变化量
@@ -3223,12 +3286,14 @@ class NiuniuPlugin(Star):
             hardness = data.get('hardness', 1)
             coins = data.get('coins', 0)
             parasite_info = " 🪱寄生牛牛" if data.get('parasite') else ""
+            huagu_info = " 🦴化骨" if data.get('huagu_debuff') else ""
+            nickname_display = data['nickname'] + huagu_info
 
             if rank_type == "金币":
-                ranking.append(f"{idx}. {data['nickname']} ➜ 💰{self.format_coins(coins)}")
+                ranking.append(f"{idx}. {nickname_display} ➜ 💰{self.format_coins(coins)}")
                 ranking.append(f"   📏 {self.format_length(data['length'])}")
             else:
-                ranking.append(f"{idx}. {data['nickname']} ➜ {self.format_length(data['length'])} 💪{hardness}")
+                ranking.append(f"{idx}. {nickname_display} ➜ {self.format_length(data['length'])} 💪{hardness}")
                 ranking.append(f"   💰 {self.format_coins(coins)}{parasite_info}")
 
         # 如果总人数超过10，显示...和后3名
@@ -3240,12 +3305,14 @@ class NiuniuPlugin(Star):
                 hardness = data.get('hardness', 1)
                 coins = data.get('coins', 0)
                 parasite_info = " 🪱寄生牛牛" if data.get('parasite') else ""
+                huagu_info = " 🦴化骨" if data.get('huagu_debuff') else ""
+                nickname_display = data['nickname'] + huagu_info
 
                 if rank_type == "金币":
-                    ranking.append(f"{idx}. {data['nickname']} ➜ 💰{self.format_coins(coins)}")
+                    ranking.append(f"{idx}. {nickname_display} ➜ 💰{self.format_coins(coins)}")
                     ranking.append(f"   📏 {self.format_length(data['length'])}")
                 else:
-                    ranking.append(f"{idx}. {data['nickname']} ➜ {self.format_length(data['length'])} 💪{hardness}")
+                    ranking.append(f"{idx}. {nickname_display} ➜ {self.format_length(data['length'])} 💪{hardness}")
                     ranking.append(f"   💰 {self.format_coins(coins)}{parasite_info}")
 
         yield event.plain_result("\n".join(ranking))

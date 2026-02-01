@@ -777,7 +777,11 @@ class HuaniuMianzhangConfig:
     TARGET_LENGTH = -10000             # 目标长度：-100m = -10000cm
     TARGET_HARDNESS = -100             # 目标硬度：-100
     ASSET_CONSUME_PERCENT = 0.99       # 消耗99%总资产
-    MIN_ASSET = 1000000                # 底价100万金币
+    MIN_ASSET = 1000000000             # 底价10亿金币
+
+    # 化骨debuff配置
+    DEBUFF_TIMES = 4                   # 化骨效果触发次数
+    DEBUFF_DAMAGE_PERCENT = 0.245      # 每次扣除快照值的24.5%
 
     # 成功使用文案
     SUCCESS_TEXTS = [
@@ -789,16 +793,30 @@ class HuaniuMianzhangConfig:
 
     # 化骨debuff 施加文案
     DEBUFF_TEXTS = [
-        "🦴 {target} 被施加「化骨debuff」！无法使用「绝对值！」翻身！",
-        "💔 {target} 骨架尽碎！只能靠自己的努力爬出深渊！",
-        "🔒 {target} 被「化骨」诅咒！必须把长度打回正数才能解除！",
+        "🦴 {target} 被施加「化骨debuff」！接下来4次行动都会受到持续伤害！",
+        "💔 {target} 骨架尽碎！每次行动都会流失长度、硬度、金币！",
+        "🔒 {target} 被「化骨」诅咒！无法抵挡，只能承受4次24.5%的持续损伤！",
+    ]
+
+    # 化骨触发文案
+    DEBUFF_TRIGGER_TEXTS = [
+        "🦴 「化骨」发作！{nickname} 流失了 {length_loss} 长度、{hardness_loss} 硬度、{coins_loss} 金币！（剩余{remaining}次）",
+        "💀 「化骨」侵蚀！{nickname} 损失 {length_loss}/{hardness_loss}硬/{coins_loss}币！（{remaining}/4）",
+        "☠️ 骨质流失！{nickname} -{length_loss}cm -{hardness_loss}硬 -{coins_loss}币（还剩{remaining}次痛苦）",
+    ]
+
+    # 化骨结束文案
+    DEBUFF_END_TEXTS = [
+        "✨ {nickname} 的「化骨debuff」终于结束了！重获新生！",
+        "🎊 {nickname} 熬过了「化骨」的4次折磨！",
+        "💪 {nickname} 从「化骨」诅咒中挣脱！",
     ]
 
     # 资产不足文案
     INSUFFICIENT_ASSET_TEXTS = [
-        "❌ 你的总资产不足100万！「化牛绵掌」需要至少100万金币的代价！",
-        "❌ 穷牛使不出「化牛绵掌」！攒够100万再来吧！",
-        "❌ 「化牛绵掌」是富牛的专属！你的资产：{asset}，需要：100万",
+        "❌ 你的总资产不足10亿！「化牛绵掌」需要至少10亿金币的代价！",
+        "❌ 穷牛使不出「化牛绵掌」！攒够10亿再来吧！",
+        "❌ 「化牛绵掌」是超级富牛的专属！你的资产：{asset}，需要：10亿",
     ]
 
 # =============================================================================
