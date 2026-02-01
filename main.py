@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.19.10")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.20.0")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -774,6 +774,7 @@ class NiuniuPlugin(Star):
                 "比划比划": self._compare,
                 "牛牛抢劫": self._robbery,
                 "牛牛排行": self._show_ranking,
+                "金币排行": self._show_coin_ranking,
                 "牛牛道具商城": self.shop.show_shop,  # 别名
                 "牛牛道具商店": self.shop.show_shop,  # 别名
                 "牛牛商城": self.shop.show_shop,
@@ -3192,6 +3193,63 @@ class NiuniuPlugin(Star):
                 )
 
         yield event.plain_result("\n".join(ranking))
+
+    async def _show_coin_ranking(self, event):
+        """显示金币排行榜"""
+        group_id = str(event.message_obj.group_id)
+        group_data = self.get_group_data(group_id)
+        if not group_data.get('plugin_enabled', False):
+            yield event.plain_result("❌ 插件未启用")
+            return
+
+        # 过滤有效用户数据
+        all_data = self._load_niuniu_lengths()
+        group_data = all_data.get(group_id, {'plugin_enabled': False})
+        valid_users = [
+            (uid, udata) for uid, udata in group_data.items()
+            if isinstance(udata, dict) and 'length' in udata
+        ]
+
+        if not valid_users:
+            yield event.plain_result("📊 暂无数据，快去注册牛牛吧！")
+            return
+
+        # 按金币排序
+        sorted_users = sorted(valid_users, key=lambda x: x[1].get('coins', 0), reverse=True)
+        total_users = len(sorted_users)
+
+        # 构建排行榜
+        ranking = ["💰 牛牛金币排行榜：\n"]
+
+        # 显示前10名
+        top_users = sorted_users[:10]
+        for idx, (uid, data) in enumerate(top_users, 1):
+            coins = data.get('coins', 0)
+            length = data['length']
+            ranking.append(
+                f"{idx}. {data['nickname']} ➜ 💰{self.format_coins(coins)}"
+            )
+            ranking.append(
+                f"   📏 {self.format_length(length)}"
+            )
+
+        # 如果总人数超过10，显示...和后3名
+        if total_users > 10:
+            ranking.append("...")
+            bottom_start = max(10, total_users - 3)
+            bottom_users = sorted_users[bottom_start:]
+            for idx, (uid, data) in enumerate(bottom_users, bottom_start + 1):
+                coins = data.get('coins', 0)
+                length = data['length']
+                ranking.append(
+                    f"{idx}. {data['nickname']} ➜ 💰{self.format_coins(coins)}"
+                )
+                ranking.append(
+                    f"   📏 {self.format_length(length)}"
+                )
+
+        yield event.plain_result("\n".join(ranking))
+
     async def _show_menu(self, event):
         """显示菜单"""
         yield event.plain_result(self.niuniu_texts['menu']['default'])
