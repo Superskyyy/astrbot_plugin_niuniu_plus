@@ -21,7 +21,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## 版本号和更新日志
 
-**重要**: 每次修改代码后，必须更新以下内容：
+**重要**: 每次修改代码后，必须更新以下内容，在获得一个相对自我 contained 改动后立刻推送符合 git 开发规范 fix: feature: 等的更新：
 
 1. **版本号** (两处必须同步！)
    - `main.py` 第33行的 `@register` 装饰器
