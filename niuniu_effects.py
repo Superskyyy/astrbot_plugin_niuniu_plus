@@ -2744,6 +2744,13 @@ class YueyaTianchongEffect(ItemEffect):
     def on_trigger(self, trigger: EffectTrigger, ctx: EffectContext) -> EffectContext:
         from niuniu_config import YueyaTianchongConfig
 
+        # 禁止负数牛牛使用（防止极端负值）
+        if ctx.user_length < 0:
+            ctx.messages.append("❌ 负数牛牛无法使用月牙天冲！请先用「绝对值！」翻正~")
+            ctx.extra['refund'] = True
+            ctx.intercept = True
+            return ctx
+
         # 需要从 extra 获取群组数据
         group_data = ctx.extra.get('group_data', {})
         if not group_data:
