@@ -211,26 +211,26 @@ class NiuniuGames:
         self._save_data(data)
     
     async def fly_plane(self, event: AstrMessageEvent):
-        """飞机游戏"""
+        """飞机游戏 - 基于总资产（金币+股票）的百分比收益/损失"""
         group_id = str(event.message_obj.group_id)
         user_id = str(event.get_sender_id())
         nickname = event.get_sender_name()
-        
+
         #从文件加载数据
         data = self._load_data()
         group_data = data.get(group_id, {})
-        
+
         # 检查插件是否启用
         if not group_data.get('plugin_enabled', False):
             yield event.plain_result("❌ 插件未启用")
             return
-        
+
         #从文件获取用户数据
         user_data = group_data.get(user_id, {})
         if not user_data:
             yield event.plain_result("❌ 你大概是没有牛牛的，请先注册牛牛")
             return
-        
+
         # 检查冷却时间
         last_fly_time = user_data.get('last_fly_time', 0)
         if time.time() - last_fly_time < Cooldowns.FLY_PLANE_COOLDOWN:
@@ -238,14 +238,30 @@ class NiuniuGames:
             yield event.plain_result(f"✈️ 油箱空了，{nickname} {int(remaining//60)+1}分钟后可再起飞")
             return
 
-        # 飞行事件
+        # 计算总资产（金币 + 股票市值）
+        from niuniu_stock import NiuniuStock
+        stock = NiuniuStock.get()
+        user_shares = stock.get_holdings(group_id, user_id)
+        stock_price = stock.get_price(group_id)
+        stock_value = user_shares * stock_price
+        user_coins = user_data.get('coins', 0)
+        total_asset = user_coins + stock_value
+
+        # 飞行事件 - 使用百分比计算
         event_template = random.choice(FLY_PLANE_EVENTS)
-        event_coins = random.randint(event_template["coins_min"], event_template["coins_max"])
+        percent_min = event_template["percent_min"]
+        percent_max = event_template["percent_max"]
+
+        # 随机百分比（保留4位小数精度）
+        event_percent = random.uniform(percent_min, percent_max)
+
+        # 计算实际金币变动（基于总资产的百分比）
+        event_coins = int(total_asset * event_percent)
 
         # 更新金币和时间
         user_data['coins'] = round(user_data.get('coins', 0) + event_coins)
         user_data['last_fly_time'] = time.time()
-        
+
         # 保存到文件
         data.setdefault(group_id, {})[user_id] = user_data
         self._save_data(data)
@@ -253,10 +269,12 @@ class NiuniuGames:
         # 股市钩子
         stock_msg = stock_hook(group_id, nickname, event_type="dajiao", coins_change=event_coins)
 
+        # 显示百分比和实际金币变动
+        percent_display = f"{abs(event_percent * 100):.1f}%"
         if event_coins >= 0:
-            result = f"✈️ {nickname} {event_template['desc']}\n💰 获得 {event_coins} 金币！"
+            result = f"✈️ {nickname} {event_template['desc']}\n💰 获得总资产的 {percent_display}，即 {event_coins} 金币！"
         else:
-            result = f"✈️ {nickname} {event_template['desc']}\n💸 损失 {abs(event_coins)} 金币！"
+            result = f"✈️ {nickname} {event_template['desc']}\n💸 损失总资产的 {percent_display}，即 {abs(event_coins)} 金币！"
 
         if stock_msg:
             result += f"\n{stock_msg}"

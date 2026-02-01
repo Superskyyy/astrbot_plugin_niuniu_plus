@@ -3814,9 +3814,8 @@ class HuaniuMianzhangEffect(ItemEffect):
         target_name = target_data.get('nickname', target_id)
 
         # 计算总资产 = 金币 + 股票市值
-        stock_data = ctx.extra.get('stock_data', {})
-        user_shares = stock_data.get('shares', {}).get(user_id, 0)
-        stock_price = stock_data.get('price', 100)
+        user_shares = ctx.extra.get('user_shares', 0)
+        stock_price = ctx.extra.get('stock_price', 100)
         stock_value = user_shares * stock_price
         total_asset = user_coins + stock_value
 
@@ -3850,7 +3849,7 @@ class HuaniuMianzhangEffect(ItemEffect):
 
         # 获取目标当前的总资产（金币 + 股票市值，用于快照）
         target_coins = ctx.extra.get('target_coins', 0)
-        target_shares = stock_data.get('shares', {}).get(target_id, 0)
+        target_shares = ctx.extra.get('target_shares', 0)
         target_stock_value = target_shares * stock_price
         target_total_asset = target_coins + target_stock_value
 

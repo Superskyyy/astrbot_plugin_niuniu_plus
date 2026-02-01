@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.6")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.8")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -487,7 +487,7 @@ class NiuniuPlugin(Star):
         snapshot_hardness = huagu_debuff.get('snapshot_hardness', 0)
         snapshot_asset = huagu_debuff.get('snapshot_asset', 0)
 
-        # 计算伤害（快照值的24.5%）
+        # 计算伤害（快照值的19.6%）
         length_damage = int(snapshot_length * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
         hardness_damage = int(snapshot_hardness * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
         asset_damage = int(snapshot_asset * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
@@ -500,10 +500,9 @@ class NiuniuPlugin(Star):
         current_coins = self.shop.get_user_coins(group_id, user_id)
 
         # 获取股票信息
-        stock = NiuniuStock(group_id)
-        stock_data = stock.get_stock_data()
-        user_shares = stock_data.get('shares', {}).get(user_id, 0)
-        stock_price = stock_data.get('price', 100)
+        stock = NiuniuStock.get()
+        user_shares = stock.get_holdings(group_id, user_id)
+        stock_price = stock.get_price(group_id)
         current_stock_value = user_shares * stock_price
 
         # 长度：直接减去（可以变负）
@@ -3070,66 +3069,6 @@ class NiuniuPlugin(Star):
 
         # === 抢劫成功！===
 
-        # === 打斗判定（50%概率） ===
-        is_fight = random.random() < RobberyConfig.FIGHT_CHANCE
-        fight_info = []
-
-        if is_fight:
-            # 触发打斗！双方都会损失长度和硬度
-            # 选择损失档位（递减概率）
-            rand = random.random()
-            cumulative_prob = 0
-            damage_percent = 0.05  # 默认5%
-
-            for min_pct, max_pct, prob in RobberyConfig.FIGHT_DAMAGE_TIERS:
-                cumulative_prob += prob
-                if rand < cumulative_prob:
-                    damage_percent = random.uniform(min_pct, max_pct)
-                    break
-
-            # 计算双方损失
-            # 抢劫者损失
-            robber_length_loss = int(abs(u_len) * damage_percent)
-            robber_hardness_loss = int(u_hardness * damage_percent)
-            if robber_hardness_loss == 0 and damage_percent > 0:
-                robber_hardness_loss = 1  # 至少损失1硬度
-
-            # 受害者损失
-            victim_length_loss = int(abs(t_len) * damage_percent)
-            victim_hardness_loss = int(t_hardness * damage_percent)
-            if victim_hardness_loss == 0 and damage_percent > 0:
-                victim_hardness_loss = 1  # 至少损失1硬度
-
-            # 应用损失（无论正负长度，损失都是减少）
-            new_robber_len = u_len - robber_length_loss
-            new_robber_hard = max(1, u_hardness - robber_hardness_loss)
-            new_victim_len = t_len - victim_length_loss
-            new_victim_hard = max(1, t_hardness - victim_hardness_loss)
-
-            # 更新数据
-            self.update_user_data(group_id, user_id, {
-                'length': new_robber_len,
-                'hardness': new_robber_hard
-            })
-            self.update_user_data(group_id, target_id, {
-                'length': new_victim_len,
-                'hardness': new_victim_hard
-            })
-
-            # 记录打斗信息
-            fight_text = random.choice(RobberyConfig.FIGHT_TEXTS)
-            fight_info.append(fight_text)
-            fight_info.append(f"💔 {nickname}：-{robber_length_loss}cm长度, -{robber_hardness_loss}硬度")
-            fight_info.append(f"💔 {target_data['nickname']}：-{victim_length_loss}cm长度, -{victim_hardness_loss}硬度")
-            fight_info.append(f"📊 损失比例：{damage_percent*100:.1f}%")
-        else:
-            # 不打斗，一方投降
-            surrender_text = random.choice(RobberyConfig.SURRENDER_TEXTS_WIN).format(
-                victim=target_data['nickname'],
-                robber=nickname
-            )
-            fight_info.append(surrender_text)
-
         # 选择抢劫金额档位
         rand = random.random()
         cumulative_prob = 0
@@ -3146,37 +3085,32 @@ class NiuniuPlugin(Star):
         if robbery_amount <= 0:
             robbery_amount = 1  # 至少抢1枚
 
-        # === 检查目标的防护道具 ===
+        # === 检查目标的防护道具（在打斗之前检查） ===
         protection_msg = []
         actual_victim_id = target_id
         actual_victim_name = target_data['nickname']
+        actual_victim_data = target_data
 
-        # 1. 检查护盾（优先级最高）
+        # 1. 检查护盾（优先级最高，完全抵挡抢劫和打斗）
         target_shield = target_data.get('shield_charges', 0)
         if target_shield > 0:
-            # 护盾抵挡抢劫
+            # 护盾抵挡抢劫（包括打斗）
             self.update_user_data(group_id, target_id, {
                 'shield_charges': target_shield - 1
             })
-            # 构建打斗信息（如果有）
-            fight_result = []
-            if fight_info:
-                fight_result = fight_info + [""]
-
             result_lines = [
                 "💰 ══ 牛牛抢劫结果 ══ 💰",
                 f"🎯 {nickname} 试图抢劫 {target_data['nickname']}！",
                 "",
-            ] + fight_result + [
-                f"🛡️ 但是 {target_data['nickname']} 的护盾抵挡了抢劫！",
+                f"🛡️ {target_data['nickname']} 的护盾完全抵挡了抢劫！",
                 f"📊 护盾剩余：{target_shield - 1} 层",
-                f"💨 {nickname} 空手而归...",
+                f"💨 {nickname} 空手而归，连打斗都没发生...",
                 "═══════════════════"
             ]
             yield event.plain_result("\n".join(result_lines))
             return
 
-        # 2. 检查祸水东引（护盾之后检查）
+        # 2. 检查祸水东引（护盾之后检查，打斗伤害也转嫁）
         target_transfer = target_data.get('risk_transfer_charges', 0)
         if target_transfer > 0 and robbery_amount >= 50:  # 只有损失>=50才触发转嫁
             # 找一个随机群友来承担
@@ -3196,9 +3130,10 @@ class NiuniuPlugin(Star):
                     'risk_transfer_charges': target_transfer - 1
                 })
 
-                # 更新实际受害者
+                # 更新实际受害者（打斗伤害也转嫁给新目标）
                 actual_victim_id = new_victim_id
                 actual_victim_name = new_victim_name
+                actual_victim_data = new_victim_data
 
                 # 基于新目标重新计算抢劫金额（按比例，防止弱者被抢巨额固定金额）
                 old_robbery_amount = robbery_amount
@@ -3208,6 +3143,68 @@ class NiuniuPlugin(Star):
 
                 protection_msg.append(f"🔄 {target_data['nickname']} 触发祸水东引！抢劫转嫁给 {new_victim_name}！（剩余{target_transfer - 1}次）")
                 protection_msg.append(f"📊 原抢{old_robbery_amount}→重算{robbery_amount}（{new_victim_name}的{robbery_percent*100:.1f}%）")
+
+        # === 打斗判定（50%概率，基于实际受害者） ===
+        is_fight = random.random() < RobberyConfig.FIGHT_CHANCE
+        fight_info = []
+
+        # 获取实际受害者的长度和硬度
+        v_len = actual_victim_data.get('length', 0)
+        v_hardness = actual_victim_data.get('hardness', 1)
+
+        if is_fight:
+            # 触发打斗！双方都会损失长度和硬度
+            rand = random.random()
+            cumulative_prob = 0
+            damage_percent = 0.05  # 默认5%
+
+            for min_pct, max_pct, prob in RobberyConfig.FIGHT_DAMAGE_TIERS:
+                cumulative_prob += prob
+                if rand < cumulative_prob:
+                    damage_percent = random.uniform(min_pct, max_pct)
+                    break
+
+            # 抢劫者损失
+            robber_length_loss = int(abs(u_len) * damage_percent)
+            robber_hardness_loss = int(u_hardness * damage_percent)
+            if robber_hardness_loss == 0 and damage_percent > 0:
+                robber_hardness_loss = 1
+
+            # 实际受害者损失（可能是转嫁后的新目标）
+            victim_length_loss = int(abs(v_len) * damage_percent)
+            victim_hardness_loss = int(v_hardness * damage_percent)
+            if victim_hardness_loss == 0 and damage_percent > 0:
+                victim_hardness_loss = 1
+
+            # 应用损失
+            new_robber_len = u_len - robber_length_loss
+            new_robber_hard = max(1, u_hardness - robber_hardness_loss)
+            new_victim_len = v_len - victim_length_loss
+            new_victim_hard = max(1, v_hardness - victim_hardness_loss)
+
+            # 更新数据
+            self.update_user_data(group_id, user_id, {
+                'length': new_robber_len,
+                'hardness': new_robber_hard
+            })
+            self.update_user_data(group_id, actual_victim_id, {
+                'length': new_victim_len,
+                'hardness': new_victim_hard
+            })
+
+            # 记录打斗信息
+            fight_text = random.choice(RobberyConfig.FIGHT_TEXTS)
+            fight_info.append(fight_text)
+            fight_info.append(f"💔 {nickname}：-{robber_length_loss}cm长度, -{robber_hardness_loss}硬度")
+            fight_info.append(f"💔 {actual_victim_name}：-{victim_length_loss}cm长度, -{victim_hardness_loss}硬度")
+            fight_info.append(f"📊 损失比例：{damage_percent*100:.1f}%")
+        else:
+            # 不打斗，一方投降
+            surrender_text = random.choice(RobberyConfig.SURRENDER_TEXTS_WIN).format(
+                victim=actual_victim_name,
+                robber=nickname
+            )
+            fight_info.append(surrender_text)
 
         # === 触发抢劫后事件 ===
         # 选择事件

@@ -120,10 +120,9 @@ class NiuniuShop:
                 elif item['name'] == '化牛绵掌':
                     from niuniu_config import HuaniuMianzhangConfig
                     from niuniu_stock import NiuniuStock
-                    stock = NiuniuStock(group_id)
-                    stock_data = stock.get_stock_data()
-                    user_shares = stock_data.get('shares', {}).get(user_id, 0)
-                    stock_price = stock_data.get('price', 100)
+                    stock = NiuniuStock.get()
+                    user_shares = stock.get_holdings(group_id, user_id)
+                    stock_price = stock.get_price(group_id)
                     stock_value = user_shares * stock_price
                     total_asset = user_coins + stock_value
                     min_asset = HuaniuMianzhangConfig.MIN_ASSET
@@ -1302,12 +1301,15 @@ class NiuniuShop:
 
                     # 获取股票数据用于计算总资产
                     from niuniu_stock import NiuniuStock
-                    stock = NiuniuStock(group_id)
-                    stock_data = stock.get_stock_data()
-                    extra_data['stock_data'] = stock_data
+                    stock = NiuniuStock.get()
+                    # 直接传递用户持股和股价，避免使用不存在的方法
+                    extra_data['user_shares'] = stock.get_holdings(group_id, user_id)
+                    extra_data['stock_price'] = stock.get_price(group_id)
+                    extra_data['stock_instance'] = stock  # 传递实例供后续操作
 
-                    # 获取目标的金币（用于含笑五步癫快照）
+                    # 获取目标的金币和股票（用于含笑五步癫快照）
                     extra_data['target_coins'] = self.get_user_coins(group_id, target_id)
+                    extra_data['target_shares'] = stock.get_holdings(group_id, target_id)
 
                 # 需要群组数据的道具
                 if selected_item['name'] in ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '牛牛寄生', '牛牛均富/负卡', '化牛绵掌']:
@@ -1926,19 +1928,12 @@ class NiuniuShop:
                         current_coins = self.get_user_coins(group_id, user_id)
                         self.update_user_coins(group_id, user_id, current_coins - coins_to_deduct)
 
-                        # 强制卖出股票
+                        # 强制卖出股票（使用 force_liquidate 方法，自动处理统计数据）
                         if shares_to_sell > 0:
                             from niuniu_stock import NiuniuStock
-                            stock = NiuniuStock(group_id)
-                            stock_data = stock.get_stock_data()
-                            user_shares = stock_data.get('shares', {}).get(user_id, 0)
-                            new_shares = max(0, user_shares - shares_to_sell)
-                            stock_data.setdefault('shares', {})[user_id] = new_shares
-                            # 清除持仓时间记录（如果全部卖出）
-                            if new_shares == 0 and user_id in stock_data.get('buy_times', {}):
-                                del stock_data['buy_times'][user_id]
-                            stock.save_stock_data(stock_data)
-                            result_msg.append(f"📉 强制卖出股票：{shares_to_sell}股")
+                            stock = NiuniuStock.get()
+                            stock.force_liquidate(group_id, user_id, shares_to_sell)
+                            result_msg.append(f"📉 强制清算股票：{shares_to_sell}股（无收益）")
 
                         # 施加含笑五步癫（不修改目标长度/硬度，只施加debuff）
                         if target_id in group_data:
