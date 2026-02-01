@@ -83,7 +83,10 @@ class NiuniuShop:
                         dynamic_price = int(abs(user_length) * 0.1)
                         tax = self._calculate_purchase_tax(user_coins, dynamic_price)
                         total_price = dynamic_price + tax
-                        price_str = f"{total_price} 💰 (含税)"
+                        if tax > 0:
+                            price_str = f"{dynamic_price}+{tax}税={total_price} 💰"
+                        else:
+                            price_str = f"{dynamic_price} 💰"
                     else:
                         price_str = "仅限负数牛牛"
                 # 牛牛均富/负卡的动态价格计算
@@ -109,8 +112,7 @@ class NiuniuShop:
                 tax = self._calculate_purchase_tax(user_coins, base_price)
                 total_price = base_price + tax
                 if tax > 0:
-                    digit_count = len(str(base_price))
-                    price_str = f"{total_price} 💰 (含{digit_count}%税)"
+                    price_str = f"{base_price}+{tax}税={total_price} 💰"
                 else:
                     price_str = f"{base_price} 💰"
 

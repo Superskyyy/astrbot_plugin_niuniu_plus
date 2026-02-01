@@ -1,5 +1,5 @@
 name: niuniu_plus # 这是你的插件的唯一识别名。
 desc: 基于原版 Niuniu 的超级增强版（增加 1000+ 新文本和随机事件） # 插件简短描述
-version: v4.20.3 # 插件版本号。格式：v1.1.1 或者 v1.1
+version: v4.20.4 # 插件版本号。格式：v1.1.1 或者 v1.1
 author: Superskyyy # 作者
 repo: https://github.com/Superskyyy/astrbot_plugin_niuniu_plus # 插件的仓库地址
