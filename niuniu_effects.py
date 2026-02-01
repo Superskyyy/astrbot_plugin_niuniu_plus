@@ -3859,17 +3859,13 @@ class HuaniuMianzhangEffect(ItemEffect):
         ctx.extra['huaniu_mianzhang'] = {
             'target_id': target_id,
             'target_name': target_name,
-            'target_old_length': target_data.get('length', 0),
-            'target_old_hardness': target_data.get('hardness', 1),
-            'target_new_length': HuaniuMianzhangConfig.TARGET_LENGTH,
-            'target_new_hardness': HuaniuMianzhangConfig.TARGET_HARDNESS,
             'coins_to_deduct': int(coins_to_deduct),
             'shares_to_sell': shares_to_sell,
             'total_asset_consumed': asset_consume,
             # 快照数据用于化骨debuff（资产=金币+股票市值）
             'snapshot_length': abs(target_data.get('length', 0)),  # 用绝对值作为基准
             'snapshot_hardness': target_data.get('hardness', 1),
-            'snapshot_asset': target_total_asset,  # 改为总资产
+            'snapshot_asset': target_total_asset,  # 总资产
         }
 
         # 动态价格设为0（已在extra中处理扣除）
@@ -3880,18 +3876,18 @@ class HuaniuMianzhangEffect(ItemEffect):
         damage_per_time_hardness = int(target_data.get('hardness', 1) * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
         damage_per_time_asset = int(target_total_asset * HuaniuMianzhangConfig.DEBUFF_DAMAGE_PERCENT)
 
-        # 生成消息
+        # 生成消息（只施加化骨debuff，不立即修改目标长度/硬度）
         ctx.messages.extend([
             "☠️ ══ 化牛绵掌 ══ ☠️",
             random.choice(HuaniuMianzhangConfig.SUCCESS_TEXTS).format(user=nickname, target=target_name),
             f"💸 消耗资产：{asset_consume:,}（金币{int(coins_to_deduct):,} + 股票{shares_to_sell}股）",
-            f"📉 {target_name} 的牛牛：",
-            f"   长度：{format_length(target_data.get('length', 0))} → {format_length(HuaniuMianzhangConfig.TARGET_LENGTH)}",
-            f"   硬度：{target_data.get('hardness', 1)} → {HuaniuMianzhangConfig.TARGET_HARDNESS}",
             "",
             random.choice(HuaniuMianzhangConfig.DEBUFF_TEXTS).format(target=target_name),
+            f"📊 快照记录（{target_name}当前状态）：",
+            f"   长度：{format_length(target_data.get('length', 0))}",
+            f"   硬度：{target_data.get('hardness', 1)}",
+            f"   资产：{target_coins}币+{target_shares}股={target_total_asset:,}",
             f"💀 化骨伤害预览：每次行动将损失约 {damage_per_time_length}cm / {damage_per_time_hardness}硬 / {damage_per_time_asset}资产",
-            f"   ({target_name}当前总资产：{target_coins}币+{target_shares}股={target_total_asset:,})",
             "═══════════════════"
         ])
 

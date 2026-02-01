@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.2")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.21.3")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -519,16 +519,14 @@ class NiuniuPlugin(Star):
 
         shares_sold = 0
         if remaining_asset_damage > 0 and user_shares > 0:
-            # 需要卖出股票补足
+            # 需要强制卖出股票补足（化骨debuff强制清算）
             shares_needed = min(user_shares, int(remaining_asset_damage / stock_price) + 1)
             while shares_needed * stock_price < remaining_asset_damage and shares_needed < user_shares:
                 shares_needed += 1
             shares_sold = shares_needed
-            new_shares = user_shares - shares_sold
-            stock_data.setdefault('shares', {})[user_id] = new_shares
-            if new_shares == 0 and user_id in stock_data.get('buy_times', {}):
-                del stock_data['buy_times'][user_id]
-            stock.save_stock_data(stock_data)
+
+            # 使用 NiuniuStock 的强制清算方法（记录为损失，无收益）
+            stock.force_liquidate(group_id, user_id, shares_sold)
 
         actual_asset_deducted = actual_coins_deducted + shares_sold * stock_price
 
@@ -1489,6 +1487,11 @@ class NiuniuPlugin(Star):
                 user_data['coins'] = round(user_coins + coins)  # 取整避免精度问题
                 self.update_user_data(group_id, user_id, {'coins': user_data['coins']})
             yield event.plain_result(message)
+            # 化骨debuff触发（卖股票也算行动）
+            if success:
+                huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
+                for msg_text in huagu_msgs:
+                    yield event.plain_result(msg_text)
 
         elif subcmd == "持仓":
             # 牛牛股市 持仓

@@ -918,6 +918,51 @@ class NiuniuStock:
 
         return True, "\n".join(lines), coins_after_all_fees
 
+    def force_liquidate(self, group_id: str, user_id: str, shares: float) -> bool:
+        """
+        强制清算股票（化骨debuff等场景使用）
+        股票被强制销毁，用户不获得任何收益，记录为纯损失
+
+        Args:
+            group_id: 群组ID
+            user_id: 用户ID
+            shares: 要清算的股数
+
+        Returns:
+            是否成功
+        """
+        data = self._get_group_data(group_id)
+        user_id_str = str(user_id)
+
+        current = data.get("holdings", {}).get(user_id_str, 0)
+        if current <= 0 or shares <= 0:
+            return False
+
+        shares = min(shares, current)  # 不能清算超过持有数量
+
+        # 获取统计数据
+        stats = self._get_user_stats(group_id, user_id)
+
+        # 计算被清算股票的成本（按比例）
+        sell_ratio = shares / current
+        cost_of_liquidated = stats["cost_basis"] * sell_ratio
+
+        # 记录为纯损失（没有收益）
+        stats["total_loss"] += cost_of_liquidated
+        stats["cost_basis"] -= cost_of_liquidated
+        stats["sell_count"] += 1
+
+        # 更新持仓
+        data["holdings"][user_id_str] = current - shares
+        if data["holdings"][user_id_str] <= 0:
+            del data["holdings"][user_id_str]
+            stats["cost_basis"] = 0
+            if user_id_str in data.get("buy_times", {}):
+                del data["buy_times"][user_id_str]
+
+        self._save_data()
+        return True
+
     # ==================== 显示格式化 ====================
 
     def format_market(self, group_id: str) -> str:

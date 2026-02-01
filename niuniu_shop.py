@@ -1940,11 +1940,8 @@ class NiuniuShop:
                             stock.save_stock_data(stock_data)
                             result_msg.append(f"📉 强制卖出股票：{shares_to_sell}股")
 
-                        # 修改目标的长度和硬度
+                        # 施加化骨debuff（不修改目标长度/硬度，只施加debuff）
                         if target_id in group_data:
-                            group_data[target_id]['length'] = huaniu['target_new_length']
-                            group_data[target_id]['hardness'] = huaniu['target_new_hardness']
-                            # 施加化骨debuff（带快照数据）
                             import time
                             from niuniu_config import HuaniuMianzhangConfig
                             group_data[target_id]['huagu_debuff'] = {
