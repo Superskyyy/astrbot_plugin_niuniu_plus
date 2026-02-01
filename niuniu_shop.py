@@ -1043,25 +1043,9 @@ class NiuniuShop:
                 # 牛牛盾牌批量购买特殊处理（每次扣除当前50%）
                 if is_dunpai and buy_count > 1:
                     from niuniu_config import NiuniuDunpaiConfig
-
-                    # 检查护盾上限
-                    current_shield = user_data.get('shield_charges', 0)
-                    if current_shield >= NiuniuDunpaiConfig.SHIELD_MAX:
-                        yield event.plain_result(
-                            f"🛡️ ══ 牛牛盾牌 ══ 🛡️\n"
-                            f"❌ 购买失败！护盾已达上限 {NiuniuDunpaiConfig.SHIELD_MAX} 层\n"
-                            f"📊 当前护盾：{current_shield} 层\n"
-                            f"═══════════════════"
-                        )
-                        return
-
-                    # 计算还能购买多少次（基于护盾上限）
-                    remaining_capacity = NiuniuDunpaiConfig.SHIELD_MAX - current_shield
-                    max_buys_by_shield = (remaining_capacity + NiuniuDunpaiConfig.SHIELD_CHARGES - 1) // NiuniuDunpaiConfig.SHIELD_CHARGES
-
                     price_per_buy = selected_item['price']
                     max_buys_by_coins = self._calculate_max_purchases_with_tax(user_coins, price_per_buy)
-                    actual_buy_count = min(buy_count, max_buys_by_coins, max_buys_by_shield)
+                    actual_buy_count = min(buy_count, max_buys_by_coins)
 
                     if actual_buy_count <= 0:
                         # 计算第一次购买需要的总金额（含税）
@@ -1095,15 +1079,13 @@ class NiuniuShop:
                             current_length += length_cost  # 负数长度：让它更接近0
                         current_hardness -= hardness_cost
 
-                        # 增加护盾（限制上限）
-                        add_this_time = min(NiuniuDunpaiConfig.SHIELD_CHARGES,
-                                           NiuniuDunpaiConfig.SHIELD_MAX - current_shield - total_shield_charges)
-                        total_shield_charges += add_this_time
+                        # 增加护盾
+                        total_shield_charges += NiuniuDunpaiConfig.SHIELD_CHARGES
 
                     # 应用最终结果
                     user_data['length'] = current_length
                     user_data['hardness'] = max(1, current_hardness)
-                    user_data['shield_charges'] = current_shield + total_shield_charges
+                    user_data['shield_charges'] = user_data.get('shield_charges', 0) + total_shield_charges
                     self._save_user_data(group_id, user_id, user_data)
 
                     # 生成消息
@@ -1112,17 +1094,11 @@ class NiuniuShop:
                     result_msg.append(f"🛡️ 批量购买牛牛盾牌 ×{actual_buy_count}")
                     result_msg.append(f"⚠️ 累计代价：长度 {original_length}cm → {current_length}cm ({length_change:+}cm)")
                     result_msg.append(f"⚠️ 累计代价：硬度 {original_hardness} → {user_data['hardness']} ({hardness_change:+})")
-                    result_msg.append(f"🔒 累计获得 {total_shield_charges} 次护盾防护")
-                    result_msg.append(f"📊 当前护盾总计：{user_data['shield_charges']} / {NiuniuDunpaiConfig.SHIELD_MAX} 次")
-
-                    if user_data['shield_charges'] >= NiuniuDunpaiConfig.SHIELD_MAX:
-                        result_msg.append(f"⚠️ 护盾已达上限！")
+                    result_msg.append(f"🔒 累计获得 {total_shield_charges} 次护盾防护（{NiuniuDunpaiConfig.SHIELD_CHARGES}×{actual_buy_count}）")
+                    result_msg.append(f"📊 当前护盾总计：{user_data['shield_charges']} 次")
 
                     if actual_buy_count < buy_count:
-                        if max_buys_by_shield < buy_count and max_buys_by_coins >= buy_count:
-                            result_msg.append(f"⚠️ 护盾即将满，仅购买{actual_buy_count}次")
-                        elif max_buys_by_coins < buy_count:
-                            result_msg.append(f"⚠️ 金币不足，仅购买{actual_buy_count}次")
+                        result_msg.append(f"⚠️ 金币不足，仅购买{actual_buy_count}次")
 
                     # 计算批量购买的总税额（每次购买后金币递减）
                     purchase_tax, tax_list = self._calculate_batch_purchase_taxes(user_coins, price_per_buy, actual_buy_count)
