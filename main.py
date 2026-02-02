@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.22.7")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.22.8")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -721,7 +721,7 @@ class NiuniuPlugin(Star):
                         group_data[uid]['hardness'] = max(1, old_hard - hard_loss)
                     ctx.messages.append(f"💣 团灭彩票未中...{len(selected_ids)}人各-50%长度和硬度！")
 
-        self._save_niuniu_data(niuniu_data)
+        self._save_data(niuniu_data)
 
     def _process_delegated_dazibao(self, ctx, group_id, user_id):
         """处理夺牛魔委托的大自爆效果"""
@@ -751,7 +751,7 @@ class NiuniuPlugin(Star):
             group_data[uid]['length'] = group_data[uid].get('length', 0) - length_damage
             group_data[uid]['hardness'] = max(1, group_data[uid].get('hardness', 1) - hardness_damage)
 
-        self._save_niuniu_data(niuniu_data)
+        self._save_data(niuniu_data)
 
     def check_cooldown(self, last_time, cooldown):
         """检查冷却时间"""
