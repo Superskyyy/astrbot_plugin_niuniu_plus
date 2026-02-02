@@ -785,7 +785,7 @@ class NiuniuStock:
         返回: (成功, 消息, 获得金币-税后)
         注意：先跌价再成交，防止套利
         """
-        from niuniu_config import StockTaxConfig, StockTradingConfig
+        from niuniu_config import StockTaxConfig
 
         data = self._get_group_data(group_id)
         user_id_str = str(user_id)
@@ -800,12 +800,6 @@ class NiuniuStock:
 
         if shares <= 0:
             return False, "❌ 卖出数量必须大于0", 0
-
-        # 检查持仓时间
-        buy_time = data.get("buy_times", {}).get(user_id_str, 0)
-        hold_time = time.time() - buy_time
-        is_quick_sell = hold_time < StockTradingConfig.MIN_HOLD_TIME
-        quick_sell_fee = 0
 
         old_price = data.get("price", STOCK_CONFIG["base_price"])
 
@@ -828,10 +822,6 @@ class NiuniuStock:
         cost_of_sold = stats["cost_basis"] * sell_ratio
         profit_or_loss = coins - cost_of_sold
 
-        # 如果是快速倒手且有盈利，收取获利部分的75%作为倒手费
-        if is_quick_sell and profit_or_loss > 0:
-            quick_sell_fee = round(profit_or_loss * StockTradingConfig.QUICK_SELL_FEE_RATE, 2)
-
         # 计算收益税（仅对正收益征税）
         tax_amount = 0
         tax_rate = 0
@@ -839,17 +829,17 @@ class NiuniuStock:
         if profit_or_loss > 0 and avg_coins > 0:
             tax_amount, tax_rate, tax_bracket_str = self._calculate_tax(profit_or_loss, avg_coins)
 
-        # 税后+扣除手续费+倒手费后实际获得金币
-        coins_after_all_fees = coins - tax_amount - fee - quick_sell_fee
+        # 税后+扣除手续费后实际获得金币
+        coins_after_all_fees = coins - tax_amount - fee
 
-        # 更新统计（记录税后+手续费+倒手费后的数据）
+        # 更新统计（记录税后+手续费后的数据）
         stats["total_withdrawn"] += coins_after_all_fees
         stats["cost_basis"] -= cost_of_sold
         stats["sell_count"] += 1
         if profit_or_loss >= 0:
-            stats["total_profit"] += (profit_or_loss - tax_amount - fee - quick_sell_fee)
+            stats["total_profit"] += (profit_or_loss - tax_amount - fee)
         else:
-            stats["total_loss"] += abs(profit_or_loss) + fee + quick_sell_fee  # 亏损时所有费用都算损失
+            stats["total_loss"] += abs(profit_or_loss) + fee  # 亏损时所有费用都算损失
 
         # 更新持仓
         data["holdings"][user_id_str] = current - shares
@@ -882,16 +872,6 @@ class NiuniuStock:
 
         # 手续费显示
         lines.append(f"💸 手续费: -{fee:.0f}金币 (3%)")
-
-        # 快速倒手费显示
-        if is_quick_sell:
-            lines.append("")
-            if profit_or_loss > 0:
-                lines.append(random.choice(StockTradingConfig.QUICK_SELL_PENALTY_TEXTS))
-                lines.append(f"⏰ 持仓时间: {int(hold_time)}秒 (需要{StockTradingConfig.MIN_HOLD_TIME}秒)")
-                lines.append(f"💀 倒手费: -{quick_sell_fee:.0f}金币 (获利部分的{StockTradingConfig.QUICK_SELL_FEE_RATE*100:.0f}%)")
-            else:
-                lines.append("⏰ 持仓时间不足，但因为亏损，不收取倒手费")
 
         # 税收显示
         if tax_amount > 0:
