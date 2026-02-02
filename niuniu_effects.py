@@ -852,7 +852,16 @@ class DuoxinmoEffect(ItemEffect):
         if ctx.target_data:
             target_shield_charges = ctx.target_data.get('shield_charges', 0)
 
-        damage_reduction = min(target_shield_charges * 0.1, 1.0)
+        # 最多消耗10层护盾（每层减免10%，最多100%）
+        shields_to_consume = min(target_shield_charges, 10)
+        damage_reduction = shields_to_consume * 0.1
+
+        # 消耗护盾
+        if shields_to_consume > 0:
+            ctx.extra.setdefault('consume_shields', []).append({
+                'user_id': ctx.target_id,
+                'amount': shields_to_consume
+            })
 
         if damage_reduction >= 1.0:
             ctx.extra['duoxinmo_result'] = 'blocked'

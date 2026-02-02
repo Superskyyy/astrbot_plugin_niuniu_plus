@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.22.4")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.22.5")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -2239,7 +2239,16 @@ class NiuniuPlugin(Star):
                     yield event.plain_result("\n".join(ctx.messages))
                     return
 
-                # 普通夺牛魔效果（steal/self_clear）
+                # 普通夺牛魔效果（steal/self_clear/blocked）
+                # 处理护盾消耗
+                for shield_info in ctx.extra.get('consume_shields', []):
+                    shield_target_id = shield_info['user_id']
+                    shield_amount = shield_info['amount']
+                    current_shield = self.get_user_data(group_id, shield_target_id).get('shield_charges', 0)
+                    self.update_user_data(group_id, shield_target_id, {
+                        'shield_charges': max(0, current_shield - shield_amount)
+                    })
+
                 # 应用长度变化
                 if ctx.length_change != 0:
                     new_user_len = user_data['length'] + ctx.length_change
