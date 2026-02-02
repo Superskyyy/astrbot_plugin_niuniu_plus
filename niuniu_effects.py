@@ -863,12 +863,16 @@ class DuoxinmoEffect(ItemEffect):
                 'amount': shields_to_consume
             })
 
+        # 计算剩余护盾
+        remaining_shields = target_shield_charges - shields_to_consume
+
         if damage_reduction >= 1.0:
             ctx.extra['duoxinmo_result'] = 'blocked'
             ctx.messages.extend([
                 "🥫 ══ 夺牛魔蝌蚪罐头 ══ 🥫",
                 random.choice(self.STEAL_TEXTS),
-                f"🛡️ 但 {ctx.target_nickname} 的护盾（{target_shield_charges}层）完全抵挡！",
+                f"🛡️ 但 {ctx.target_nickname} 的护盾完全抵挡！",
+                f"💥 护盾破碎：{target_shield_charges}层 → {remaining_shields}层（-{shields_to_consume}层）",
                 "💨 夺牛魔悻悻离去...",
             ])
             ctx.intercept = True
@@ -894,6 +898,7 @@ class DuoxinmoEffect(ItemEffect):
             ])
             if damage_reduction > 0:
                 ctx.messages.append(f"🛡️ {ctx.target_nickname} 护盾抵挡了{int(damage_reduction*100)}%！")
+                ctx.messages.append(f"💥 护盾消耗：{target_shield_charges}层 → {remaining_shields}层（-{shields_to_consume}层）")
 
             # 根据目标长度正负显示不同文案
             if base_steal_len < 0:
