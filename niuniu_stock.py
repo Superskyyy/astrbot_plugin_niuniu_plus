@@ -604,11 +604,36 @@ class NiuniuStock:
         "🔔 「逃顶成功」的钟声响起！",
     ]
 
-    def bailout(self, group_id: str, coins: float) -> Tuple[bool, str]:
+    # 玩家操盘文案（拉盘）
+    PLAYER_BAILOUT_TEXTS = [
+        "🎩 {name} 一掷千金，强行拉盘！",
+        "💰 {name} 化身庄家，疯狂扫货！",
+        "🐋 {name} 大鲸鱼入场！散户跟上！",
+        "🔥 {name} 怒砸真金白银，我就是国家队！",
+        "🏦 {name}：「信我，梭哈！」",
+        "🎰 {name} 用金币铺出一条牛路！",
+        "⚡ {name} 以一己之力托住了盘面！",
+        "💎 {name}：「钻石手永不卖出！」",
+    ]
+
+    # 玩家操盘文案（砸盘）
+    PLAYER_DUMP_TEXTS = [
+        "🎩 {name} 一掷千金，强行砸盘！",
+        "💀 {name} 化身庄家，疯狂抛售！",
+        "🐋 {name} 大鲸鱼出逃！散户慌了！",
+        "🔥 {name} 怒砸真金白银做空！",
+        "🏦 {name}：「给我跌！」",
+        "🎰 {name} 用金币砸出一个大坑！",
+        "⚡ {name} 以一己之力打崩了盘面！",
+        "👻 {name}：「空头永远是对的！」",
+    ]
+
+    def bailout(self, group_id: str, coins: float, operator: str = None) -> Tuple[bool, str]:
         """
-        救市/砸盘 - 系统资金买入/卖出后销毁
+        救市/砸盘 - 系统/玩家资金操纵股价
         coins > 0: 救市（推高股价）
         coins < 0: 砸盘（压低股价）
+        operator: 操作者昵称（None表示管理员/系统）
         返回: (成功, 消息)
         """
         if coins == 0:
@@ -621,14 +646,19 @@ class NiuniuStock:
         abs_coins = abs(coins)
         impact = 0.02 + abs_coins / 5000 * 0.02
 
+        is_player = operator is not None
+
         if coins > 0:
             # 救市：推高股价
             new_price = old_price * (1 + impact)
             new_price = min(STOCK_CONFIG["max_price"], round(new_price, 2))
             direction = 1
-            action_texts = self.BAILOUT_TEXTS
+            if is_player:
+                action_texts = self.PLAYER_BAILOUT_TEXTS
+            else:
+                action_texts = self.BAILOUT_TEXTS
             success_texts = self.BAILOUT_SUCCESS_TEXTS
-            action_name = "救市资金"
+            action_name = "操盘资金" if is_player else "救市资金"
             action_desc = "虚空购入"
             price_symbol = "📈"
             change_str = f"+{impact * 100:.2f}%"
@@ -637,9 +667,12 @@ class NiuniuStock:
             new_price = old_price * (1 - impact)
             new_price = max(STOCK_CONFIG["min_price"], round(new_price, 2))
             direction = -1
-            action_texts = self.DUMP_TEXTS
+            if is_player:
+                action_texts = self.PLAYER_DUMP_TEXTS
+            else:
+                action_texts = self.DUMP_TEXTS
             success_texts = self.DUMP_SUCCESS_TEXTS
-            action_name = "砸盘资金"
+            action_name = "操盘资金" if is_player else "砸盘资金"
             action_desc = "虚空抛售"
             price_symbol = "📉"
             change_str = f"-{impact * 100:.2f}%"
@@ -652,13 +685,14 @@ class NiuniuStock:
         data["last_update"] = time.time()
 
         # 记录事件
+        event_nickname = operator if is_player else "牛牛国家队"
         event = {
             "time": time.time(),
             "type": "bailout" if coins > 0 else "dump",
-            "nickname": "牛牛国家队",
+            "nickname": event_nickname,
             "direction": direction,
             "change_pct": impact * 100,
-            "desc": random.choice(action_texts),
+            "desc": random.choice(action_texts).format(name=event_nickname),
         }
 
         if "events" not in data:
@@ -670,7 +704,7 @@ class NiuniuStock:
 
         self._save_data()
 
-        action_text = random.choice(action_texts)
+        action_text = random.choice(action_texts).format(name=event_nickname)
         success_text = random.choice(success_texts)
 
         return True, (

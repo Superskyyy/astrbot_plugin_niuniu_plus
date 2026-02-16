@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.24.1")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.25.0")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -1525,8 +1525,47 @@ class NiuniuPlugin(Star):
             # 牛牛股市 持仓
             yield event.plain_result(stock.format_holdings(group_id, user_id, nickname))
 
+        elif subcmd == "操盘":
+            # 牛牛股市 操盘 <金额> — 花自己的钱拉盘/砸盘
+            if len(parts) < 2:
+                yield event.plain_result(
+                    "❌ 格式：牛牛股市 操盘 <金额>\n"
+                    "正数拉盘，负数砸盘，花的是你自己的钱！\n"
+                    "例：牛牛股市 操盘 5000\n"
+                    "例：牛牛股市 操盘 -3000"
+                )
+                return
+
+            try:
+                amount = float(parts[1])
+            except ValueError:
+                yield event.plain_result("❌ 金额必须是数字")
+                return
+
+            if amount == 0:
+                yield event.plain_result("❌ 金额不能为0")
+                return
+
+            abs_amount = abs(amount)
+            user_coins = user_data.get('coins', 0)
+            if user_coins < abs_amount:
+                yield event.plain_result(f"❌ 金币不足！你只有 {user_coins:.0f} 金币，需要 {abs_amount:.0f} 金币")
+                return
+
+            # 扣除金币
+            self.update_user_data(group_id, user_id, {'coins': round(user_coins - abs_amount)})
+
+            # 执行操盘（复用bailout逻辑）
+            success, msg = stock.bailout(group_id, amount, operator=nickname)
+            yield event.plain_result(msg)
+
+            # 含笑五步癫触发
+            huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
+            for msg_text in huagu_msgs:
+                yield event.plain_result(msg_text)
+
         else:
-            yield event.plain_result("❌ 未知命令\n📌 牛牛股市 购买 <金额|梭哈>\n📌 牛牛股市 出售 [数量/全部]\n📌 牛牛股市 持仓")
+            yield event.plain_result("❌ 未知命令\n📌 牛牛股市 购买 <金额|梭哈>\n📌 牛牛股市 出售 [数量/全部]\n📌 牛牛股市 持仓\n📌 牛牛股市 操盘 <金额>")
 
     async def _register(self, event):
         """注册牛牛"""
