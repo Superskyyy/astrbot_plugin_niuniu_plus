@@ -2091,7 +2091,7 @@ class NiuniuShop:
 
     async def show_items(self, event: AstrMessageEvent):
         """显示用户道具及金币总额"""
-        from niuniu_config import DELETED_ITEM_REFUND
+        from niuniu_config import DELETED_ITEM_REFUND, BainianConfig
 
         group_id = str(event.message_obj.group_id)
         user_id = str(event.get_sender_id())
@@ -2101,14 +2101,15 @@ class NiuniuShop:
         result_list = ["📦 你的道具背包："]
         refund_msgs = []
 
-        # 检查并处理已删除的道具（统一退款）
+        # 检查并处理已删除的道具（统一退款，跳过五福等特殊道具）
         if items:
+            fu_names_skip = {f['name'] for f in BainianConfig.FU_CARDS}
             shop_items = self.get_shop_items()
             shop_names = {i['name'] for i in shop_items}
             items_to_remove = []
 
             for name, count in list(items.items()):
-                if name not in shop_names:
+                if name not in shop_names and name not in fu_names_skip:
                     # 道具已从商店删除，统一退款
                     total_refund = DELETED_ITEM_REFUND * count
                     self._update_new_game_coins(group_id, user_id,
@@ -2135,6 +2136,20 @@ class NiuniuShop:
                 item_info = next((i for i in shop_items if i['name'] == name), None)
                 if item_info:
                     result_list.append(f"🔹 {name}x{count} - {item_info['desc']}")
+
+        # 显示五福道具
+        fu_names_set = {f['name'] for f in BainianConfig.FU_CARDS}
+        fu_items = {name: count for name, count in items.items() if name in fu_names_set} if items else {}
+        if fu_items:
+            result_list.append("")
+            result_list.append("🎴 ═══ 五福 ═══")
+            for fu in BainianConfig.FU_CARDS:
+                if fu['name'] in fu_items:
+                    result_list.append(f"  {fu['emoji']} {fu['name']} ✅")
+            # 显示缺少的福
+            missing = [fu for fu in BainianConfig.FU_CARDS if fu['name'] not in fu_items]
+            for fu in missing:
+                result_list.append(f"  {fu['emoji']} {fu['name']} ❌")
 
         # 显示护盾次数
         shield_charges = user_data.get('shield_charges', 0)
@@ -2184,7 +2199,7 @@ class NiuniuShop:
             result_list.append(f"【🤪癫】含笑五步癫：已走{walked}步，剩余{remaining}步（每步损失{dmg_pct}%快照）")
             result_list.append(f"   快照：{snapshot_length}cm / {snapshot_hardness}硬 / {snapshot_asset}资产")
 
-        if not items and shield_charges == 0 and risk_transfer_charges == 0 and reflect_charges == 0 and insurance_charges == 0 and not has_subscriptions and not parasite and not huagu_debuff:
+        if not items and not fu_items and shield_charges == 0 and risk_transfer_charges == 0 and reflect_charges == 0 and insurance_charges == 0 and not has_subscriptions and not parasite and not huagu_debuff:
             result_list.append("🛍️ 你的背包里还没有道具哦~")
 
         # 显示金币总额

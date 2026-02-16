@@ -1302,6 +1302,117 @@ def format_length(length: float, show_sign: bool = False) -> str:
     return result
 
 
+# =============================================================================
+# 牛牛拜年 Configuration
+# =============================================================================
+class BainianConfig:
+    """牛牛拜年 - 春节互动功能配置"""
+    # 每日限制
+    DAILY_LIMIT = 20  # 每天最多拜20家
+
+    # 基础奖励 - 拜年者
+    SENDER_LENGTH_MIN = 1
+    SENDER_LENGTH_MAX = 5
+    SENDER_COINS_MIN = 25       # 5x
+    SENDER_COINS_MAX = 100      # 5x
+    SENDER_HARDNESS_CHANCE = 0.10  # 10%概率+1硬度
+
+    # 基础奖励 - 被拜者（被拜访的人多拿一些）
+    TARGET_LENGTH_MIN = 2
+    TARGET_LENGTH_MAX = 8
+    TARGET_COINS_MIN = 50       # 5x
+    TARGET_COINS_MAX = 150      # 5x
+    TARGET_HARDNESS_CHANCE = 0.05  # 5%概率+1硬度
+
+    # 特殊事件总触发概率
+    SPECIAL_EVENT_CHANCE = 0.50  # 50%概率触发其一
+
+    # 特殊事件列表（按权重选取）
+    SPECIAL_EVENTS = [
+        {
+            'id': 'niuqi_chongtian',
+            'name': '🐂 牛气冲天',
+            'weight': 3,
+            'both_length_min': 15, 'both_length_max': 30,
+            'both_coins_min': 250, 'both_coins_max': 500,
+        },
+        {
+            'id': 'hongbao_yu',
+            'name': '🧧 红包雨',
+            'weight': 8,
+            'both_coins_min': 150, 'both_coins_max': 400,
+        },
+        {
+            'id': 'nianshou_laixi',
+            'name': '👹 年兽来袭',
+            'weight': 5,
+            'both_length_min': -8, 'both_length_max': -3,
+            'both_hardness_min': 1, 'both_hardness_max': 2,
+        },
+        {
+            'id': 'fuxing_gaozhao',
+            'name': '⭐ 福星高照',
+            'weight': 7,
+        },
+        {
+            'id': 'bai_cuo_men',
+            'name': '🚪 拜错门',
+            'weight': 5,
+        },
+        {
+            'id': 'caishen_dao',
+            'name': '💰 财神到',
+            'weight': 4,
+            'both_coins_min': 500, 'both_coins_max': 1000,
+        },
+        {
+            'id': 'tuanyuan_fan',
+            'name': '🥟 团圆饭',
+            'weight': 6,
+            'group_count_min': 3, 'group_count_max': 5,
+            'group_length_min': 1, 'group_length_max': 3,
+        },
+        {
+            'id': 'niu_zhuan_qiankun',
+            'name': '🔄 牛转乾坤',
+            'weight': 3,
+            'length_diff_threshold': 20,
+        },
+        {
+            'id': 'baozu_jingniu',
+            'name': '🧨 爆竹惊牛',
+            'weight': 5,
+            'both_length_min': -3, 'both_length_max': -1,
+        },
+        {
+            'id': 'yasuiqian',
+            'name': '💰 压岁钱',
+            'weight': 4,
+            'percent': 0.05,
+            'min_amount': 50,
+            'max_amount': 2500,
+        },
+    ]
+
+    # 集五福
+    FU_DROP_CHANCE = 0.20  # 20%概率掉落
+
+    FU_CARDS = [
+        {'name': '富强福', 'emoji': '🐂', 'weight': 25, 'reward_coins': 50},
+        {'name': '和谐福', 'emoji': '🎊', 'weight': 25, 'reward_hardness': 1},
+        {'name': '友善福', 'emoji': '🤝', 'weight': 25, 'reward_length': 2},
+        {'name': '爱牛福', 'emoji': '💕', 'weight': 20, 'reward_coins': 25},
+        {'name': '敬业福', 'emoji': '🏮', 'weight': 5, 'reward_length': 1},
+    ]
+
+    FU_DUPLICATE_COINS = 15  # 重复福转化金币
+
+    # 集齐五福大奖
+    FU_COMPLETE_LENGTH = 100
+    FU_COMPLETE_HARDNESS = 5
+    FU_COMPLETE_COINS = 20000
+
+
 def format_length_change(change: float) -> str:
     """
     格式化长度变化量（总是显示正负号）

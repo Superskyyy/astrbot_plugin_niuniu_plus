@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.23.0")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.24.0")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -939,6 +939,7 @@ class NiuniuPlugin(Star):
                 "打胶": self._dajiao,
                 "我的牛牛": self._show_status,
                 "比划比划": self._compare,
+                "牛牛拜年": self._bainian,
                 "牛牛抢劫": self._robbery,
                 "牛牛打劫": self._robbery,
                 "牛牛排行": self._show_ranking,
@@ -975,7 +976,7 @@ class NiuniuPlugin(Star):
         niuniu_commands = [
             "牛牛菜单", "牛牛帮助", "牛牛开", "牛牛关", "注册牛牛", "打胶", "我的牛牛",
             "比划比划", "牛牛排行", "牛牛商城", "牛牛购买", "牛牛背包",
-            "牛牛股市", "开冲", "停止开冲", "飞飞机"
+            "牛牛股市", "开冲", "停止开冲", "飞飞机", "牛牛拜年"
         ]
         
         if any(msg.startswith(cmd) for cmd in niuniu_commands):
@@ -3352,6 +3353,395 @@ class NiuniuPlugin(Star):
         for msg_text in huagu_msgs:
             yield event.plain_result(msg_text)
 
+    async def _bainian(self, event):
+        """牛牛拜年 - 春节互动功能"""
+        from niuniu_config import BainianConfig
+
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+        nickname = event.get_sender_name()
+
+        group_data = self.get_group_data(group_id)
+        if not group_data.get('plugin_enabled', False):
+            yield event.plain_result("❌ 插件未启用")
+            return
+
+        # 获取自身数据
+        user_data = self.get_user_data(group_id, user_id)
+        if not user_data:
+            yield event.plain_result(self.niuniu_texts['bainian']['not_registered'].format(nickname=nickname))
+            return
+
+        # 解析目标
+        target_id = self.parse_target(event)
+        if not target_id:
+            yield event.plain_result(self.niuniu_texts['bainian']['no_target'])
+            return
+
+        if target_id == user_id:
+            yield event.plain_result(self.niuniu_texts['bainian']['self_bainian'])
+            return
+
+        # 获取目标数据
+        target_data = self.get_user_data(group_id, target_id)
+        if not target_data:
+            yield event.plain_result(self.niuniu_texts['bainian']['target_not_registered'])
+            return
+
+        # 获取当前日期（上海时区）
+        tz = pytz.timezone(TIMEZONE)
+        today = datetime.now(tz).strftime('%Y-%m-%d')
+
+        # 检查每日重置
+        bainian_date = user_data.get('bainian_date', '')
+        if bainian_date != today:
+            self.update_user_data(group_id, user_id, {
+                'bainian_date': today,
+                'bainian_count': 0,
+                'bainian_targets': [],
+            })
+            user_data = self.get_user_data(group_id, user_id)
+
+        bainian_count = user_data.get('bainian_count', 0)
+        bainian_targets = user_data.get('bainian_targets', [])
+
+        # 检查每日上限
+        if bainian_count >= BainianConfig.DAILY_LIMIT:
+            yield event.plain_result(self.niuniu_texts['bainian']['daily_limit'].format(count=bainian_count))
+            return
+
+        # 检查是否已拜访过该目标
+        if target_id in bainian_targets:
+            yield event.plain_result(self.niuniu_texts['bainian']['already_visited'].format(target_name=target_data['nickname']))
+            return
+
+        # === 计算基础奖励 ===
+        sender_length = random.randint(BainianConfig.SENDER_LENGTH_MIN, BainianConfig.SENDER_LENGTH_MAX)
+        sender_coins = random.randint(BainianConfig.SENDER_COINS_MIN, BainianConfig.SENDER_COINS_MAX)
+        sender_hardness = 1 if random.random() < BainianConfig.SENDER_HARDNESS_CHANCE else 0
+
+        target_length = random.randint(BainianConfig.TARGET_LENGTH_MIN, BainianConfig.TARGET_LENGTH_MAX)
+        target_coins = random.randint(BainianConfig.TARGET_COINS_MIN, BainianConfig.TARGET_COINS_MAX)
+        target_hardness = 1 if random.random() < BainianConfig.TARGET_HARDNESS_CHANCE else 0
+
+        # === 特殊事件 ===
+        event_text = ""
+        event_extra = []
+        special_triggered = False
+        chosen_event = None
+        swap_lengths = False  # 牛转乾坤标记
+
+        if random.random() < BainianConfig.SPECIAL_EVENT_CHANCE:
+            # 按权重选择事件
+            total_weight = sum(e['weight'] for e in BainianConfig.SPECIAL_EVENTS)
+            rand_val = random.random() * total_weight
+            cumulative = 0
+            for evt in BainianConfig.SPECIAL_EVENTS:
+                cumulative += evt['weight']
+                if rand_val < cumulative:
+                    chosen_event = evt
+                    break
+
+            if chosen_event:
+                special_triggered = True
+                eid = chosen_event['id']
+
+                if eid == 'niuqi_chongtian':
+                    extra_length = random.randint(chosen_event['both_length_min'], chosen_event['both_length_max'])
+                    extra_coins = random.randint(chosen_event['both_coins_min'], chosen_event['both_coins_max'])
+                    sender_length += extra_length
+                    sender_coins += extra_coins
+                    target_length += extra_length
+                    target_coins += extra_coins
+                    event_text = self.niuniu_texts['bainian']['event_niuqi']
+                    event_extra.append(f"   双方额外：+{extra_length}cm, +{extra_coins}金币")
+
+                elif eid == 'hongbao_yu':
+                    extra_coins = random.randint(chosen_event['both_coins_min'], chosen_event['both_coins_max'])
+                    sender_coins += extra_coins
+                    target_coins += extra_coins
+                    event_text = self.niuniu_texts['bainian']['event_hongbao']
+                    event_extra.append(f"   双方额外：+{extra_coins}金币")
+
+                elif eid == 'nianshou_laixi':
+                    length_loss = random.randint(chosen_event['both_length_min'], chosen_event['both_length_max'])
+                    hardness_gain = random.randint(chosen_event['both_hardness_min'], chosen_event['both_hardness_max'])
+                    sender_length += length_loss  # 负数
+                    target_length += length_loss
+                    sender_hardness += hardness_gain
+                    target_hardness += hardness_gain
+                    event_text = self.niuniu_texts['bainian']['event_nianshou']
+                    event_extra.append(f"   双方：{length_loss}cm, +{hardness_gain}硬度")
+
+                elif eid == 'fuxing_gaozhao':
+                    sender_length *= 2
+                    sender_coins *= 2
+                    sender_hardness *= 2
+                    event_text = self.niuniu_texts['bainian']['event_fuxing'].format(sender=nickname)
+
+                elif eid == 'bai_cuo_men':
+                    sender_length = 0
+                    sender_coins = 0
+                    sender_hardness = 0
+                    target_length *= 2
+                    target_coins *= 2
+                    target_hardness *= 2
+                    event_text = self.niuniu_texts['bainian']['event_baicuomen'].format(
+                        sender=nickname, target=target_data['nickname']
+                    )
+
+                elif eid == 'caishen_dao':
+                    extra_coins = random.randint(chosen_event['both_coins_min'], chosen_event['both_coins_max'])
+                    sender_coins += extra_coins
+                    target_coins += extra_coins
+                    event_text = self.niuniu_texts['bainian']['event_caishen']
+                    event_extra.append(f"   双方额外：+{extra_coins}金币")
+
+                elif eid == 'tuanyuan_fan':
+                    all_users_data = self.get_group_data(group_id)
+                    valid_users = [
+                        (uid, data) for uid, data in all_users_data.items()
+                        if isinstance(data, dict) and 'length' in data
+                        and uid != user_id and uid != target_id
+                    ]
+                    count = min(
+                        random.randint(chosen_event['group_count_min'], chosen_event['group_count_max']),
+                        len(valid_users)
+                    )
+                    if count > 0:
+                        lucky_users = random.sample(valid_users, count)
+                        feast_names = []
+                        for uid, udata in lucky_users:
+                            gain = random.randint(chosen_event['group_length_min'], chosen_event['group_length_max'])
+                            self.update_user_data(group_id, uid, {
+                                'length': udata['length'] + gain
+                            })
+                            feast_names.append(f"{udata['nickname']}(+{gain}cm)")
+                        event_text = self.niuniu_texts['bainian']['event_tuanyuan'].format(
+                            sender=nickname, target=target_data['nickname'], count=count
+                        )
+                        event_extra.append(f"   蹭饭牛友：{'、'.join(feast_names)}")
+                    else:
+                        special_triggered = False
+
+                elif eid == 'niu_zhuan_qiankun':
+                    s_len = user_data['length']
+                    t_len = target_data['length']
+                    if abs(s_len - t_len) > chosen_event['length_diff_threshold']:
+                        swap_lengths = True
+                        event_text = self.niuniu_texts['bainian']['event_niuzhuan'].format(
+                            sender=nickname, target=target_data['nickname']
+                        )
+                        event_extra.append(f"   {nickname}: {self.format_length(s_len)} → {self.format_length(t_len)}")
+                        event_extra.append(f"   {target_data['nickname']}: {self.format_length(t_len)} → {self.format_length(s_len)}")
+                    else:
+                        special_triggered = False
+
+                elif eid == 'baozu_jingniu':
+                    length_loss = random.randint(chosen_event['both_length_min'], chosen_event['both_length_max'])
+                    sender_length += length_loss
+                    target_length += length_loss
+                    event_text = self.niuniu_texts['bainian']['event_baozu']
+                    event_extra.append(f"   双方：{length_loss}cm")
+
+                elif eid == 'yasuiqian':
+                    sender_total_coins = user_data.get('coins', 0)
+                    yasuiqian = int(sender_total_coins * chosen_event['percent'])
+                    yasuiqian = max(chosen_event['min_amount'], min(yasuiqian, chosen_event['max_amount']))
+                    sender_coins -= yasuiqian
+                    target_coins += yasuiqian
+                    event_text = self.niuniu_texts['bainian']['event_yasuiqian'].format(
+                        sender=nickname, target=target_data['nickname'], amount=yasuiqian
+                    )
+
+        # === 应用奖励 ===
+        # 更新拜年者数据
+        if swap_lengths:
+            # 牛转乾坤：互换长度，然后在互换后的基础上加奖励
+            new_sender_length = target_data['length'] + sender_length
+            new_target_length = user_data['length'] + target_length
+        else:
+            new_sender_length = user_data['length'] + sender_length
+            new_target_length = target_data['length'] + target_length
+
+        new_sender_hardness = min(100, user_data['hardness'] + sender_hardness)
+        new_sender_coins = round(user_data.get('coins', 0) + sender_coins)
+
+        sender_updates = {
+            'length': new_sender_length,
+            'hardness': new_sender_hardness,
+            'coins': new_sender_coins,
+            'bainian_date': today,
+            'bainian_count': bainian_count + 1,
+            'bainian_targets': bainian_targets + [target_id],
+        }
+        self.update_user_data(group_id, user_id, sender_updates)
+
+        # 更新被拜者数据
+        new_target_hardness = min(100, target_data['hardness'] + target_hardness)
+        new_target_coins = round(target_data.get('coins', 0) + target_coins)
+        self.update_user_data(group_id, target_id, {
+            'length': new_target_length,
+            'hardness': new_target_hardness,
+            'coins': new_target_coins,
+        })
+
+        # === 集五福 ===
+        fu_text = ""
+        fu_complete_text = ""
+
+        if random.random() < BainianConfig.FU_DROP_CHANCE:
+            # 按权重选择福卡
+            total_fu_weight = sum(f['weight'] for f in BainianConfig.FU_CARDS)
+            rand_fu = random.random() * total_fu_weight
+            cumulative_fu = 0
+            chosen_fu = None
+            for fu in BainianConfig.FU_CARDS:
+                cumulative_fu += fu['weight']
+                if rand_fu < cumulative_fu:
+                    chosen_fu = fu
+                    break
+
+            if chosen_fu:
+                fu_name = chosen_fu['name']
+                fu_emoji = chosen_fu['emoji']
+
+                user_data_fresh = self.get_user_data(group_id, user_id)
+                items = user_data_fresh.get('items', {})
+
+                if items.get(fu_name, 0) > 0:
+                    # 重复的福，转化为金币
+                    dup_coins = BainianConfig.FU_DUPLICATE_COINS
+                    self.update_user_data(group_id, user_id, {
+                        'coins': round(user_data_fresh.get('coins', 0) + dup_coins)
+                    })
+                    fu_text = self.niuniu_texts['bainian']['fu_duplicate'].format(
+                        fu_emoji=fu_emoji, fu_name=fu_name, coins=dup_coins
+                    )
+                else:
+                    # 新的福！
+                    items[fu_name] = 1
+                    reward_text = ""
+                    reward_updates = {'items': items}
+                    if 'reward_coins' in chosen_fu:
+                        reward_updates['coins'] = round(user_data_fresh.get('coins', 0) + chosen_fu['reward_coins'])
+                        reward_text = f"+{chosen_fu['reward_coins']}金币"
+                    if 'reward_hardness' in chosen_fu:
+                        reward_updates['hardness'] = min(100, user_data_fresh.get('hardness', 1) + chosen_fu['reward_hardness'])
+                        reward_text = f"+{chosen_fu['reward_hardness']}硬度"
+                    if 'reward_length' in chosen_fu:
+                        reward_updates['length'] = user_data_fresh.get('length', 0) + chosen_fu['reward_length']
+                        reward_text = f"+{chosen_fu['reward_length']}cm"
+
+                    self.update_user_data(group_id, user_id, reward_updates)
+
+                    fu_text = self.niuniu_texts['bainian']['fu_drop'].format(
+                        fu_emoji=fu_emoji, fu_name=fu_name, reward_text=reward_text
+                    )
+
+                    # 检查是否集齐五福
+                    user_data_check = self.get_user_data(group_id, user_id)
+                    items_check = user_data_check.get('items', {})
+                    all_fu_names = [f['name'] for f in BainianConfig.FU_CARDS]
+
+                    if all(items_check.get(fn, 0) > 0 for fn in all_fu_names):
+                        # 集齐五福！发放大奖并清除
+                        for fn in all_fu_names:
+                            if fn in items_check:
+                                del items_check[fn]
+
+                        self.update_user_data(group_id, user_id, {
+                            'items': items_check,
+                            'length': user_data_check['length'] + BainianConfig.FU_COMPLETE_LENGTH,
+                            'hardness': min(100, user_data_check['hardness'] + BainianConfig.FU_COMPLETE_HARDNESS),
+                            'coins': round(user_data_check.get('coins', 0) + BainianConfig.FU_COMPLETE_COINS),
+                        })
+
+                        fu_complete_text = self.niuniu_texts['bainian']['fu_complete'].format(
+                            length=BainianConfig.FU_COMPLETE_LENGTH,
+                            hardness=BainianConfig.FU_COMPLETE_HARDNESS,
+                            coins=BainianConfig.FU_COMPLETE_COINS
+                        )
+
+        # === 构建输出 ===
+        result_lines = ["🧧 ══ 牛牛拜年 ══ 🧧"]
+        result_lines.append(random.choice(self.niuniu_texts['bainian']['success']).format(
+            sender=nickname, target=target_data['nickname']
+        ))
+        result_lines.append("")
+
+        # 特殊事件
+        if special_triggered and event_text:
+            result_lines.append(event_text)
+            result_lines.extend(event_extra)
+            result_lines.append("")
+
+        # 奖励总结 - 拜年者
+        sender_parts = []
+        if sender_length != 0:
+            sender_parts.append(f"{'+' if sender_length > 0 else ''}{sender_length}cm")
+        if sender_coins != 0:
+            sender_parts.append(f"{'+' if sender_coins > 0 else ''}{sender_coins}金币")
+        if sender_hardness > 0:
+            sender_parts.append(f"+{sender_hardness}硬度")
+        if sender_parts:
+            result_lines.append(f"📦 {nickname}：{', '.join(sender_parts)}")
+        else:
+            result_lines.append(f"📦 {nickname}：（空手而归~）")
+
+        # 奖励总结 - 被拜者
+        target_parts = []
+        if target_length != 0:
+            target_parts.append(f"{'+' if target_length > 0 else ''}{target_length}cm")
+        if target_coins != 0:
+            target_parts.append(f"{'+' if target_coins > 0 else ''}{target_coins}金币")
+        if target_hardness > 0:
+            target_parts.append(f"+{target_hardness}硬度")
+        if target_parts:
+            result_lines.append(f"🎁 {target_data['nickname']}：{', '.join(target_parts)}")
+
+        # 集福信息
+        if fu_text:
+            result_lines.append("")
+            result_lines.append(fu_text)
+
+        if fu_complete_text:
+            result_lines.append("")
+            result_lines.append(fu_complete_text)
+
+        # 集福进度
+        user_data_final = self.get_user_data(group_id, user_id)
+        items_final = user_data_final.get('items', {})
+        all_fu = BainianConfig.FU_CARDS
+        progress_parts = []
+        fu_count = 0
+        for fu in all_fu:
+            if items_final.get(fu['name'], 0) > 0:
+                progress_parts.append(f"{fu['emoji']}✅")
+                fu_count += 1
+            else:
+                progress_parts.append(f"{fu['emoji']}❌")
+
+        if fu_count > 0:
+            result_lines.append("")
+            result_lines.append(self.niuniu_texts['bainian']['fu_progress'].format(
+                progress=" ".join(progress_parts), count=fu_count
+            ))
+
+        # 今日拜年次数
+        result_lines.append(self.niuniu_texts['bainian']['remaining'].format(
+            count=bainian_count + 1, limit=BainianConfig.DAILY_LIMIT
+        ))
+
+        result_lines.append("═══════════════════")
+
+        yield event.plain_result("\n".join(result_lines))
+
+        # 含笑五步癫触发
+        huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
+        for msg_text in huagu_msgs:
+            yield event.plain_result(msg_text)
+
     async def _show_status(self, event):
         """查看牛牛状态"""
         group_id = str(event.message_obj.group_id)
@@ -3400,6 +3790,20 @@ class NiuniuPlugin(Star):
         if parasite:
             beneficiary_name = parasite.get('beneficiary_name', '某人')
             text += f"\n🦠【寄】寄生牛牛来自：{beneficiary_name}"
+
+        # 集福进度
+        from niuniu_config import BainianConfig
+        items = user_data.get('items', {})
+        all_fu = BainianConfig.FU_CARDS
+        fu_count = sum(1 for fu in all_fu if items.get(fu['name'], 0) > 0)
+        if fu_count > 0:
+            progress_parts = []
+            for fu in all_fu:
+                if items.get(fu['name'], 0) > 0:
+                    progress_parts.append(f"{fu['emoji']}✅")
+                else:
+                    progress_parts.append(f"{fu['emoji']}❌")
+            text += f"\n🎴 集福进度: {' '.join(progress_parts)} ({fu_count}/5)"
 
         yield event.plain_result(text)
 
