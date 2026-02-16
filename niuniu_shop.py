@@ -931,10 +931,11 @@ class NiuniuShop:
                 loop_trigger_items = ['祸水东引', '上保险', '牛牛反弹', '巴黎牛家', '赌徒骰子', '穷牛一生']
                 is_simple_item = selected_item['name'] not in complex_items
                 is_dunpai = selected_item['name'] == '牛牛盾牌'  # 牛牛盾牌支持批量购买但需特殊处理
+                is_chongchui = selected_item['name'] == '牛牛重锤'  # 牛牛重锤支持批量购买+指定目标
                 is_loop_trigger = selected_item['name'] in loop_trigger_items  # 需要循环触发
 
-                # 简单道具支持批量购买（排除需要循环触发的道具和牛牛盾牌）
-                if is_simple_item and not is_loop_trigger and not is_dunpai and buy_count > 1:
+                # 简单道具支持批量购买（排除需要循环触发的道具、牛牛盾牌和牛牛重锤）
+                if is_simple_item and not is_loop_trigger and not is_dunpai and not is_chongchui and buy_count > 1:
                     price_per_buy = selected_item['price']
                     max_buys_by_coins = self._calculate_max_purchases_with_tax(user_coins, price_per_buy)
 
@@ -1111,6 +1112,124 @@ class NiuniuShop:
                     yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
                     return
 
+                # 牛牛重锤：指定目标+支持批量购买
+                if is_chongchui:
+                    from niuniu_config import ChongchuiConfig
+
+                    # 解析@目标
+                    target_id = None
+                    for comp in event.message_obj.message:
+                        if isinstance(comp, At):
+                            target_id = str(comp.qq)
+                            break
+                    if not target_id:
+                        yield event.plain_result("❌ 请指定目标！\n格式：牛牛购买 22 @目标 [数量]")
+                        return
+                    if target_id == user_id:
+                        yield event.plain_result("❌ 不能对自己使用「牛牛重锤」！自己锤自己的盾？")
+                        return
+
+                    # 获取目标数据
+                    niuniu_data = self._load_niuniu_data()
+                    group_data = niuniu_data.get(group_id, {})
+                    target_data = group_data.get(target_id)
+                    if not target_data or not isinstance(target_data, dict) or 'length' not in target_data:
+                        yield event.plain_result("❌ 目标还没有牛牛，锤个寂寞？")
+                        return
+
+                    target_name = target_data.get('nickname', target_id)
+                    target_shields = target_data.get('shield_charges', 0)
+
+                    if target_shields <= 0:
+                        yield event.plain_result(f"❌ {target_name} 没有护盾，不需要锤！省点钱吧牛友")
+                        return
+
+                    # 计算需要多少锤（自动限制到实际需要的数量）
+                    import math
+                    shields_per_use = ChongchuiConfig.SHIELD_BREAK_PER_USE
+                    max_useful = math.ceil(target_shields / shields_per_use)
+                    actual_buy_count = min(buy_count, max_useful)
+
+                    # 检查金币
+                    price_per_buy = selected_item['price']
+                    max_buys_by_coins = self._calculate_max_purchases_with_tax(user_coins, price_per_buy)
+                    actual_buy_count = min(actual_buy_count, max_buys_by_coins)
+
+                    if actual_buy_count <= 0:
+                        first_tax = self._calculate_purchase_tax(user_coins, price_per_buy)
+                        total_needed = price_per_buy + first_tax
+                        shortfall = total_needed - user_coins
+                        yield event.plain_result(
+                            f"❌ 金币不足，无法购买\n"
+                            f"📋 需要: {price_per_buy} 金币 + {first_tax} 消费税 = {total_needed} 金币\n"
+                            f"📊 你有: {int(user_coins)} 金币\n"
+                            f"⚠️ 还差: {int(shortfall)} 金币"
+                        )
+                        return
+
+                    # 重新加载数据并原子更新目标护盾
+                    niuniu_data = self._load_niuniu_data()
+                    group_data = niuniu_data.setdefault(group_id, {})
+                    if target_id not in group_data:
+                        yield event.plain_result("❌ 目标数据异常，操作取消")
+                        return
+                    # 用最新的护盾数据重新计算
+                    target_shields = group_data[target_id].get('shield_charges', 0)
+                    if target_shields <= 0:
+                        yield event.plain_result(f"❌ {target_name} 的护盾刚刚被清除了，不需要锤了")
+                        return
+                    max_useful = math.ceil(target_shields / shields_per_use)
+                    actual_buy_count = min(actual_buy_count, max_useful)
+                    total_break = min(target_shields, actual_buy_count * shields_per_use)
+                    remaining_shields = target_shields - total_break
+
+                    group_data[target_id]['shield_charges'] = remaining_shields
+                    self._save_niuniu_data(niuniu_data)
+
+                    # 计算费用
+                    purchase_tax, tax_list = self._calculate_batch_purchase_taxes(user_coins, price_per_buy, actual_buy_count)
+                    total_cost = price_per_buy * actual_buy_count
+                    total_cost_with_tax = total_cost + purchase_tax
+
+                    # 扣除金币
+                    self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
+
+                    # 生成消息
+                    result_msg.append(f"🔨 ══ 牛牛重锤 ══ 🔨")
+                    if actual_buy_count == 1:
+                        result_msg.append(f"💥 {nickname} 挥起重锤砸向 {target_name} 的护盾！")
+                    else:
+                        result_msg.append(f"💥 {nickname} 连续挥锤{actual_buy_count}次砸向 {target_name} 的护盾！")
+                    result_msg.append(f"🛡️ 护盾破碎：{target_shields}层 → {remaining_shields}层（-{total_break}层）")
+                    if remaining_shields == 0:
+                        result_msg.append(f"⚡ {target_name} 的护盾已被完全击碎！")
+                    if actual_buy_count < buy_count:
+                        if max_buys_by_coins < buy_count:
+                            result_msg.append(f"⚠️ 金币不足，仅购买{actual_buy_count}次")
+                        else:
+                            result_msg.append(f"💡 目标只有{target_shields}层护盾，{actual_buy_count}锤就够了")
+
+                    if purchase_tax > 0:
+                        digit_count = len(str(price_per_buy))
+                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
+                    result_msg.append(f"═══════════════════")
+
+                    # 股市钩子
+                    stock_msg = stock_hook(
+                        group_id, nickname,
+                        item_name='牛牛重锤',
+                        length_change=0,
+                        hardness_change=0,
+                        volatility=(0.01, 0.04),
+                        templates={"plain": ["{nickname} 挥起重锤！护盾应声碎裂，股市微微震动 {change}"]},
+                        mean_reversion=True
+                    )
+                    if stock_msg:
+                        result_msg.append(stock_msg)
+
+                    yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
+                    return
+
                 # 循环触发道具批量购买（祸水东引、上保险、牛牛反弹、巴黎牛家、赌徒骰子、穷牛一生）
                 if is_loop_trigger and buy_count > 1:
                     # 检查效果是否存在
@@ -1263,7 +1382,7 @@ class NiuniuShop:
                     return
 
                 # 复杂道具或单次购买
-                if not is_simple_item and not is_dunpai and not is_loop_trigger and buy_count > 1:
+                if not is_simple_item and not is_dunpai and not is_loop_trigger and not is_chongchui and buy_count > 1:
                     yield event.plain_result("⚠️ 该道具有特殊效果，不支持批量购买")
                     return
 
