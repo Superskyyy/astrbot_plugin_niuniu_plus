@@ -1408,9 +1408,10 @@ class BainianConfig:
     FU_DUPLICATE_COINS = 15  # 重复福转化金币
 
     # 集齐五福大奖
-    FU_COMPLETE_LENGTH = 100
-    FU_COMPLETE_HARDNESS = 5
-    FU_COMPLETE_COINS = 20000
+    FU_COMPLETE_LENGTH = 188
+    FU_COMPLETE_HARDNESS = 88
+    FU_COMPLETE_COINS = 28888
+    FU_ASSET_BONUS_PERCENT = 0.50  # 额外奖励：总资产（金币+股票市值）的50%
 
 
 def format_length_change(change: float) -> str:

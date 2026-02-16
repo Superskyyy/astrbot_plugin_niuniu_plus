@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.24.0")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.24.1")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -3590,7 +3590,11 @@ class NiuniuPlugin(Star):
         fu_text = ""
         fu_complete_text = ""
 
-        if random.random() < BainianConfig.FU_DROP_CHANCE:
+        # 已集齐过五福的玩家不再掉落
+        user_data_fu_check = self.get_user_data(group_id, user_id)
+        fu_already_completed = user_data_fu_check.get('bainian_fu_completed', False)
+
+        if not fu_already_completed and random.random() < BainianConfig.FU_DROP_CHANCE:
             # 按权重选择福卡
             total_fu_weight = sum(f['weight'] for f in BainianConfig.FU_CARDS)
             rand_fu = random.random() * total_fu_weight
@@ -3650,17 +3654,30 @@ class NiuniuPlugin(Star):
                             if fn in items_check:
                                 del items_check[fn]
 
+                        # 计算50%总资产奖励（金币 + 股票市值）
+                        current_coins = user_data_check.get('coins', 0)
+                        stock = NiuniuStock.get()
+                        user_shares = stock.get_holdings(group_id, user_id)
+                        stock_price = stock.get_price(group_id)
+                        stock_value = user_shares * stock_price
+                        total_asset = max(0, current_coins) + stock_value
+                        asset_bonus = round(total_asset * BainianConfig.FU_ASSET_BONUS_PERCENT)
+                        total_coin_reward = BainianConfig.FU_COMPLETE_COINS + asset_bonus
+
                         self.update_user_data(group_id, user_id, {
                             'items': items_check,
                             'length': user_data_check['length'] + BainianConfig.FU_COMPLETE_LENGTH,
                             'hardness': min(100, user_data_check['hardness'] + BainianConfig.FU_COMPLETE_HARDNESS),
-                            'coins': round(user_data_check.get('coins', 0) + BainianConfig.FU_COMPLETE_COINS),
+                            'coins': round(current_coins + total_coin_reward),
+                            'bainian_fu_completed': True,
                         })
 
                         fu_complete_text = self.niuniu_texts['bainian']['fu_complete'].format(
                             length=BainianConfig.FU_COMPLETE_LENGTH,
                             hardness=BainianConfig.FU_COMPLETE_HARDNESS,
-                            coins=BainianConfig.FU_COMPLETE_COINS
+                            base_coins=BainianConfig.FU_COMPLETE_COINS,
+                            asset_bonus=asset_bonus,
+                            total_coins=total_coin_reward,
                         )
 
         # === 构建输出 ===
@@ -3793,17 +3810,20 @@ class NiuniuPlugin(Star):
 
         # 集福进度
         from niuniu_config import BainianConfig
-        items = user_data.get('items', {})
-        all_fu = BainianConfig.FU_CARDS
-        fu_count = sum(1 for fu in all_fu if items.get(fu['name'], 0) > 0)
-        if fu_count > 0:
-            progress_parts = []
-            for fu in all_fu:
-                if items.get(fu['name'], 0) > 0:
-                    progress_parts.append(f"{fu['emoji']}✅")
-                else:
-                    progress_parts.append(f"{fu['emoji']}❌")
-            text += f"\n🎴 集福进度: {' '.join(progress_parts)} ({fu_count}/5)"
+        if user_data.get('bainian_fu_completed', False):
+            text += "\n🎴 集福: 🎊 已集齐五福！大奖已领取！"
+        else:
+            items = user_data.get('items', {})
+            all_fu = BainianConfig.FU_CARDS
+            fu_count = sum(1 for fu in all_fu if items.get(fu['name'], 0) > 0)
+            if fu_count > 0:
+                progress_parts = []
+                for fu in all_fu:
+                    if items.get(fu['name'], 0) > 0:
+                        progress_parts.append(f"{fu['emoji']}✅")
+                    else:
+                        progress_parts.append(f"{fu['emoji']}❌")
+                text += f"\n🎴 集福进度: {' '.join(progress_parts)} ({fu_count}/5)"
 
         yield event.plain_result(text)
 
