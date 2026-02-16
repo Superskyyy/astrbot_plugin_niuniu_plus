@@ -10,6 +10,7 @@
 
 import os
 import json
+import math
 import random
 import time
 from typing import Dict, Any, Tuple, List
@@ -642,9 +643,9 @@ class NiuniuStock:
         data = self._get_group_data(group_id)
         old_price = data.get("price", STOCK_CONFIG["base_price"])
 
-        # 计算影响（基础2%，每5000金币+2%，无上限）
+        # 计算影响（对数衰减：小额微波动，大额有上限）
         abs_coins = abs(coins)
-        impact = 0.02 + abs_coins / 5000 * 0.02
+        impact = 0.01 * math.log2(1 + abs_coins / 1000)
 
         is_player = operator is not None
 
