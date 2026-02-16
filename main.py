@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.22.8")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.23.0")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -219,8 +219,31 @@ class NiuniuPlugin(Star):
         return user_data
 
     def consume_item(self, group_id: str, user_id: str, item_name: str) -> bool:
-        """消耗道具（代理方法，调用shop.consume_item）"""
-        return self.shop.consume_item(group_id, user_id, item_name)
+        """消耗道具（直接操作缓存数据，避免缓存不一致）"""
+        group_id = str(group_id)
+        user_id = str(user_id)
+        data = self._get_data()
+        group_data = data.get(group_id, {})
+        user_data = group_data.get(user_id, {})
+        items = user_data.get('items', {})
+
+        if items.get(item_name, 0) > 0:
+            items[item_name] -= 1
+            if items[item_name] == 0:
+                del items[item_name]
+            self._save_data(data)
+            return True
+        return False
+
+    def modify_coins_cached(self, group_id: str, user_id: str, delta: float):
+        """修改金币（通过缓存，避免缓存不一致）"""
+        group_id = str(group_id)
+        user_id = str(user_id)
+        data = self._get_data()
+        group_data = data.get(group_id, {})
+        user_data = group_data.get(user_id, {})
+        user_data['coins'] = round(user_data.get('coins', 0) + delta)
+        self._save_data(data)
 
     def update_group_data(self, group_id, updates):
         """更新群组数据并保存到文件/缓存"""
@@ -324,7 +347,7 @@ class NiuniuPlugin(Star):
             current_coins = group_data[user_id].get('coins', 0)
             group_data[user_id]['coins'] = round(current_coins + payout)
         else:
-            self.games.update_user_coins(group_id, user_id, payout)
+            self.modify_coins_cached(group_id, user_id, payout)
 
         # 构建消息
         damage_parts = []
@@ -917,6 +940,7 @@ class NiuniuPlugin(Star):
                 "我的牛牛": self._show_status,
                 "比划比划": self._compare,
                 "牛牛抢劫": self._robbery,
+                "牛牛打劫": self._robbery,
                 "牛牛排行": self._show_ranking,
                 "牛牛道具商城": self.shop.show_shop,  # 别名
                 "牛牛道具商店": self.shop.show_shop,  # 别名
@@ -2290,7 +2314,7 @@ class NiuniuPlugin(Star):
                                 payout = 200
                                 remaining_msg = f"剩余{old_insurance_charges - 1}次"
 
-                            self.games.update_user_coins(group_id, target_id, payout)
+                            self.modify_coins_cached(group_id, target_id, payout)
                             ctx.messages.append(f"📋 {target_data['nickname']} 保险理赔！损失{target_length_loss}cm，赔付{payout:,}金币（{remaining_msg}）")
 
                 yield event.plain_result("\n".join(ctx.messages))
@@ -2380,18 +2404,18 @@ class NiuniuPlugin(Star):
                         if bracket_str and bracket_str != "免税":
                             bet_tax_info += f"\n📊 税率明细：{bracket_str}"
                         # 扣除输家金币（全部）
-                        self.shop.modify_coins(group_id, target_id, -actual_bet)
+                        self.modify_coins_cached(group_id, target_id, -actual_bet)
                         # 增加赢家金币（扣税后）
-                        self.shop.modify_coins(group_id, user_id, int(net_gain))
+                        self.modify_coins_cached(group_id, user_id, int(net_gain))
                     else:
                         # 正常结算
                         bet_tax_info = f"\n💸 赢得 {net_gain:.0f} 枚金币（税前 {bet_amount}，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
                         if bracket_str and bracket_str != "免税":
                             bet_tax_info += f"\n📊 税率明细：{bracket_str}"
                         # 扣除输家金币
-                        self.shop.modify_coins(group_id, target_id, -bet_amount)
+                        self.modify_coins_cached(group_id, target_id, -bet_amount)
                         # 增加赢家金币（扣税后）
-                        self.shop.modify_coins(group_id, user_id, int(net_gain))
+                        self.modify_coins_cached(group_id, user_id, int(net_gain))
 
                 text = random.choice(self.niuniu_texts['compare']['win']).format(
                     winner=nickname,
@@ -2510,9 +2534,9 @@ class NiuniuPlugin(Star):
                         if bracket_str and bracket_str != "免税":
                             bet_tax_info += f"\n📊 税率明细：{bracket_str}"
                         # 扣除自己金币（全部）
-                        self.shop.modify_coins(group_id, user_id, -actual_bet)
+                        self.modify_coins_cached(group_id, user_id, -actual_bet)
                         # 增加赢家金币（扣税后）
-                        self.shop.modify_coins(group_id, target_id, int(net_gain))
+                        self.modify_coins_cached(group_id, target_id, int(net_gain))
                     else:
                         # 正常结算
                         tax_amount, effective_rate, bracket_str = NiuniuStock.get()._calculate_tax(bet_amount, avg_coins)
@@ -2521,9 +2545,9 @@ class NiuniuPlugin(Star):
                         if bracket_str and bracket_str != "免税":
                             bet_tax_info += f"\n📊 税率明细：{bracket_str}"
                         # 扣除自己金币
-                        self.shop.modify_coins(group_id, user_id, -bet_amount)
+                        self.modify_coins_cached(group_id, user_id, -bet_amount)
                         # 增加赢家金币（扣税后）
-                        self.shop.modify_coins(group_id, target_id, int(net_gain))
+                        self.modify_coins_cached(group_id, target_id, int(net_gain))
 
                 text = random.choice(self.niuniu_texts['compare']['lose']).format(
                     loser=nickname,
@@ -2761,12 +2785,12 @@ class NiuniuPlugin(Star):
             if bet_amount > 0:
                 if is_win:
                     winnings = int(bet_amount * CompareBet.WINNER_MULTIPLIER)
-                    self.games.update_user_coins(group_id, user_id, winnings)
+                    self.modify_coins_cached(group_id, user_id, winnings)
                     bet_text = random.choice(self.niuniu_texts['compare'].get('bet_win', ['💰 赢得 {amount} 金币！'])).format(
                         nickname=nickname, amount=winnings
                     )
                 else:
-                    self.games.update_user_coins(group_id, user_id, -bet_amount)
+                    self.modify_coins_cached(group_id, user_id, -bet_amount)
                     bet_text = random.choice(self.niuniu_texts['compare'].get('bet_lose', ['💸 失去 {amount} 金币'])).format(
                         nickname=nickname, amount=bet_amount
                     )
@@ -2815,8 +2839,8 @@ class NiuniuPlugin(Star):
                 elif effect_type == 'bonus_coins':
                     # 奖励金币（双方）
                     coins = random.randint(CompareAudience.BONUS_COINS_MIN, CompareAudience.BONUS_COINS_MAX)
-                    self.games.update_user_coins(group_id, user_id, coins)
-                    self.games.update_user_coins(group_id, target_id, coins)
+                    self.modify_coins_cached(group_id, user_id, coins)
+                    self.modify_coins_cached(group_id, target_id, coins)
                     audience_text = random.choice(self.niuniu_texts['compare'].get('audience_coins', ['💰 【围观打赏】观众们打赏了，双方各获得{coins}金币！'])).format(
                         coins=coins, count=len(group_compares)
                     )
@@ -2828,7 +2852,7 @@ class NiuniuPlugin(Star):
                     for uid, udata in group_data.items():
                         if uid.startswith('_') or uid == 'plugin_enabled' or not isinstance(udata, dict):
                             continue
-                        self.games.update_user_coins(group_id, uid, coins)
+                        self.modify_coins_cached(group_id, uid, coins)
                         beneficiaries += 1
                     audience_text = random.choice(self.niuniu_texts['compare'].get('group_bonus', ['🎁 【群友福利】全群{beneficiaries}人每人获得{coins}金币！'])).format(
                         coins=coins, beneficiaries=beneficiaries, count=len(group_compares)
@@ -3315,6 +3339,11 @@ class NiuniuPlugin(Star):
             result_lines.append(f"🔥 抢劫{new_win_streak}连胜！")
 
         result_lines.append("═══════════════════")
+
+        # 股市钩子 - 抢劫金币变动影响股市
+        stock_msg = stock_hook(group_id, nickname, event_type="compare", coins_change=final_gain)
+        if stock_msg:
+            result_lines.append(stock_msg)
 
         yield event.plain_result("\n".join(result_lines))
 

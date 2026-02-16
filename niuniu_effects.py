@@ -17,33 +17,33 @@ from niuniu_config import format_length, format_length_change
 SUBSCRIPTION_CONFIGS = {
     "battle_master": {
         "name": "战斗大师",
-        "price_per_day": 1000000,  # 100万/天
+        "price_per_day": 100000,  # 10万/天
         "emoji": "🏆",
         "description": "打胶冷却-75%，成功率+10%，比划胜率+5%，抢劫成功率+5%",
     },
     "insurance_plan": {
         "name": "保险订阅",
-        "price_per_day": 100000,  # 10万/天
+        "price_per_day": 10000,  # 1万/天
         "emoji": "📋",
         "description": "无限次理赔，每次赔付10,000金币",
         "payout": 10000,  # 每次理赔金额
     },
     "parasite_immunity": {
         "name": "寄生免疫",
-        "price_per_day": 500000,  # 50万/天
+        "price_per_day": 50000,  # 5万/天
         "emoji": "🚫",
         "description": "完全免疫寄生牛牛",
     },
     "melon_eater": {
         "name": "吃瓜群众",
-        "price_per_day": 100000,  # 10万/天
+        "price_per_day": 10000,  # 1万/天
         "emoji": "🍉",
         "description": "别人打胶成功时获得50%增长，使用道具时30%概率获得10%金币",
         "max_triggers_per_day": 20,  # 每天最多触发20次
     },
     "time_rewind_vip": {
         "name": "时光倒流VIP",
-        "price_per_day": 1000000,  # 100万/天
+        "price_per_day": 100000,  # 10万/天
         "emoji": "⏰",
         "description": "受到损失时30%概率时光倒流，损失无效化",
         "trigger_chance": 0.30,  # 30%触发概率
