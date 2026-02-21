@@ -1223,9 +1223,6 @@ def stock_hook(group_id: str,
                 up_probability = 0.5 + regression_strength
             else:
                 up_probability = 0.5
-        elif event_type in ("chaos", "global"):
-            # 混沌和全局事件保持 50/50
-            up_probability = 0.5
         else:
             # 常规模式：变化量影响概率
             # 基础概率 50%，变化量可以将概率偏移到 15%-85%
