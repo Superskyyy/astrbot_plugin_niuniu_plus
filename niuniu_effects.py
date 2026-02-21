@@ -38,7 +38,7 @@ SUBSCRIPTION_CONFIGS = {
         "name": "吃瓜群众",
         "price_per_day": 10000,  # 1万/天
         "emoji": "🍉",
-        "description": "别人打胶成功时获得50%增长，使用道具时30%概率获得10%金币",
+        "description": "别人打胶成功时获得50%增长，别人使用道具时30%概率获得道具售价10%金币",
         "max_triggers_per_day": 20,  # 每天最多触发20次
     },
     "time_rewind_vip": {
@@ -639,6 +639,10 @@ class EffectManager:
         if trigger == EffectTrigger.AFTER_DAJIAO:
             ctx = self._trigger_melon_eater_on_dajiao(ctx)
 
+        # 吃瓜群众 - 别人购买道具时获得售价10%金币
+        if trigger == EffectTrigger.ON_PURCHASE:
+            ctx = self._trigger_melon_eater_on_purchase(ctx)
+
         return ctx
 
     def _trigger_time_rewind_vip(self, ctx: EffectContext) -> EffectContext:
@@ -734,6 +738,46 @@ class EffectManager:
                     melon_messages.append(f"🍉 {eater_nickname} 吃到了你的瓜！({' '.join(gains)})")
 
         # 追加吃瓜消息
+        if melon_messages:
+            ctx.messages.append("")
+            ctx.messages.extend(melon_messages)
+
+        return ctx
+
+    def _trigger_melon_eater_on_purchase(self, ctx: EffectContext) -> EffectContext:
+        """吃瓜群众 - 别人购买道具时30%概率获得道具售价10%金币"""
+        item_price = ctx.extra.get('item_price', 0)
+        if item_price <= 0:
+            return ctx
+
+        # 获取群内所有吃瓜群众订阅者（排除购买者自己）
+        melon_eaters = self.get_all_group_subscribers(ctx.group_id, "melon_eater")
+        melon_eaters = [uid for uid in melon_eaters if uid != ctx.user_id]
+
+        if not melon_eaters:
+            return ctx
+
+        shop = self._shop_ref
+        melon_messages = []
+
+        for eater_id in melon_eaters:
+            # 30%概率触发
+            if random.random() > 0.3:
+                continue
+
+            # 检查今日触发次数
+            if not self.increment_melon_eater_count(ctx.group_id, eater_id):
+                continue
+
+            # 获得道具售价的10%
+            coin_gain = max(1, int(item_price * 0.1))
+
+            if shop:
+                shop.games.update_user_coins(ctx.group_id, eater_id, coin_gain)
+                eater_data = shop.get_user_data(ctx.group_id, eater_id)
+                eater_nickname = eater_data.get('nickname', f'用户{eater_id}') if eater_data else f'用户{eater_id}'
+                melon_messages.append(f"🍉 {eater_nickname} 围观吃瓜！获得 {coin_gain} 金币！")
+
         if melon_messages:
             ctx.messages.append("")
             ctx.messages.extend(melon_messages)

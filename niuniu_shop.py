@@ -2189,6 +2189,18 @@ class NiuniuShop:
             huagu_msgs = self.main._trigger_huagu_debuff(group_id, user_id)
             result_msg.extend(huagu_msgs)
 
+            # ===== 吃瓜群众订阅：别人购买道具时获得售价10%金币 =====
+            melon_ctx = EffectContext(
+                group_id=group_id,
+                user_id=user_id,
+                nickname=nickname,
+                user_data=user_data,
+                extra={'item_price': int(final_price)},
+            )
+            melon_ctx = self.main.effects.trigger(EffectTrigger.ON_PURCHASE, melon_ctx, {})
+            if melon_ctx.messages:
+                result_msg.extend(melon_ctx.messages)
+
             yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
 
         except Exception as e:
