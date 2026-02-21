@@ -571,6 +571,25 @@ class NiuniuShop:
             'message': message
         }
 
+    @staticmethod
+    def _consume_shields_batch(group_data: Dict[str, Any], shields_list: list):
+        """批量消耗护盾"""
+        for shield_info in shields_list:
+            target_id = shield_info['user_id']
+            if target_id in group_data:
+                current = group_data[target_id].get('shield_charges', 0)
+                group_data[target_id]['shield_charges'] = max(0, current - shield_info['amount'])
+
+    def _apply_coin_vanish_batch(self, group_id: str, victim_ids: list,
+                                  item_name: str, group_data: Dict[str, Any],
+                                  result_msg: list):
+        """批量应用金币消失"""
+        for victim_id in victim_ids:
+            vanish_info = self._apply_coin_vanish(group_id, victim_id, item_name, group_data)
+            if vanish_info.get('vanished'):
+                result_msg.append(vanish_info['message'])
+                self._modify_coins_in_memory(group_data, victim_id, vanish_info['coin_change'])
+
     def _check_reflect(self, group_data: Dict[str, Any], victim_id: str,
                        attacker_id: str, length_damage: int, hardness_damage: int) -> Dict[str, Any]:
         """
@@ -1608,11 +1627,7 @@ class NiuniuShop:
                             self._update_new_game_coins(group_id, uid, current_coins + amount)
 
                         # 同时处理护盾消耗（混沌风暴多人）
-                        for shield_info in ctx.extra.get('consume_shields', []):
-                            target_id = shield_info['user_id']
-                            if target_id in group_data:
-                                current = group_data[target_id].get('shield_charges', 0)
-                                group_data[target_id]['shield_charges'] = max(0, current - shield_info['amount'])
+                        self._consume_shields_batch(group_data, ctx.extra.get('consume_shields', []))
 
                         # 处理全属性交换
                         for full_swap in chaos_storm.get('full_swaps', []):
@@ -1811,11 +1826,7 @@ class NiuniuShop:
                         # backfire 结果不扣任何人（已在效果中处理）
 
                         # 消耗护盾
-                        for shield_info in ctx.extra.get('consume_shields', []):
-                            target_id = shield_info['user_id']
-                            if target_id in group_data:
-                                current = group_data[target_id].get('shield_charges', 0)
-                                group_data[target_id]['shield_charges'] = max(0, current - shield_info['amount'])
+                        self._consume_shields_batch(group_data, ctx.extra.get('consume_shields', []))
 
                         # 金币消失：所有受害者（包括发起人如果backfire）都可能失去金币
                         coin_vanish_victims = []
@@ -1827,13 +1838,8 @@ class NiuniuShop:
                         if result_type == 'backfire':
                             coin_vanish_victims.append(user_id)
 
-                        # 对每个受害者应用金币消失（优化：全部在内存中操作）
-                        for victim_id in coin_vanish_victims:
-                            vanish_info = self._apply_coin_vanish(group_id, victim_id, "牛牛黑洞", group_data)
-                            if vanish_info.get('vanished'):
-                                result_msg.append(vanish_info['message'])
-                                # 直接在内存中修改金币
-                                self._modify_coins_in_memory(group_data, victim_id, vanish_info['coin_change'])
+                        # 对每个受害者应用金币消失
+                        self._apply_coin_vanish_batch(group_id, coin_vanish_victims, "牛牛黑洞", group_data, result_msg)
 
                         # 一次性保存所有变更
                         self._save_niuniu_data(niuniu_data)
@@ -1890,12 +1896,8 @@ class NiuniuShop:
                         # 发起人自己也可能失去金币（自己归零了）
                         coin_vanish_victims.append(user_id)
 
-                        # 对每个受害者应用金币消失（优化：全部在内存中操作）
-                        for victim_id in coin_vanish_victims:
-                            vanish_info = self._apply_coin_vanish(group_id, victim_id, "月牙天冲", group_data)
-                            if vanish_info.get('vanished'):
-                                result_msg.append(vanish_info['message'])
-                                self._modify_coins_in_memory(group_data, victim_id, vanish_info['coin_change'])
+                        # 对每个受害者应用金币消失
+                        self._apply_coin_vanish_batch(group_id, coin_vanish_victims, "月牙天冲", group_data, result_msg)
 
                         # 一次性保存所有变更
                         self._save_niuniu_data(niuniu_data)
@@ -1954,11 +1956,7 @@ class NiuniuShop:
                                         result_msg.append(insurance_info['message'])
 
                         # 处理护盾消耗（多人）
-                        for shield_info in ctx.extra.get('consume_shields', []):
-                            target_id = shield_info['user_id']
-                            if target_id in group_data:
-                                current = group_data[target_id].get('shield_charges', 0)
-                                group_data[target_id]['shield_charges'] = max(0, current - shield_info['amount'])
+                        self._consume_shields_batch(group_data, ctx.extra.get('consume_shields', []))
 
                         # 金币消失：所有受害者和发起人都可能失去金币
                         coin_vanish_victims = []
@@ -1969,12 +1967,8 @@ class NiuniuShop:
                         # 发起人自己也可能失去金币（自己归零了）
                         coin_vanish_victims.append(user_id)
 
-                        # 对每个受害者应用金币消失（优化：全部在内存中操作）
-                        for victim_id in coin_vanish_victims:
-                            vanish_info = self._apply_coin_vanish(group_id, victim_id, "牛牛大自爆", group_data)
-                            if vanish_info.get('vanished'):
-                                result_msg.append(vanish_info['message'])
-                                self._modify_coins_in_memory(group_data, victim_id, vanish_info['coin_change'])
+                        # 对每个受害者应用金币消失
+                        self._apply_coin_vanish_batch(group_id, coin_vanish_victims, "牛牛大自爆", group_data, result_msg)
 
                         # 一次性保存所有变更
                         self._save_niuniu_data(niuniu_data)
@@ -2075,7 +2069,25 @@ class NiuniuShop:
                                 'applied_by': user_id
                             }
 
+                        # ===== 发起方立即获得目标快照的100%长度、硬度、资产 =====
+                        snapshot_length = hanxiao.get('snapshot_length', 0)
+                        snapshot_hardness = hanxiao.get('snapshot_hardness', 1)
+                        snapshot_asset = hanxiao.get('snapshot_asset', 0)
+
+                        # 加长度和硬度
+                        if user_id in group_data:
+                            group_data[user_id]['length'] = group_data[user_id].get('length', 0) + snapshot_length
+                            group_data[user_id]['hardness'] = min(100, group_data[user_id].get('hardness', 1) + snapshot_hardness)
+
                         self._save_niuniu_data(niuniu_data)
+
+                        # 加资产（金币）
+                        if snapshot_asset > 0:
+                            current_coins_after = self.get_user_coins(group_id, user_id)
+                            self.update_user_coins(group_id, user_id, current_coins_after + snapshot_asset)
+
+                        from niuniu_config import format_length
+                        result_msg.append(f"💰 掠夺成功！获得：+{format_length(snapshot_length)}长度 / +{snapshot_hardness}硬度 / +{snapshot_asset:,}金币")
 
                         # 设置final_price为0，已在extra中处理扣除
                         final_price = 0

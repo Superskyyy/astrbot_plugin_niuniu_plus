@@ -111,6 +111,13 @@ def _calculate_total_subscription_cost(base_price: int, user_coins: int, days: i
     return total_cost, remaining_coins, True
 
 
+def _filter_valid_users(group_data: dict, exclude_uid: str = None) -> list:
+    """从群组数据中筛选有效用户（有length字段的dict）"""
+    return [(uid, data) for uid, data in group_data.items()
+            if isinstance(data, dict) and 'length' in data
+            and (exclude_uid is None or uid != exclude_uid)]
+
+
 class EffectTrigger(str, Enum):
     """Effect trigger points"""
     # Dajiao triggers
@@ -1407,8 +1414,7 @@ class JiefuJipinEffect(ItemEffect):
             return ctx
 
         # 过滤有效用户（有长度数据的）
-        valid_users = [(uid, data) for uid, data in group_data.items()
-                       if isinstance(data, dict) and 'length' in data]
+        valid_users = _filter_valid_users(group_data)
 
         if len(valid_users) < 4:
             ctx.messages.append("❌ 群里牛牛不足4人，无法发动劫富济贫！")
@@ -2010,8 +2016,7 @@ class HundunFengbaoEffect(ItemEffect):
             return ctx
 
         # 过滤有效用户（有长度数据的）
-        valid_users = [(uid, data) for uid, data in group_data.items()
-                       if isinstance(data, dict) and 'length' in data]
+        valid_users = _filter_valid_users(group_data)
 
         if len(valid_users) < HundunFengbaoConfig.MIN_PLAYERS:
             ctx.messages.append(f"❌ 群里牛牛不足{HundunFengbaoConfig.MIN_PLAYERS}人，风暴刮不起来！")
@@ -2562,8 +2567,7 @@ class HeidongEffect(ItemEffect):
             return ctx
 
         # 过滤有效用户（有长度数据的）
-        valid_users = [(uid, data) for uid, data in group_data.items()
-                       if isinstance(data, dict) and 'length' in data]
+        valid_users = _filter_valid_users(group_data)
 
         if len(valid_users) < HeidongConfig.MIN_PLAYERS:
             ctx.messages.append(f"❌ 群里牛牛不足{HeidongConfig.MIN_PLAYERS}人，黑洞无法形成！")
@@ -2818,8 +2822,7 @@ class YueyaTianchongEffect(ItemEffect):
             return ctx
 
         # 过滤有效用户（有长度数据的，排除自己）
-        valid_targets = [(uid, data) for uid, data in group_data.items()
-                         if isinstance(data, dict) and 'length' in data and uid != ctx.user_id]
+        valid_targets = _filter_valid_users(group_data, exclude_uid=ctx.user_id)
 
         if len(valid_targets) < 1:
             ctx.messages.append("❌ 群里没有其他牛牛可以开炮！")
@@ -3010,8 +3013,7 @@ class DazibaoEffect(ItemEffect):
             return ctx
 
         # 过滤有效用户（有长度数据的，排除自己），按长度排序
-        valid_users = [(uid, data) for uid, data in group_data.items()
-                       if isinstance(data, dict) and 'length' in data and uid != ctx.user_id]
+        valid_users = _filter_valid_users(group_data, exclude_uid=ctx.user_id)
 
         if len(valid_users) < 1:
             ctx.messages.append("❌ 群里没有其他牛牛可以炸！")
@@ -3653,8 +3655,7 @@ class JunfukaEffect(ItemEffect):
             return ctx
 
         # 过滤有效用户（有长度数据的）
-        all_valid_users = [(uid, data) for uid, data in group_data.items()
-                          if isinstance(data, dict) and 'length' in data]
+        all_valid_users = _filter_valid_users(group_data)
 
         if len(all_valid_users) < JunfukaConfig.MIN_PLAYERS:
             ctx.messages.append(f"❌ 群里牛牛不足{JunfukaConfig.MIN_PLAYERS}人，无法发动均富！")
@@ -3933,17 +3934,19 @@ class HanxiaoWubudianEffect(ItemEffect):
         damage_per_time_hardness = int(target_data.get('hardness', 1) * HanxiaoWubudianConfig.DEBUFF_DAMAGE_PERCENT)
         damage_per_time_asset = int(target_total_asset * HanxiaoWubudianConfig.DEBUFF_DAMAGE_PERCENT)
 
-        # 生成消息（只施加含笑五步癫，不立即修改目标长度/硬度）
+        # 生成消息
         ctx.messages.extend([
             "😈 ══ 含笑五步癫 ══ 😈",
             random.choice(HanxiaoWubudianConfig.SUCCESS_TEXTS).format(user=nickname, target=target_name),
             f"💸 消耗资产：{asset_consume:,}（金币{int(coins_to_deduct):,} + 股票{shares_to_sell}股）",
             "",
-            random.choice(HanxiaoWubudianConfig.DEBUFF_TEXTS).format(target=target_name),
+            f"🎯 立即掠夺 {target_name} 的全部属性！",
             f"📊 快照记录（{target_name}当前状态）：",
             f"   长度：{format_length(target_data.get('length', 0))}",
             f"   硬度：{target_data.get('hardness', 1)}",
             f"   资产：{target_coins}币+{target_shares}股={target_total_asset:,}",
+            "",
+            random.choice(HanxiaoWubudianConfig.DEBUFF_TEXTS).format(target=target_name),
             f"🤪 含笑五步癫预览：每走一步损失约 {damage_per_time_length}cm / {damage_per_time_hardness}硬 / {damage_per_time_asset}资产",
             "═══════════════════"
         ])
