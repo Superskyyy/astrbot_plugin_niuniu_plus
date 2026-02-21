@@ -3923,20 +3923,26 @@ class HanxiaoWubudianEffect(ItemEffect):
         damage_per_time_hardness = int(target_data.get('hardness', 1) * HanxiaoWubudianConfig.DEBUFF_DAMAGE_PERCENT)
         damage_per_time_asset = int(target_total_asset * HanxiaoWubudianConfig.DEBUFF_DAMAGE_PERCENT)
 
+        # 计算第一步转移给攻击方的收益
+        first_step_length = damage_per_time_length
+        first_step_hardness = damage_per_time_hardness
+        first_step_asset = damage_per_time_asset
+
         # 生成消息
         ctx.messages.extend([
             "😈 ══ 含笑五步癫 ══ 😈",
             random.choice(HanxiaoWubudianConfig.SUCCESS_TEXTS).format(user=nickname, target=target_name),
-            f"💸 消耗资产：{asset_consume:,}（金币{int(coins_to_deduct):,} + 股票{shares_to_sell}股）",
+            f"💸 自爆消耗：全部资产 {asset_consume:,}（金币{int(coins_to_deduct):,} + 股票{shares_to_sell}股）",
             "",
-            f"🎯 立即掠夺 {target_name} 的全部属性！",
             f"📊 快照记录（{target_name}当前状态）：",
             f"   长度：{format_length(target_data.get('length', 0))}",
             f"   硬度：{target_data.get('hardness', 1)}",
             f"   资产：{target_coins}币+{target_shares}股={target_total_asset:,}",
             "",
             random.choice(HanxiaoWubudianConfig.DEBUFF_TEXTS).format(target=target_name),
-            f"🤪 含笑五步癫预览：每走一步损失约 {damage_per_time_length}cm / {damage_per_time_hardness}硬 / {damage_per_time_asset}资产",
+            f"🤪 每步损失约 {damage_per_time_length}cm / {damage_per_time_hardness}硬 / {damage_per_time_asset}资产",
+            f"💰 第1步损失将转移给 {nickname}（+{first_step_length}cm / +{first_step_hardness}硬 / +{first_step_asset:,}资产）",
+            f"🔥 第2-5步损失直接销毁",
             "═══════════════════"
         ])
 

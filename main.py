@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.28.2")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.29.0")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -552,6 +552,33 @@ class NiuniuPlugin(Star):
 
         actual_asset_deducted = actual_coins_deducted + shares_sold * stock_price
 
+        # 判断是否是第一步（转移给攻击方）
+        step = HanxiaoWubudianConfig.DEBUFF_TIMES - remaining + 1
+        is_first_step = (step == 1)
+        applied_by = huagu_debuff.get('applied_by')
+
+        # 第一步：将损失转移给攻击方
+        if is_first_step and applied_by and applied_by != user_id:
+            attacker_data = self.get_user_data(group_id, applied_by)
+            if attacker_data:
+                # 转移长度和硬度
+                new_atk_length = attacker_data.get('length', 0) + length_damage
+                new_atk_hardness = min(100, attacker_data.get('hardness', 1) + hardness_damage)
+                self.update_user_data(group_id, applied_by, {
+                    'length': new_atk_length,
+                    'hardness': new_atk_hardness,
+                })
+                # 转移资产（金币）
+                if asset_damage > 0:
+                    atk_coins = self.shop.get_user_coins(group_id, applied_by)
+                    self.shop.update_user_coins(group_id, applied_by, atk_coins + asset_damage)
+
+                atk_nickname = attacker_data.get('nickname', applied_by)
+                messages.append(
+                    f"💰 【含笑五步癫·转移】第1步损失转移给 {atk_nickname}："
+                    f"+{length_damage}cm / +{hardness_damage}硬 / +{asset_damage:,}资产"
+                )
+
         # 更新剩余次数
         new_remaining = remaining - 1
         if new_remaining <= 0:
@@ -563,11 +590,10 @@ class NiuniuPlugin(Star):
             })
             self.shop.update_user_coins(group_id, user_id, new_coins)
 
-            # 生成消息（第5步 = 最后一步）
+            # 生成消息（最后一步）
             asset_loss_str = f"{actual_coins_deducted}币"
             if shares_sold > 0:
                 asset_loss_str += f"+{shares_sold}股"
-            step = HanxiaoWubudianConfig.DEBUFF_TIMES  # 第5步
             messages.append(random.choice(HanxiaoWubudianConfig.DEBUFF_TRIGGER_TEXTS).format(
                 nickname=nickname,
                 length_loss=length_damage,
@@ -591,7 +617,6 @@ class NiuniuPlugin(Star):
             asset_loss_str = f"{actual_coins_deducted}币"
             if shares_sold > 0:
                 asset_loss_str += f"+{shares_sold}股"
-            step = HanxiaoWubudianConfig.DEBUFF_TIMES - new_remaining  # 当前是第几步
             messages.append(random.choice(HanxiaoWubudianConfig.DEBUFF_TRIGGER_TEXTS).format(
                 nickname=nickname,
                 length_loss=length_damage,

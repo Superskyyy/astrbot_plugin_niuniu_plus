@@ -2069,25 +2069,7 @@ class NiuniuShop:
                                 'applied_by': user_id
                             }
 
-                        # ===== 发起方立即获得目标快照的100%长度、硬度、资产 =====
-                        snapshot_length = hanxiao.get('snapshot_length', 0)
-                        snapshot_hardness = hanxiao.get('snapshot_hardness', 1)
-                        snapshot_asset = hanxiao.get('snapshot_asset', 0)
-
-                        # 加长度和硬度
-                        if user_id in group_data:
-                            group_data[user_id]['length'] = group_data[user_id].get('length', 0) + snapshot_length
-                            group_data[user_id]['hardness'] = min(100, group_data[user_id].get('hardness', 1) + snapshot_hardness)
-
                         self._save_niuniu_data(niuniu_data)
-
-                        # 加资产（金币）
-                        if snapshot_asset > 0:
-                            current_coins_after = self.get_user_coins(group_id, user_id)
-                            self.update_user_coins(group_id, user_id, current_coins_after + snapshot_asset)
-
-                        from niuniu_config import format_length
-                        result_msg.append(f"💰 掠夺成功！获得：+{format_length(snapshot_length)}长度 / +{snapshot_hardness}硬度 / +{snapshot_asset:,}金币")
 
                         # 设置final_price为0，已在extra中处理扣除
                         final_price = 0
