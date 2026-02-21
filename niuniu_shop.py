@@ -283,12 +283,12 @@ class NiuniuShop:
         user_data['coins'] = round(current_coins + delta)
 
     def _calculate_purchase_tax(self, user_coins: float, item_price: int) -> int:
-        """计算购买消费税：用户金币 × 道具价格位数%
+        """计算购买消费税：用户金币 × 道具价格位数/2%
 
-        税率规则：几位数就是%几
-        - 100（3位数）→ 3%税率
-        - 1000（4位数）→ 4%税率
-        - 10000（5位数）→ 5%税率
+        税率规则：几位数的一半就是%几
+        - 100（3位数）→ 1.5%税率
+        - 1000（4位数）→ 2%税率
+        - 10000（5位数）→ 2.5%税率
 
         Args:
             user_coins: 用户当前金币总额
@@ -301,8 +301,8 @@ class NiuniuShop:
             return 0
         # 计算价格的位数
         digit_count = len(str(item_price))
-        # 税率 = 位数%
-        tax_rate = digit_count / 100.0
+        # 税率 = 位数/2%
+        tax_rate = digit_count / 200.0
         # 计算税额
         tax = int(user_coins * tax_rate)
         return tax
@@ -930,7 +930,7 @@ class NiuniuShop:
                 # 显示消费税信息
                 if purchase_tax > 0:
                     digit_count = len(str(price_per_buy))
-                    result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
+                    result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count/2}%税率）")
 
                 # 扣除金币（含税）
                 self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
@@ -1009,7 +1009,7 @@ class NiuniuShop:
                     # 显示消费税信息
                     if purchase_tax > 0:
                         digit_count = len(str(price_per_buy))
-                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
+                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count/2}%税率）")
 
                     # 扣除金币（含税）
                     self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
@@ -1108,7 +1108,7 @@ class NiuniuShop:
                     purchase_tax, tax_list = self._calculate_batch_purchase_taxes(user_coins, price_per_buy, actual_buy_count)
                     if purchase_tax > 0:
                         digit_count = len(str(price_per_buy))
-                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
+                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count/2}%税率）")
 
                     # 扣除金币（含税）
                     total_cost = price_per_buy * actual_buy_count
@@ -1230,7 +1230,7 @@ class NiuniuShop:
 
                     if purchase_tax > 0:
                         digit_count = len(str(price_per_buy))
-                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
+                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count/2}%税率）")
                     result_msg.append(f"═══════════════════")
 
                     # 股市钩子
@@ -1363,7 +1363,7 @@ class NiuniuShop:
                     purchase_tax, tax_list = self._calculate_batch_purchase_taxes(user_coins, price_per_buy, successfully_bought)
                     if purchase_tax > 0:
                         digit_count = len(str(price_per_buy))
-                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
+                        result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count/2}%税率）")
 
                     # 扣除金币（只扣除实际成功购买的次数，含税）
                     total_cost = price_per_buy * successfully_bought
@@ -2156,7 +2156,7 @@ class NiuniuShop:
             # 显示消费税信息
             if purchase_tax > 0:
                 digit_count = len(str(int(final_price)))
-                result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count}%税率）")
+                result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count/2}%税率）")
 
             # 扣除金币（道具价格+消费税，加上保险理赔）
             target_coins = user_coins - total_cost_with_tax + insurance_payout

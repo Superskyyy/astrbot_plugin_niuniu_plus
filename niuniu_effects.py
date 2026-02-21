@@ -73,7 +73,7 @@ def _calculate_subscription_daily_price(base_price: int, user_coins: int) -> int
 
     # 计算基础价的位数
     digits = len(str(base_price))
-    tax_rate = digits / 100.0  # 几位数就是%几
+    tax_rate = digits / 200.0  # 几位数的一半就是%几
 
     # 动态价格 = 基础价 + 用户金币 × 税率
     dynamic_price = base_price + int(user_coins * tax_rate)
