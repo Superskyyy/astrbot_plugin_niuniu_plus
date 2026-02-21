@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.26.2")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.27.1")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -3774,6 +3774,409 @@ class NiuniuPlugin(Star):
         # 今日拜年次数
         result_lines.append(self.niuniu_texts['bainian']['remaining'].format(
             count=bainian_count + 1, limit=BainianConfig.DAILY_LIMIT
+        ))
+
+        result_lines.append("═══════════════════")
+
+        yield event.plain_result("\n".join(result_lines))
+
+        # 含笑五步癫触发
+        huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
+        for msg_text in huagu_msgs:
+            yield event.plain_result(msg_text)
+
+    async def _bainian_all(self, event):
+        """牛牛拜年 所有人 - 一次性拜年到今日上限并汇总结算"""
+        from niuniu_config import BainianConfig
+
+        group_id = str(event.message_obj.group_id)
+        user_id = str(event.get_sender_id())
+        nickname = event.get_sender_name()
+
+        group_data = self.get_group_data(group_id)
+        if not group_data.get('plugin_enabled', False):
+            yield event.plain_result("❌ 插件未启用")
+            return
+
+        user_data = self.get_user_data(group_id, user_id)
+        if not user_data:
+            yield event.plain_result(self.niuniu_texts['bainian']['not_registered'].format(nickname=nickname))
+            return
+
+        # 获取当前日期（上海时区）
+        tz = pytz.timezone(TIMEZONE)
+        today = datetime.now(tz).strftime('%Y-%m-%d')
+
+        # 检查每日重置
+        bainian_date = user_data.get('bainian_date', '')
+        if bainian_date != today:
+            self.update_user_data(group_id, user_id, {
+                'bainian_date': today,
+                'bainian_count': 0,
+                'bainian_targets': [],
+            })
+            user_data = self.get_user_data(group_id, user_id)
+
+        bainian_count = user_data.get('bainian_count', 0)
+        bainian_targets = list(user_data.get('bainian_targets', []))
+
+        if bainian_count >= BainianConfig.DAILY_LIMIT:
+            yield event.plain_result(self.niuniu_texts['bainian']['daily_limit'].format(count=bainian_count))
+            return
+
+        # 查找所有可拜年的目标（已注册、非自己、今天未拜访过）
+        all_targets = []
+        for uid, udata in group_data.items():
+            if (isinstance(udata, dict) and 'length' in udata
+                    and uid != user_id and uid not in bainian_targets):
+                all_targets.append(uid)
+
+        if not all_targets:
+            yield event.plain_result("❌ 群里没有可以拜年的牛友了！今天已经拜遍了~")
+            return
+
+        random.shuffle(all_targets)
+        remaining = BainianConfig.DAILY_LIMIT - bainian_count
+        targets_to_visit = all_targets[:remaining]
+
+        # 记录初始状态，用于计算总变化
+        initial_data = self.get_user_data(group_id, user_id)
+        initial_length = initial_data['length']
+        initial_hardness = initial_data['hardness']
+        initial_coins = initial_data.get('coins', 0)
+
+        # 结算累计
+        visited_count = 0
+        special_events_summary = []
+        fu_cards_obtained = []
+        fu_complete_text = ""
+        visit_details = []
+
+        for target_id in targets_to_visit:
+            # 每次迭代重新读取最新数据
+            user_data = self.get_user_data(group_id, user_id)
+            target_data = self.get_user_data(group_id, target_id)
+            if not target_data:
+                continue
+
+            target_name = target_data.get('nickname', target_id)
+
+            # === 计算基础奖励 ===
+            sender_length = random.randint(BainianConfig.SENDER_LENGTH_MIN, BainianConfig.SENDER_LENGTH_MAX)
+            sender_coins = random.randint(BainianConfig.SENDER_COINS_MIN, BainianConfig.SENDER_COINS_MAX)
+            sender_hardness = 1 if random.random() < BainianConfig.SENDER_HARDNESS_CHANCE else 0
+
+            target_length = random.randint(BainianConfig.TARGET_LENGTH_MIN, BainianConfig.TARGET_LENGTH_MAX)
+            target_coins = random.randint(BainianConfig.TARGET_COINS_MIN, BainianConfig.TARGET_COINS_MAX)
+            target_hardness = 1 if random.random() < BainianConfig.TARGET_HARDNESS_CHANCE else 0
+
+            # === 特殊事件 ===
+            special_triggered = False
+            chosen_event = None
+            swap_lengths = False
+
+            if random.random() < BainianConfig.SPECIAL_EVENT_CHANCE:
+                total_weight = sum(e['weight'] for e in BainianConfig.SPECIAL_EVENTS)
+                rand_val = random.random() * total_weight
+                cumulative = 0
+                for evt in BainianConfig.SPECIAL_EVENTS:
+                    cumulative += evt['weight']
+                    if rand_val < cumulative:
+                        chosen_event = evt
+                        break
+
+                if chosen_event:
+                    special_triggered = True
+                    eid = chosen_event['id']
+
+                    if eid == 'niuqi_chongtian':
+                        extra_length = random.randint(chosen_event['both_length_min'], chosen_event['both_length_max'])
+                        extra_coins = random.randint(chosen_event['both_coins_min'], chosen_event['both_coins_max'])
+                        sender_length += extra_length
+                        sender_coins += extra_coins
+                        target_length += extra_length
+                        target_coins += extra_coins
+
+                    elif eid == 'hongbao_yu':
+                        extra_coins = random.randint(chosen_event['both_coins_min'], chosen_event['both_coins_max'])
+                        sender_coins += extra_coins
+                        target_coins += extra_coins
+
+                    elif eid == 'nianshou_laixi':
+                        length_loss = random.randint(chosen_event['both_length_min'], chosen_event['both_length_max'])
+                        hardness_gain = random.randint(chosen_event['both_hardness_min'], chosen_event['both_hardness_max'])
+                        sender_length += length_loss
+                        target_length += length_loss
+                        sender_hardness += hardness_gain
+                        target_hardness += hardness_gain
+
+                    elif eid == 'fuxing_gaozhao':
+                        sender_length *= 2
+                        sender_coins *= 2
+                        sender_hardness *= 2
+
+                    elif eid == 'bai_cuo_men':
+                        sender_length = 0
+                        sender_coins = 0
+                        sender_hardness = 0
+                        target_length *= 2
+                        target_coins *= 2
+                        target_hardness *= 2
+
+                    elif eid == 'caishen_dao':
+                        extra_coins = random.randint(chosen_event['both_coins_min'], chosen_event['both_coins_max'])
+                        sender_coins += extra_coins
+                        target_coins += extra_coins
+
+                    elif eid == 'tuanyuan_fan':
+                        all_users_data = self.get_group_data(group_id)
+                        valid_users = [
+                            (uid, data) for uid, data in all_users_data.items()
+                            if isinstance(data, dict) and 'length' in data
+                            and uid != user_id and uid != target_id
+                        ]
+                        count = min(
+                            random.randint(chosen_event['group_count_min'], chosen_event['group_count_max']),
+                            len(valid_users)
+                        )
+                        if count > 0:
+                            lucky_users = random.sample(valid_users, count)
+                            for uid, udata in lucky_users:
+                                gain = random.randint(chosen_event['group_length_min'], chosen_event['group_length_max'])
+                                self.update_user_data(group_id, uid, {
+                                    'length': udata['length'] + gain
+                                })
+                        else:
+                            special_triggered = False
+
+                    elif eid == 'niu_zhuan_qiankun':
+                        s_len = user_data['length']
+                        t_len = target_data['length']
+                        if abs(s_len - t_len) > chosen_event['length_diff_threshold']:
+                            swap_lengths = True
+                        else:
+                            special_triggered = False
+
+                    elif eid == 'baozu_jingniu':
+                        length_loss = random.randint(chosen_event['both_length_min'], chosen_event['both_length_max'])
+                        sender_length += length_loss
+                        target_length += length_loss
+
+                    elif eid == 'yasuiqian':
+                        sender_total_coins = user_data.get('coins', 0)
+                        yasuiqian = int(sender_total_coins * chosen_event['percent'])
+                        yasuiqian = max(chosen_event['min_amount'], min(yasuiqian, chosen_event['max_amount']))
+                        sender_coins -= yasuiqian
+                        target_coins += yasuiqian
+
+            # 记录特殊事件
+            if special_triggered and chosen_event:
+                special_events_summary.append(f"{chosen_event['name']}→{target_name}")
+
+            # === 应用奖励 ===
+            if swap_lengths:
+                new_sender_length = target_data['length'] + sender_length
+                new_target_length = user_data['length'] + target_length
+            else:
+                new_sender_length = user_data['length'] + sender_length
+                new_target_length = target_data['length'] + target_length
+
+            new_sender_hardness = min(100, user_data['hardness'] + sender_hardness)
+            new_sender_coins = round(user_data.get('coins', 0) + sender_coins)
+
+            # 更新拜年追踪
+            bainian_count += 1
+            bainian_targets.append(target_id)
+
+            sender_updates = {
+                'length': new_sender_length,
+                'hardness': new_sender_hardness,
+                'coins': new_sender_coins,
+                'bainian_date': today,
+                'bainian_count': bainian_count,
+                'bainian_targets': bainian_targets,
+            }
+            self.update_user_data(group_id, user_id, sender_updates)
+
+            # 更新被拜者数据
+            new_target_hardness = min(100, target_data['hardness'] + target_hardness)
+            new_target_coins = round(target_data.get('coins', 0) + target_coins)
+            self.update_user_data(group_id, target_id, {
+                'length': new_target_length,
+                'hardness': new_target_hardness,
+                'coins': new_target_coins,
+            })
+
+            # 记录拜年明细
+            detail_parts = []
+            if swap_lengths:
+                swap_delta = (target_data['length'] - user_data['length']) + sender_length
+                detail_parts.append(f"🔄{'+' if swap_delta > 0 else ''}{swap_delta}cm")
+            elif sender_length != 0:
+                detail_parts.append(f"{'+' if sender_length > 0 else ''}{sender_length}cm")
+            if sender_coins != 0:
+                detail_parts.append(f"{'+' if sender_coins > 0 else ''}{sender_coins}💰")
+            if sender_hardness > 0:
+                detail_parts.append(f"+{sender_hardness}硬度")
+            detail_str = ', '.join(detail_parts) if detail_parts else "空手而归"
+            visit_details.append(f"  {target_name}：{detail_str}")
+
+            visited_count += 1
+
+            # === 集五福 ===
+            user_data_fu = self.get_user_data(group_id, user_id)
+            fu_already_completed = user_data_fu.get('bainian_fu_completed', False)
+
+            if not fu_already_completed and random.random() < BainianConfig.FU_DROP_CHANCE:
+                total_fu_weight = sum(f['weight'] for f in BainianConfig.FU_CARDS)
+                rand_fu = random.random() * total_fu_weight
+                cumulative_fu = 0
+                chosen_fu = None
+                for fu in BainianConfig.FU_CARDS:
+                    cumulative_fu += fu['weight']
+                    if rand_fu < cumulative_fu:
+                        chosen_fu = fu
+                        break
+
+                if chosen_fu:
+                    fu_name = chosen_fu['name']
+                    fu_emoji = chosen_fu['emoji']
+
+                    user_data_fresh = self.get_user_data(group_id, user_id)
+                    items = user_data_fresh.get('items', {})
+
+                    if items.get(fu_name, 0) > 0:
+                        # 重复的福，转化为金币
+                        dup_coins = BainianConfig.FU_DUPLICATE_COINS
+                        self.update_user_data(group_id, user_id, {
+                            'coins': round(user_data_fresh.get('coins', 0) + dup_coins)
+                        })
+                        fu_cards_obtained.append(f"  {fu_emoji}{fu_name}（重复，+{dup_coins}金币）")
+                    else:
+                        # 新的福！
+                        items[fu_name] = 1
+                        reward_text = ""
+                        reward_updates = {'items': items}
+                        if 'reward_coins' in chosen_fu:
+                            reward_updates['coins'] = round(user_data_fresh.get('coins', 0) + chosen_fu['reward_coins'])
+                            reward_text = f"+{chosen_fu['reward_coins']}金币"
+                        if 'reward_hardness' in chosen_fu:
+                            reward_updates['hardness'] = min(100, user_data_fresh.get('hardness', 1) + chosen_fu['reward_hardness'])
+                            reward_text = f"+{chosen_fu['reward_hardness']}硬度"
+                        if 'reward_length' in chosen_fu:
+                            reward_updates['length'] = user_data_fresh.get('length', 0) + chosen_fu['reward_length']
+                            reward_text = f"+{chosen_fu['reward_length']}cm"
+
+                        self.update_user_data(group_id, user_id, reward_updates)
+                        fu_cards_obtained.append(f"  {fu_emoji}{fu_name}（{reward_text}）")
+
+                        # 检查是否集齐五福
+                        user_data_check = self.get_user_data(group_id, user_id)
+                        items_check = user_data_check.get('items', {})
+                        all_fu_names = [f['name'] for f in BainianConfig.FU_CARDS]
+
+                        if all(items_check.get(fn, 0) > 0 for fn in all_fu_names):
+                            # 集齐五福！发放大奖并清除福卡
+                            for fn in all_fu_names:
+                                if fn in items_check:
+                                    del items_check[fn]
+
+                            # 计算50%总资产奖励（金币 + 股票市值）
+                            current_coins = user_data_check.get('coins', 0)
+                            stock = NiuniuStock.get()
+                            user_shares = stock.get_holdings(group_id, user_id)
+                            stock_price = stock.get_price(group_id)
+                            stock_value = user_shares * stock_price
+                            total_asset = max(0, current_coins) + stock_value
+                            asset_bonus = round(total_asset * BainianConfig.FU_ASSET_BONUS_PERCENT)
+                            total_coin_reward = BainianConfig.FU_COMPLETE_COINS + asset_bonus
+
+                            self.update_user_data(group_id, user_id, {
+                                'items': items_check,
+                                'length': user_data_check['length'] + BainianConfig.FU_COMPLETE_LENGTH,
+                                'hardness': min(100, user_data_check['hardness'] + BainianConfig.FU_COMPLETE_HARDNESS),
+                                'coins': round(current_coins + total_coin_reward),
+                                'bainian_fu_completed': True,
+                            })
+
+                            fu_complete_text = self.niuniu_texts['bainian']['fu_complete'].format(
+                                length=BainianConfig.FU_COMPLETE_LENGTH,
+                                hardness=BainianConfig.FU_COMPLETE_HARDNESS,
+                                base_coins=BainianConfig.FU_COMPLETE_COINS,
+                                asset_bonus=asset_bonus,
+                                total_coins=total_coin_reward,
+                            )
+
+        if visited_count == 0:
+            yield event.plain_result("❌ 没有找到可以拜年的牛友！")
+            return
+
+        # === 构建汇总输出 ===
+        result_lines = ["🧧 ══ 牛牛群拜年 ══ 🧧"]
+        result_lines.append(f"🏃 {nickname} 挨家挨户拜年，一口气拜了 {visited_count} 家！")
+        result_lines.append("")
+
+        # 拜年明细
+        result_lines.append("📋 拜年明细：")
+        result_lines.extend(visit_details)
+        result_lines.append("")
+
+        # 计算实际总变化（包含所有效果：基础奖励、特殊事件、福卡奖励、五福大奖等）
+        final_data = self.get_user_data(group_id, user_id)
+        total_length_change = final_data['length'] - initial_length
+        total_hardness_change = final_data['hardness'] - initial_hardness
+        total_coins_change = round(final_data.get('coins', 0) - initial_coins)
+
+        total_parts = []
+        if total_length_change != 0:
+            total_parts.append(f"{'+' if total_length_change > 0 else ''}{total_length_change}cm")
+        if total_coins_change != 0:
+            total_parts.append(f"{'+' if total_coins_change > 0 else ''}{total_coins_change}金币")
+        if total_hardness_change > 0:
+            total_parts.append(f"+{total_hardness_change}硬度")
+        if total_parts:
+            result_lines.append(f"📦 总计收获：{', '.join(total_parts)}")
+        else:
+            result_lines.append("📦 总计收获：竟然空手而归了！")
+
+        # 特殊事件汇总
+        if special_events_summary:
+            result_lines.append("")
+            result_lines.append(f"✨ 触发事件：{'、'.join(special_events_summary)}")
+
+        # 集福信息
+        if fu_cards_obtained:
+            result_lines.append("")
+            result_lines.append("🎴 获得福卡：")
+            result_lines.extend(fu_cards_obtained)
+
+        if fu_complete_text:
+            result_lines.append("")
+            result_lines.append(fu_complete_text)
+
+        # 集福进度（未集齐时显示）
+        user_data_final = self.get_user_data(group_id, user_id)
+        if not user_data_final.get('bainian_fu_completed', False):
+            items_final = user_data_final.get('items', {})
+            all_fu = BainianConfig.FU_CARDS
+            progress_parts = []
+            fu_count = 0
+            for fu in all_fu:
+                if items_final.get(fu['name'], 0) > 0:
+                    progress_parts.append(f"{fu['emoji']}✅")
+                    fu_count += 1
+                else:
+                    progress_parts.append(f"{fu['emoji']}❌")
+
+            if fu_count > 0:
+                result_lines.append("")
+                result_lines.append(self.niuniu_texts['bainian']['fu_progress'].format(
+                    progress=" ".join(progress_parts), count=fu_count
+                ))
+
+        # 今日拜年次数
+        result_lines.append(self.niuniu_texts['bainian']['remaining'].format(
+            count=bainian_count, limit=BainianConfig.DAILY_LIMIT
         ))
 
         result_lines.append("═══════════════════")
