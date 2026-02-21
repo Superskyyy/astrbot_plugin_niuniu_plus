@@ -352,6 +352,19 @@ class NiuniuStock:
         with open(STOCK_DATA_FILE, 'w', encoding='utf-8') as f:
             json.dump(self._data, f, ensure_ascii=False, indent=2)
 
+    @staticmethod
+    def _clamp_price(price: float) -> float:
+        """限制价格在配置范围内并取两位小数"""
+        return max(STOCK_CONFIG["min_price"],
+                   min(STOCK_CONFIG["max_price"], round(price, 2)))
+
+    @staticmethod
+    def _append_event(data: Dict[str, Any], event: Dict[str, Any]):
+        """记录事件并保留最近50条"""
+        data.setdefault("events", []).append(event)
+        if len(data["events"]) > 50:
+            data["events"] = data["events"][-50:]
+
     def _get_group_data(self, group_id: str) -> Dict[str, Any]:
         """获取群组股市数据，不存在则初始化"""
         group_id = str(group_id)
@@ -401,13 +414,7 @@ class NiuniuStock:
             "desc": desc,
         }
 
-        if "events" not in data:
-            data["events"] = []
-        data["events"].append(event)
-
-        # 只保留最近50条
-        if len(data["events"]) > 50:
-            data["events"] = data["events"][-50:]
+        self._append_event(data, event)
 
     def _update_price(self, group_id: str, event_type: str,
                       direction: int, magnitude: float = 1.0,
@@ -444,12 +451,7 @@ class NiuniuStock:
 
         # 计算新价格
         change_pct = volatility * actual_direction
-        new_price = current_price * (1 + change_pct)
-
-        # 限制价格范围
-        new_price = max(STOCK_CONFIG["min_price"],
-                       min(STOCK_CONFIG["max_price"], new_price))
-        new_price = round(new_price, 2)
+        new_price = self._clamp_price(current_price * (1 + change_pct))
 
         data["price"] = new_price
         data["last_update"] = time.time()
@@ -505,8 +507,7 @@ class NiuniuStock:
 
         # 先计算买入对价格的影响（用实际购买金额计算，先涨价再成交，防止套利）
         impact = min(0.02, 0.001 + actual_coins / 10000 * 0.01)  # 0.1%-2%
-        new_price = old_price * (1 + impact)
-        new_price = min(STOCK_CONFIG["max_price"], round(new_price, 2))
+        new_price = self._clamp_price(old_price * (1 + impact))
         price_change_pct = impact * 100
 
         # 按涨后的价格成交
@@ -651,8 +652,7 @@ class NiuniuStock:
 
         if coins > 0:
             # 救市：推高股价
-            new_price = old_price * (1 + impact)
-            new_price = min(STOCK_CONFIG["max_price"], round(new_price, 2))
+            new_price = self._clamp_price(old_price * (1 + impact))
             direction = 1
             if is_player:
                 action_texts = self.PLAYER_BAILOUT_TEXTS
@@ -665,8 +665,7 @@ class NiuniuStock:
             change_str = f"+{impact * 100:.2f}%"
         else:
             # 砸盘：压低股价
-            new_price = old_price * (1 - impact)
-            new_price = max(STOCK_CONFIG["min_price"], round(new_price, 2))
+            new_price = self._clamp_price(old_price * (1 - impact))
             direction = -1
             if is_player:
                 action_texts = self.PLAYER_DUMP_TEXTS
@@ -696,12 +695,7 @@ class NiuniuStock:
             "desc": random.choice(action_texts).format(name=event_nickname),
         }
 
-        if "events" not in data:
-            data["events"] = []
-        data["events"].append(event)
-
-        if len(data["events"]) > 50:
-            data["events"] = data["events"][-50:]
+        self._append_event(data, event)
 
         self._save_data()
 
@@ -841,8 +835,7 @@ class NiuniuStock:
         # 先计算卖出对价格的影响（用旧价估算金额）
         estimated_coins = shares * old_price
         impact = min(0.02, 0.001 + estimated_coins / 10000 * 0.01)  # 0.1%-2%
-        new_price = old_price * (1 - impact)
-        new_price = max(STOCK_CONFIG["min_price"], round(new_price, 2))
+        new_price = self._clamp_price(old_price * (1 - impact))
         price_change_pct = impact * 100
 
         # 按跌后的价格成交（先跌价再成交，防止套利）
@@ -1245,12 +1238,7 @@ def stock_hook(group_id: str,
         change_pct = vol * actual_direction
         data = stock._get_group_data(group_id)
         current_price = data.get("price", STOCK_CONFIG["base_price"])
-        new_price = current_price * (1 + change_pct)
-
-        # 限制价格范围
-        new_price = max(STOCK_CONFIG["min_price"],
-                       min(STOCK_CONFIG["max_price"], new_price))
-        new_price = round(new_price, 2)
+        new_price = NiuniuStock._clamp_price(current_price * (1 + change_pct))
 
         data["price"] = new_price
         data["last_update"] = time.time()
@@ -1308,13 +1296,7 @@ def stock_hook(group_id: str,
             "desc": desc,
         }
 
-        if "events" not in data:
-            data["events"] = []
-        data["events"].append(event)
-
-        # 只保留最近50条
-        if len(data["events"]) > 50:
-            data["events"] = data["events"][-50:]
+        NiuniuStock._append_event(data, event)
 
         stock._save_data()
 

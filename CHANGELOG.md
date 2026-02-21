@@ -1,5 +1,14 @@
 # Changelog
 
+## [v4.28.1] - 2026-02-21
+
+### 代码简化
+- **niuniu_stock.py**: 提取 `_clamp_price()` (6处) 和 `_append_event()` (3处) 公共方法，删除股市死代码
+- **niuniu_shop.py**: 提取 `_consume_shields_batch()` (3处) 和 `_apply_coin_vanish_batch()` (3处) 公共方法
+- **niuniu_effects.py**: 提取 `_filter_valid_users()` (6处) 公共函数，简化布尔赋值，删除死注释代码
+
+---
+
 ## [v4.28.0] - 2026-02-21
 
 ### 数值调整

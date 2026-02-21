@@ -304,13 +304,6 @@ class EffectManager:
                         sub_info["melon_trigger_date"] = today
                         modified = True
 
-                # 未来可以在这里添加其他订阅的每日重置逻辑
-                # elif sub_name == "other_subscription":
-                #     if "reset_date" not in sub_info or sub_info["reset_date"] != today:
-                #         sub_info["daily_count"] = 0
-                #         sub_info["reset_date"] = today
-                #         modified = True
-
             # 如果有修改，保存数据
             if modified:
                 self._save_subscriptions()
@@ -1447,16 +1440,13 @@ class JiefuJipinEffect(ItemEffect):
         # 计算抢夺数量（50%长度，20%硬度）
         steal_length = int(richest_length * JiefuJipinConfig.STEAL_LENGTH_PERCENT)
         steal_hardness = int(richest_hardness * JiefuJipinConfig.STEAL_HARDNESS_PERCENT)
-        if steal_length < 1:
-            steal_length = 1
-        if steal_hardness < 1:
-            steal_hardness = 1
+        steal_length = max(steal_length, 1)
+        steal_hardness = max(steal_hardness, 1)
 
         # 检查首富是否有护盾
-        richest_shielded = False
         richest_shield_charges = richest_data.get('shield_charges', 0)
-        if richest_shield_charges > 0:
-            richest_shielded = True
+        richest_shielded = richest_shield_charges > 0
+        if richest_shielded:
             # 记录需要消耗护盾
             ctx.extra['consume_shield'] = {
                 'user_id': richest_id,
@@ -2848,10 +2838,9 @@ class YueyaTianchongEffect(ItemEffect):
             damage = 1
 
         # 检查目标是否有护盾
-        target_shielded = False
         target_shield_charges = target_data.get('shield_charges', 0)
-        if target_shield_charges > 0:
-            target_shielded = True
+        target_shielded = target_shield_charges > 0
+        if target_shielded:
             ctx.extra['consume_shield'] = {
                 'user_id': target_id,
                 'amount': 1
