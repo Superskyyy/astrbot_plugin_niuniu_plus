@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.26.1")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.26.2")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -1979,6 +1979,17 @@ class NiuniuPlugin(Star):
         if extra_coins > 0:
             self.games.update_user_coins(group_id, user_id, extra_coins)
 
+        # ===== 触发 AFTER_DAJIAO 订阅效果（吃瓜群众等） =====
+        after_ctx = EffectContext(
+            group_id=group_id,
+            user_id=user_id,
+            length_change=total_change,
+            hardness_change=hardness_change,
+        )
+        after_ctx = self.effects.trigger(EffectTrigger.AFTER_DAJIAO, after_ctx, user_items)
+        if after_ctx.messages:
+            result_msgs.extend(after_ctx.messages)
+
         # 更新冷却时间（如果没有时间扭曲）
         last_actions = self._load_last_actions()
         if time_warp_triggered:
@@ -3363,6 +3374,14 @@ class NiuniuPlugin(Star):
     async def _bainian(self, event):
         """牛牛拜年 - 春节互动功能"""
         from niuniu_config import BainianConfig
+
+        # 检查是否是"所有人"批量模式
+        msg = event.message_str.strip()
+        bainian_suffix = msg[len("牛牛拜年"):].strip()
+        if "所有人" in bainian_suffix or "全体" in bainian_suffix:
+            async for result in self._bainian_all(event):
+                yield result
+            return
 
         group_id = str(event.message_obj.group_id)
         user_id = str(event.get_sender_id())
