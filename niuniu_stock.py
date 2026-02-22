@@ -1195,7 +1195,7 @@ def stock_hook(group_id: str,
 
         # 计算幅度系数：变化量越大，影响越大
         total_change = length_change + hardness_change * 10 + coins_change * 0.1
-        magnitude = min(3.0, 1.0 + abs(total_change) / 50)
+        magnitude = min(4.0, 1.0 + abs(total_change) / 50)
 
         # 计算涨跌概率
         if mean_reversion:
@@ -1205,8 +1205,8 @@ def stock_hook(group_id: str,
             base_price = STOCK_CONFIG["base_price"]
             deviation = (old_price - base_price) / base_price  # 偏离比例
 
-            # 偏离越大，回归力度越大（最高85%概率回归）
-            regression_strength = min(0.35, abs(deviation) * 0.5)
+            # 偏离越大，回归力度越大（最高75%概率回归）
+            regression_strength = min(0.25, abs(deviation) * 0.5)
 
             if deviation > 0:
                 # 股价偏高，倾向下跌回归
