@@ -220,14 +220,12 @@ class NiuniuGames:
             result_lines.append(stock_msg)
 
         yield event.plain_result("\n".join(result_lines))
-        
-        # 重置状态
-        user_data['is_rushing'] = False
-        user_data['last_rush_end_time'] = time.time()
-        
-        # 再次保存到文件
-        data.setdefault(group_id, {})[user_id] = user_data
-        self._save_data(data)
+
+        # 重置状态（用原子更新，避免覆盖其他命令并发保存的数据）
+        self.main.update_user_data(group_id, user_id, {
+            'is_rushing': False,
+            'last_rush_end_time': time.time()
+        })
     
     async def fly_plane(self, event: AstrMessageEvent):
         """飞机游戏 - 基于总资产（金币+股票）的百分比收益/损失"""
