@@ -369,8 +369,9 @@ FLY_PLANE_EVENTS = [
 # Rush (开冲) Configuration
 # =============================================================================
 class RushConfig:
-    COINS_PER_MINUTE = 1           # Coins earned per minute
-    MAX_COINS = 600                # Maximum base coins per rush (before bonus)
+    COINS_PER_MINUTE = 1           # Coins earned per minute (保底)
+    MAX_COINS = 600                # Maximum base coins per rush (保底上限)
+    RATE_PER_HOUR = 0.005         # 每小时收益率（总资产的0.5%）
 
 # =============================================================================
 # Shop Items Configuration

@@ -131,8 +131,20 @@ class NiuniuGames:
         # 超过最大时间按最大时间计算
         work_time = min(work_time, Cooldowns.RUSH_MAX_TIME)
 
-        # 计算金币（基础收益有上限）
-        base_coins = min(int(work_time / 60 * RushConfig.COINS_PER_MINUTE), RushConfig.MAX_COINS)
+        # 计算金币（百分比收益，保底固定收益）
+        from niuniu_stock import NiuniuStock
+        stock_inst = NiuniuStock.get()
+        user_shares = stock_inst.get_holdings(group_id, user_id)
+        stock_price = stock_inst.get_price(group_id)
+        stock_value = user_shares * stock_price
+        total_asset = user_data.get('coins', 0) + stock_value
+
+        hours_float = work_time / 3600
+        pct_coins = int(total_asset * RushConfig.RATE_PER_HOUR * hours_float)
+        floor_coins = min(int(work_time / 60 * RushConfig.COINS_PER_MINUTE), RushConfig.MAX_COINS)
+        base_coins = max(pct_coins, floor_coins)
+        used_pct = pct_coins >= floor_coins
+
         bonus_coins = 0
         bonus_msg = ""
 
@@ -189,8 +201,12 @@ class NiuniuGames:
         result_lines = [
             f"🎉 {nickname} 冲刺结束！",
             f"⏱️ 冲了 {minutes} 分钟",
-            f"💰 基础收益：{base_coins} 金币",
         ]
+        if used_pct:
+            pct_display = round(RushConfig.RATE_PER_HOUR * hours_float * 100, 2)
+            result_lines.append(f"💰 基础收益：{base_coins} 金币（总资产 {pct_display}%）")
+        else:
+            result_lines.append(f"💰 基础收益：{base_coins} 金币")
         if bonus_msg:
             result_lines.append(bonus_msg)
         result_lines.append(f"📊 总计：{total_coins} 金币")
