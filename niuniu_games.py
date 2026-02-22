@@ -140,7 +140,10 @@ class NiuniuGames:
         total_asset = user_data.get('coins', 0) + stock_value
 
         hours_float = work_time / 3600
-        pct_coins = int(total_asset * RushConfig.RATE_PER_HOUR * hours_float)
+        user_coins = user_data.get('coins', 0)
+        # 金币或总资产取max，防止新手总资产为0时收益为0
+        pct_base = max(user_coins, total_asset)
+        pct_coins = int(pct_base * RushConfig.RATE_PER_HOUR * hours_float)
         floor_coins = min(int(work_time / 60 * RushConfig.COINS_PER_MINUTE), RushConfig.MAX_COINS)
         base_coins = max(pct_coins, floor_coins)
         used_pct = pct_coins >= floor_coins
