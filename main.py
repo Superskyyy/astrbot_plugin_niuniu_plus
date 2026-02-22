@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.29.1")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.29.2")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -2466,18 +2466,24 @@ class NiuniuPlugin(Star):
 
                 # 处理金币下注（获胜方）
                 if bet_amount > 0:
-                    # 计算税收（复用股市税率）
-                    tax_amount, effective_rate, bracket_str = NiuniuStock.get()._calculate_tax(bet_amount, avg_coins)
-                    net_gain = bet_amount - tax_amount
-
-                    # 按原始下注额结算（输家金币不足则欠债）
-                    bet_tax_info = f"\n💸 赢得 {net_gain:.0f} 枚金币（税前 {bet_amount}，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
-                    if bracket_str and bracket_str != "免税":
-                        bet_tax_info += f"\n📊 税率明细：{bracket_str}"
-                    # 扣除输家金币（不足则欠债）
-                    self.modify_coins_cached(group_id, target_id, -bet_amount)
-                    # 增加赢家金币（扣税后）
-                    self.modify_coins_cached(group_id, user_id, int(net_gain))
+                    # 获取输家当前金币，不允许扣到负数
+                    target_coins = self.shop.get_user_coins(group_id, target_id)
+                    actual_bet = min(bet_amount, max(0, target_coins))
+                    if actual_bet > 0:
+                        # 计算税收（复用股市税率）
+                        tax_amount, effective_rate, bracket_str = NiuniuStock.get()._calculate_tax(actual_bet, avg_coins)
+                        net_gain = actual_bet - tax_amount
+                        bet_tax_info = f"\n💸 赢得 {net_gain:.0f} 枚金币（税前 {actual_bet}，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
+                        if bracket_str and bracket_str != "免税":
+                            bet_tax_info += f"\n📊 税率明细：{bracket_str}"
+                        if actual_bet < bet_amount:
+                            bet_tax_info += f"\n⚠️ {target_data['nickname']} 金币不足，实际赔付 {actual_bet} 枚（原赌注 {bet_amount}）"
+                        # 扣除输家金币（最多扣到0）
+                        self.modify_coins_cached(group_id, target_id, -actual_bet)
+                        # 增加赢家金币（扣税后）
+                        self.modify_coins_cached(group_id, user_id, int(net_gain))
+                    else:
+                        bet_tax_info = f"\n⚠️ {target_data['nickname']} 金币为0，无法赔付赌注"
 
                 text = random.choice(self.niuniu_texts['compare']['win']).format(
                     winner=nickname,
@@ -2584,16 +2590,23 @@ class NiuniuPlugin(Star):
 
                 # 处理金币下注（失败方）
                 if bet_amount > 0:
-                    # 按原始下注额结算（输家金币不足则欠债）
-                    tax_amount, effective_rate, bracket_str = NiuniuStock.get()._calculate_tax(bet_amount, avg_coins)
-                    net_gain = bet_amount - tax_amount
-                    bet_tax_info = f"\n💸 损失 {bet_amount} 枚金币（{target_data['nickname']} 获得 {net_gain:.0f} 枚，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
-                    if bracket_str and bracket_str != "免税":
-                        bet_tax_info += f"\n📊 税率明细：{bracket_str}"
-                    # 扣除自己金币（不足则欠债）
-                    self.modify_coins_cached(group_id, user_id, -bet_amount)
-                    # 增加赢家金币（扣税后）
-                    self.modify_coins_cached(group_id, target_id, int(net_gain))
+                    # 获取输家当前金币，不允许扣到负数
+                    user_coins_now = self.shop.get_user_coins(group_id, user_id)
+                    actual_bet = min(bet_amount, max(0, user_coins_now))
+                    if actual_bet > 0:
+                        tax_amount, effective_rate, bracket_str = NiuniuStock.get()._calculate_tax(actual_bet, avg_coins)
+                        net_gain = actual_bet - tax_amount
+                        bet_tax_info = f"\n💸 损失 {actual_bet} 枚金币（{target_data['nickname']} 获得 {net_gain:.0f} 枚，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
+                        if bracket_str and bracket_str != "免税":
+                            bet_tax_info += f"\n📊 税率明细：{bracket_str}"
+                        if actual_bet < bet_amount:
+                            bet_tax_info += f"\n⚠️ {nickname} 金币不足，实际赔付 {actual_bet} 枚（原赌注 {bet_amount}）"
+                        # 扣除自己金币（最多扣到0）
+                        self.modify_coins_cached(group_id, user_id, -actual_bet)
+                        # 增加赢家金币（扣税后）
+                        self.modify_coins_cached(group_id, target_id, int(net_gain))
+                    else:
+                        bet_tax_info = f"\n⚠️ {nickname} 金币为0，无法赔付赌注"
 
                 text = random.choice(self.niuniu_texts['compare']['lose']).format(
                     loser=nickname,
@@ -2826,21 +2839,6 @@ class NiuniuPlugin(Star):
             final_target = self.get_user_data(group_id, target_id)
             result_msg[2] = f"🗡️ {nickname}: {self.format_length(old_u_len)} → {self.format_length(final_user['length'])}"
             result_msg[3] = f"🛡️ {target_data['nickname']}: {self.format_length(old_t_len)} → {self.format_length(final_target['length'])}"
-
-            # ===== 赌注结算 =====
-            if bet_amount > 0:
-                if is_win:
-                    winnings = int(bet_amount * CompareBet.WINNER_MULTIPLIER)
-                    self.modify_coins_cached(group_id, user_id, winnings)
-                    bet_text = random.choice(self.niuniu_texts['compare'].get('bet_win', ['💰 赢得 {amount} 金币！'])).format(
-                        nickname=nickname, amount=winnings
-                    )
-                else:
-                    self.modify_coins_cached(group_id, user_id, -bet_amount)
-                    bet_text = random.choice(self.niuniu_texts['compare'].get('bet_lose', ['💸 失去 {amount} 金币'])).format(
-                        nickname=nickname, amount=bet_amount
-                    )
-                result_msg.append(bet_text)
 
             # ===== 连击提示 =====
             for msg in streak_msgs:
