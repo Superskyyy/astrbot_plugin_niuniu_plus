@@ -944,10 +944,10 @@ class NiuniuShop:
                 effect = self.main.effects.effects.get(selected_item['name'])
 
                 # 复杂道具列表（有特殊逻辑或动态效果，不支持批量购买）
-                # 移除了：祸水东引、上保险、牛牛反弹、巴黎牛家、赌徒骰子、穷牛一生（改为支持批量购买）
+                # 移除了：祸水东引、上保险、牛牛反弹、巴黎牛家、命运骰子、穷牛一生（改为支持批量购买）
                 complex_items = ['劫富济贫', '混沌风暴', '月牙天冲', '牛牛大自爆', '牛牛黑洞', '绝对值！', '牛牛寄生', '驱牛药', '牛牛均富/负卡', '含笑五步癫']
                 # 需要循环触发的道具（每次效果独立，不能简单乘以次数）
-                loop_trigger_items = ['祸水东引', '上保险', '牛牛反弹', '巴黎牛家', '赌徒骰子', '穷牛一生']
+                loop_trigger_items = ['祸水东引', '上保险', '牛牛反弹', '巴黎牛家', '命运骰子', '穷牛一生']
                 is_simple_item = selected_item['name'] not in complex_items
                 is_dunpai = selected_item['name'] == '牛牛盾牌'  # 牛牛盾牌支持批量购买但需特殊处理
                 is_chongchui = selected_item['name'] == '牛牛重锤'  # 牛牛重锤支持批量购买+指定目标
@@ -1014,7 +1014,7 @@ class NiuniuShop:
                     # 扣除金币（含税）
                     self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
 
-                    # 股市钩子 - 批量购买也要影响股价
+                    # 妖牛市钩子 - 批量购买也要影响牛价
                     item_name = selected_item.get('name', '')
                     stock_msg = None
                     if effect and hasattr(effect, 'stock_config') and effect.stock_config:
@@ -1035,7 +1035,7 @@ class NiuniuShop:
                             length_change=total_length_change,
                             hardness_change=total_hardness_change,
                             volatility=(0.001, 0.005),
-                            templates={"plain": ["{nickname} 批量使用了 {item_name}，股市反应平淡 {change}"]},
+                            templates={"plain": ["{nickname} 批量使用了 {item_name}，妖牛市反应平淡 {change}"]},
                             mean_reversion=True
                         )
                     if stock_msg:
@@ -1115,14 +1115,14 @@ class NiuniuShop:
                     total_cost_with_tax = total_cost + purchase_tax
                     self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
 
-                    # 股市钩子 - 牛牛盾牌批量购买也要影响股价
+                    # 妖牛市钩子 - 牛牛盾牌批量购买也要影响牛价
                     stock_msg = stock_hook(
                         group_id, nickname,
                         item_name='牛牛盾牌',
                         length_change=length_change,
                         hardness_change=hardness_change,
                         volatility=(0.01, 0.03),
-                        templates={"plain": ["{nickname} 批量购买了牛牛盾牌，股市微微波动 {change}"]},
+                        templates={"plain": ["{nickname} 批量购买了牛牛盾牌，妖牛市微微波动 {change}"]},
                         mean_reversion=True
                     )
                     if stock_msg:
@@ -1233,14 +1233,14 @@ class NiuniuShop:
                         result_msg.append(f"💸 消费税：{purchase_tax}金币（{digit_count/2}%税率）")
                     result_msg.append(f"═══════════════════")
 
-                    # 股市钩子
+                    # 妖牛市钩子
                     stock_msg = stock_hook(
                         group_id, nickname,
                         item_name='牛牛重锤',
                         length_change=0,
                         hardness_change=0,
                         volatility=(0.01, 0.04),
-                        templates={"plain": ["{nickname} 挥起重锤！护盾应声碎裂，股市微微震动 {change}"]},
+                        templates={"plain": ["{nickname} 挥起重锤！护盾应声碎裂，妖牛市微微震动 {change}"]},
                         mean_reversion=True
                     )
                     if stock_msg:
@@ -1249,7 +1249,7 @@ class NiuniuShop:
                     yield event.plain_result("✅ 购买成功\n" + "\n".join(result_msg))
                     return
 
-                # 循环触发道具批量购买（祸水东引、上保险、牛牛反弹、巴黎牛家、赌徒骰子、穷牛一生）
+                # 循环触发道具批量购买（祸水东引、上保险、牛牛反弹、巴黎牛家、命运骰子、穷牛一生）
                 if is_loop_trigger and buy_count > 1:
                     # 检查效果是否存在
                     if not effect or EffectTrigger.ON_PURCHASE not in effect.triggers:
@@ -1370,7 +1370,7 @@ class NiuniuShop:
                     total_cost_with_tax = total_cost + purchase_tax
                     self.update_user_coins(group_id, user_id, user_coins - total_cost_with_tax)
 
-                    # 股市钩子 - 使用累积效果触发
+                    # 妖牛市钩子 - 使用累积效果触发
                     item_name = selected_item.get('name', '')
                     stock_msg = None
                     if hasattr(effect, 'stock_config') and effect.stock_config:
@@ -1391,7 +1391,7 @@ class NiuniuShop:
                             length_change=total_length_change,
                             hardness_change=total_hardness_change,
                             volatility=(0.001, 0.005),
-                            templates={"plain": ["{nickname} 批量使用了 {item_name}，股市反应平淡 {change}"]},
+                            templates={"plain": ["{nickname} 批量使用了 {item_name}，妖牛市反应平淡 {change}"]},
                             mean_reversion=True
                         )
                     if stock_msg:
@@ -1444,15 +1444,15 @@ class NiuniuShop:
                         return
                     extra_data['target_id'] = target_id
 
-                    # 获取股票数据用于计算总资产
+                    # 获取妖牛券数据用于计算总资产
                     from niuniu_stock import NiuniuStock
                     stock = NiuniuStock.get()
-                    # 直接传递用户持股和股价，避免使用不存在的方法
+                    # 直接传递用户持股和牛价，避免使用不存在的方法
                     extra_data['user_shares'] = stock.get_holdings(group_id, user_id)
                     extra_data['stock_price'] = stock.get_price(group_id)
                     extra_data['stock_instance'] = stock  # 传递实例供后续操作
 
-                    # 获取目标的金币和股票（用于含笑五步癫快照）
+                    # 获取目标的金币和妖牛券（用于含笑五步癫快照）
                     extra_data['target_coins'] = self.get_user_coins(group_id, target_id)
                     extra_data['target_shares'] = stock.get_holdings(group_id, target_id)
 
@@ -2048,12 +2048,12 @@ class NiuniuShop:
                         current_coins = self.get_user_coins(group_id, user_id)
                         self.update_user_coins(group_id, user_id, current_coins - coins_to_deduct)
 
-                        # 强制卖出股票（使用 force_liquidate 方法，自动处理统计数据）
+                        # 强制卖出妖牛券（使用 force_liquidate 方法，自动处理统计数据）
                         if shares_to_sell > 0:
                             from niuniu_stock import NiuniuStock
                             stock = NiuniuStock.get()
                             stock.force_liquidate(group_id, user_id, shares_to_sell)
-                            result_msg.append(f"📉 强制清算股票：{shares_to_sell}股（无收益）")
+                            result_msg.append(f"📉 强制清算妖牛券：{shares_to_sell}股（无收益）")
 
                         # 施加含笑五步癫（不修改目标长度/硬度，只施加debuff）
                         if target_id in group_data:
@@ -2064,7 +2064,7 @@ class NiuniuShop:
                                 'remaining_times': HanxiaoWubudianConfig.DEBUFF_TIMES,  # 5次（含笑五步癫）
                                 'snapshot_length': hanxiao.get('snapshot_length', 0),
                                 'snapshot_hardness': hanxiao.get('snapshot_hardness', 1),
-                                'snapshot_asset': hanxiao.get('snapshot_asset', 0),  # 总资产=金币+股票
+                                'snapshot_asset': hanxiao.get('snapshot_asset', 0),  # 总资产=金币+妖牛券
                                 'applied_at': int(time.time()),
                                 'applied_by': user_id
                             }
@@ -2144,8 +2144,8 @@ class NiuniuShop:
             target_coins = user_coins - total_cost_with_tax + insurance_payout
             self.update_user_coins(group_id, user_id, target_coins)
 
-            # 股市钩子 - 仅对主动道具生效（被动道具无长度/硬度变化）
-            # 股价高于基准时倾向下跌，低于基准时倾向上涨，起到市场稳定器作用
+            # 妖牛市钩子 - 仅对主动道具生效（被动道具无长度/硬度变化）
+            # 牛价高于基准时倾向下跌，低于基准时倾向上涨，起到市场稳定器作用
             if selected_item['type'] == 'active':
                 item_name = selected_item.get('name', '')
                 item_length_change = ctx.length_change
@@ -2173,7 +2173,7 @@ class NiuniuShop:
                         length_change=item_length_change,
                         hardness_change=item_hardness_change,
                         volatility=(0.001, 0.005),
-                        templates={"plain": ["{nickname} 使用了 {item_name}，股市反应平淡 {change}"]},
+                        templates={"plain": ["{nickname} 使用了 {item_name}，妖牛市反应平淡 {change}"]},
                         mean_reversion=True  # 道具购买启用均值回归
                     )
                 if stock_msg:

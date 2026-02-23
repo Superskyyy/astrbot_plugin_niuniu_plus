@@ -100,7 +100,7 @@ dajiao:
     - "🧊 {nickname} 的牛牛遭遇冰河世纪！-{change}cm"
     - "👻 有鬼！{nickname} 的牛牛吓缩了{change}cm"
     - "🪄 魔法反噬！{nickname} -{change}cm"
-    - "📉 股市暴跌！{nickname} 的牛牛跟着跌了{change}cm"
+    - "📉 妖牛市暴跌！{nickname} 的牛牛跟着跌了{change}cm"
     - "🎪 {nickname} 的牛牛表演失败，观众嘘声-{change}cm"
     - "🧲 {nickname} 的牛牛被黑洞吸走了{change}cm"
     - "🎭 {nickname} 的牛牛演砸了！票房-{change}cm"
@@ -131,7 +131,7 @@ dajiao:
     - "🏆 {nickname} 的牛牛比赛被取消资格-{change}cm"
     - "🌠 {nickname} 的流星许愿被驳回-{change}cm"
     - "🦸 {nickname} 的斗篷破了个洞-{change}cm"
-    - "🎰 {nickname} 的牛牛赌博输了-{change}cm"
+    - "🎰 {nickname} 的牛牛押宝输了-{change}cm"
     - "🐜 {nickname} 的牛牛被蚂蚁搬走了{change}cm"
     - "🌧️ {nickname} 的牛牛淋雨缩水了-{change}cm"
     - "🧹 {nickname} 的牛牛被扫进垃圾桶-{change}cm"
@@ -293,7 +293,7 @@ dajiao:
       - "💀 【死亡凝视】{nickname} 不小心看了 {victim} 一眼，吓缩了{damage}cm！"
       - "🎭 【厄运转移】{nickname} 把霉运转移给了 {victim}！-{damage}cm！"
       - "🦠 【传染】{nickname} 的牛牛感冒了，传染给 {victim}！-{damage}cm！"
-      - "📉 【股灾】{nickname} 的牛牛暴跌，带崩了 {victim}！-{damage}cm！"
+      - "📉 【牛灾】{nickname} 的牛牛暴跌，带崩了 {victim}！-{damage}cm！"
       - "🎯 【流弹】{nickname} 打胶的余波击中了 {victim}！-{damage}cm！"
       - "🌪️ 【飓风】{nickname} 引发了牛牛飓风！{victim} 被卷走{damage}cm！"
       - "🔮 【巫术】{nickname} 无意中对 {victim} 施了缩小咒！-{damage}cm！"
@@ -845,21 +845,21 @@ compare:
     - "🎁 【安慰奖】{nickname}太惨了，系统给了保护！"
     - "🛡️ 【铁壁】{nickname}的牛牛启动了保护机制！"
     - "💎 【不屈意志】{nickname}虽败犹荣，长度不减！"
-  # 赌注系统
+  # 彩头系统
   bet_accepted:
     - "💰 {nickname} 下注 {amount} 金币挑战 {target}！"
-    - "🎰 【豪赌】{nickname} 押上 {amount} 金币！"
-    - "🎲 【对赌】{nickname} 以{amount}金币为赌注！"
+    - "🎰 【豪拼】{nickname} 押上 {amount} 金币！"
+    - "🎲 【对拼】{nickname} 以{amount}金币为彩头！"
     - "💎 【梭哈】{nickname} 押注{amount}金币，一决胜负！"
   bet_win:
-    - "💰 【赢得赌注】{nickname} 赢得了 {amount} 金币！"
+    - "💰 【赢得彩头】{nickname} 赢得了 {amount} 金币！"
     - "🤑 【发财了】{nickname} 豪取 {amount} 金币！"
     - "🎉 【财运亨通】{nickname} 赢了{amount}金币！"
     - "💎 【金盆钵满】{nickname} 收获{amount}金币！"
-    - "🏆 【赌神附体】{nickname} 赢走{amount}金币！"
+    - "🏆 【牛神附体】{nickname} 赢走{amount}金币！"
     - "✨ 【幸运儿】{nickname} 带走{amount}金币！"
   bet_lose:
-    - "💸 【输掉赌注】{nickname} 失去了 {amount} 金币..."
+    - "💸 【输掉彩头】{nickname} 失去了 {amount} 金币..."
     - "😭 【血本无归】{nickname} 的 {amount} 金币没了..."
     - "🥲 【赔了】{nickname} 亏掉{amount}金币..."
     - "💔 【心碎】{nickname} 损失{amount}金币..."
@@ -868,7 +868,7 @@ compare:
   bet_insufficient:
     - "❌ {nickname} 金币不足，无法下注 {amount}"
   bet_invalid:
-    - "❌ 赌注必须在 {min}-{max} 之间"
+    - "❌ 彩头必须在 {min}-{max} 之间"
   # 围观效应 - 加长度（双方）
   audience_effect:
     - "👀 【围观效应】{count}人围观助威！双方各+{bonus}cm！"
@@ -986,8 +986,7 @@ menu:
     🔹 比划比划 @目标 [金额] - 发起对决，可下注10-10000金币
     🔹 牛牛排行 [长度/金币] - 查看排行榜（默认长度）
     🔹 牛牛抢劫/牛牛打劫 @目标 - 抢劫目标金币
-    🔹 牛牛拜年 @目标/所有人 - 给牛友拜年，双方获奖励，还能集五福！
-    ━━━ 商城系统 ━━━
+━━━ 商城系统 ━━━
     🔹 牛牛购买 22 @目标 [数量] - 牛牛重锤，击碎护盾
     🔹 牛牛商城 - 购买道具
     🔹 牛牛背包 - 查看道具和订阅状态
@@ -995,15 +994,15 @@ menu:
     🔹 牛牛订阅 <编号> [天数] - 购买订阅服务
     🔹 牛牛取消订阅 <编号> - 取消订阅（不退款）
     ━━━ 经济系统 ━━━
-    🔹 牛牛股市 - 妖牛股交易（购买/出售/梭哈/持仓/操盘）
+    🔹 牛牛妖市 - 妖牛股交易（购买/出售/梭哈/持仓/操盘）
     🔹 飞飞机 - 随机事件，有惊喜
     🔹 开冲/停止开冲 - 3次/天，10分钟起，最长12h，后台挂机赚金币
     ━━━ 管理员指令 ━━━
     🔸 牛牛开/关 - 开关插件
     🔸 牛牛红包 @用户/所有人 <长度> <硬度> <金币>
     🔸 牛牛救市 <±金额> - 正数拉升，负数砸盘
-    🔸 牛牛股市 重置 - 重置股市
-    🔸 重置所有牛牛 <类型> - 金币/长度/硬度/股市/全部
+    🔸 牛牛妖市 重置 - 重置妖牛市
+    🔸 重置所有牛牛 <类型> - 金币/长度/硬度/妖牛市/全部
 
 system:
   enable: "✅ 牛牛插件已启用"

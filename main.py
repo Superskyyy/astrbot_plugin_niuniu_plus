@@ -31,7 +31,7 @@ from datetime import datetime
 # 确保目录存在
 os.makedirs(PLUGIN_DIR, exist_ok=True)
 
-@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.29.5")
+@register("niuniu_plugin", "Superskyyy", "牛牛插件，包含注册牛牛、打胶、我的牛牛、比划比划、牛牛排行等功能", "4.29.7")
 class NiuniuPlugin(Star):
     # 冷却时间常量（秒）
     COOLDOWN_10_MIN = 600    # 10分钟
@@ -475,7 +475,7 @@ class NiuniuPlugin(Star):
         """
         触发「含笑五步癫」效果（在每次命令执行后调用）
 
-        每次触发扣除快照值的19.6%长度、硬度、总资产（金币+股票），共5次（98%总量）
+        每次触发扣除快照值的19.6%长度、硬度、总资产（金币+妖牛券），共5次（98%总量）
         含笑五步癫效果无法被任何东西抵挡
 
         Args:
@@ -522,7 +522,7 @@ class NiuniuPlugin(Star):
         current_hardness = user_data.get('hardness', 1)
         current_coins = self.shop.get_user_coins(group_id, user_id)
 
-        # 获取股票信息
+        # 获取妖牛券信息
         stock = NiuniuStock.get()
         user_shares = stock.get_holdings(group_id, user_id)
         stock_price = stock.get_price(group_id)
@@ -533,7 +533,7 @@ class NiuniuPlugin(Star):
         # 硬度：最低为0
         new_hardness = max(0, current_hardness - hardness_damage)
 
-        # 资产扣除：先扣金币，不够再卖股票
+        # 资产扣除：先扣金币，不够再卖妖牛券
         remaining_asset_damage = asset_damage
         actual_coins_deducted = min(current_coins, remaining_asset_damage)
         new_coins = current_coins - actual_coins_deducted
@@ -541,7 +541,7 @@ class NiuniuPlugin(Star):
 
         shares_sold = 0
         if remaining_asset_damage > 0 and user_shares > 0:
-            # 需要强制卖出股票补足（含笑五步癫强制清算）
+            # 需要强制卖出妖牛券补足（含笑五步癫强制清算）
             shares_needed = min(user_shares, int(remaining_asset_damage / stock_price) + 1)
             while shares_needed * stock_price < remaining_asset_damage and shares_needed < user_shares:
                 shares_needed += 1
@@ -977,8 +977,8 @@ class NiuniuPlugin(Star):
                 "牛牛订阅商店": self._subscription_shop,
                 "牛牛取消订阅": self._unsubscribe,
                 "牛牛订阅": self._subscribe,
-                "牛牛股市 重置": self._niuniu_stock_reset,  # 放在 "牛牛股市" 前面
-                "牛牛股市": self._niuniu_stock,
+                "牛牛妖市 重置": self._niuniu_stock_reset,  # 放在 "牛牛妖市" 前面
+                "牛牛妖市": self._niuniu_stock,
                 "重置所有牛牛": self._reset_all_niuniu,
                 "牛牛红包": self._niuniu_hongbao,
                 "牛牛救市": self._niuniu_jiushi
@@ -1001,7 +1001,7 @@ class NiuniuPlugin(Star):
         niuniu_commands = [
             "牛牛菜单", "牛牛帮助", "牛牛开", "牛牛关", "注册牛牛", "打胶", "我的牛牛",
             "比划比划", "牛牛排行", "牛牛商城", "牛牛购买", "牛牛背包",
-            "牛牛股市", "开冲", "停止开冲", "飞飞机", "牛牛拜年"
+            "牛牛妖市", "开冲", "停止开冲", "飞飞机", "牛牛拜年"
         ]
         
         if any(msg.startswith(cmd) for cmd in niuniu_commands):
@@ -1037,7 +1037,7 @@ class NiuniuPlugin(Star):
         reset_type = msg_parts[1] if len(msg_parts) > 1 else None
 
         # 有效的重置类型
-        valid_types = ['金币', '长度', '硬度', '股市', '全部']
+        valid_types = ['金币', '长度', '硬度', '妖牛市', '全部']
 
         if reset_type and reset_type not in valid_types:
             yield event.plain_result(
@@ -1046,7 +1046,7 @@ class NiuniuPlugin(Star):
                 "   • 金币 - 所有牛友金币归零\n"
                 "   • 长度 - 所有牛牛长度随机重置\n"
                 "   • 硬度 - 所有牛牛硬度归一\n"
-                "   • 股市 - 清空所有牛友股票持仓\n"
+                "   • 妖牛市 - 清空所有牛友妖牛券持仓\n"
                 "   • 全部 - 重置以上所有数据"
             )
             return
@@ -1057,7 +1057,7 @@ class NiuniuPlugin(Star):
                 "   • 金币 - 所有牛友金币归零\n"
                 "   • 长度 - 所有牛牛长度随机重置\n"
                 "   • 硬度 - 所有牛牛硬度归一\n"
-                "   • 股市 - 清空所有牛友股票持仓\n"
+                "   • 妖牛市 - 清空所有牛友妖牛券持仓\n"
                 "   • 全部 - 重置以上所有数据"
             )
             return
@@ -1070,8 +1070,8 @@ class NiuniuPlugin(Star):
         reset_count = 0
 
         # 根据类型执行重置
-        if reset_type == '股市':
-            # 重置股市持仓
+        if reset_type == '妖牛市':
+            # 重置妖牛市持仓
             stock = NiuniuStock.get()
             stock_data = stock._get_group_data(group_id)
             reset_count = len(stock_data.get("holdings", {}))
@@ -1079,9 +1079,9 @@ class NiuniuPlugin(Star):
             stock_data["user_stats"] = {}
             stock._save_data()
             yield event.plain_result(
-                f"📊 股市持仓已清空！\n"
+                f"📊 妖牛市持仓已清空！\n"
                 f"👥 清仓牛友: {reset_count}位\n"
-                f"💰 股价保持不变，所有牛友从零开始炒股~"
+                f"💰 牛价保持不变，所有牛友从零开始炒牛券~"
             )
             return
 
@@ -1111,7 +1111,7 @@ class NiuniuPlugin(Star):
         data[group_id] = group_data
         self._save_niuniu_lengths(data)
 
-        # 如果是全部重置，同时清空股市
+        # 如果是全部重置，同时清空妖牛市
         if reset_type == '全部':
             stock = NiuniuStock.get()
             stock_data = stock._get_group_data(group_id)
@@ -1124,7 +1124,7 @@ class NiuniuPlugin(Star):
             '金币': '金币已归零',
             '长度': '长度已随机重置',
             '硬度': '硬度已归一',
-            '全部': '全部数据已重置（含股市持仓）'
+            '全部': '全部数据已重置（含妖牛市持仓）'
         }
         yield event.plain_result(f"✅ 已重置本群 {reset_count} 个牛牛！\n📋 {type_names[reset_type]}")
 
@@ -1395,7 +1395,7 @@ class NiuniuPlugin(Star):
             yield event.plain_result("\n".join(result_parts))
 
     async def _niuniu_jiushi(self, event):
-        """牛牛救市/砸盘 - 系统资金操作股价，仅管理员可用"""
+        """牛牛救市/砸盘 - 系统资金操作牛价，仅管理员可用"""
         group_id = str(event.message_obj.group_id)
         user_id = str(event.get_sender_id())
 
@@ -1431,7 +1431,7 @@ class NiuniuPlugin(Star):
         yield event.plain_result(msg)
 
     async def _niuniu_stock_reset(self, event):
-        """牛牛股市 重置 - 清除所有股市数据，仅管理员可用"""
+        """牛牛妖市 重置 - 清除所有妖牛市数据，仅管理员可用"""
         group_id = str(event.message_obj.group_id)
         user_id = str(event.get_sender_id())
 
@@ -1447,7 +1447,7 @@ class NiuniuPlugin(Star):
         yield event.plain_result(msg)
 
     async def _niuniu_stock(self, event):
-        """牛牛股市"""
+        """牛牛妖市"""
         group_id = str(event.message_obj.group_id)
         user_id = str(event.get_sender_id())
         nickname = event.get_sender_name()
@@ -1462,19 +1462,19 @@ class NiuniuPlugin(Star):
         stock = NiuniuStock.get()
 
         # 解析子命令
-        parts = msg.replace("牛牛股市", "").strip().split()
+        parts = msg.replace("牛牛妖市", "").strip().split()
 
         if not parts:
-            # 无参数：显示股市行情
+            # 无参数：显示妖牛市行情
             yield event.plain_result(stock.format_market(group_id))
             return
 
         subcmd = parts[0]
 
         if subcmd == "购买":
-            # 牛牛股市 购买 <金额|梭哈>
+            # 牛牛妖市 购买 <金额|梭哈>
             if len(parts) < 2:
-                yield event.plain_result("❌ 格式：牛牛股市 购买 <金额|梭哈>")
+                yield event.plain_result("❌ 格式：牛牛妖市 购买 <金额|梭哈>")
                 return
 
             user_coins = user_data.get('coins', 0)
@@ -1507,14 +1507,14 @@ class NiuniuPlugin(Star):
                 if is_soha:
                     message = f"🎰 梭哈模式！投入95%财富\n{message}"
             yield event.plain_result(message)
-            # 含笑五步癫触发（买股票也算行动）
+            # 含笑五步癫触发（买妖牛券也算行动）
             if success:
                 huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
                 for msg_text in huagu_msgs:
                     yield event.plain_result(msg_text)
 
         elif subcmd == "出售":
-            # 牛牛股市 出售 [数量/全部]
+            # 牛牛妖市 出售 [数量/全部]
             shares = None
             if len(parts) >= 2:
                 if parts[1] == "全部":
@@ -1540,24 +1540,24 @@ class NiuniuPlugin(Star):
                 user_data['coins'] = round(user_coins + coins)  # 取整避免精度问题
                 self.update_user_data(group_id, user_id, {'coins': user_data['coins']})
             yield event.plain_result(message)
-            # 含笑五步癫触发（卖股票也算行动）
+            # 含笑五步癫触发（卖妖牛券也算行动）
             if success:
                 huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
                 for msg_text in huagu_msgs:
                     yield event.plain_result(msg_text)
 
         elif subcmd == "持仓":
-            # 牛牛股市 持仓
+            # 牛牛妖市 持仓
             yield event.plain_result(stock.format_holdings(group_id, user_id, nickname))
 
         elif subcmd == "操盘":
-            # 牛牛股市 操盘 <金额> — 花自己的钱拉盘/砸盘
+            # 牛牛妖市 操盘 <金额> — 花自己的钱拉盘/砸盘
             if len(parts) < 2:
                 yield event.plain_result(
-                    "❌ 格式：牛牛股市 操盘 <金额>\n"
+                    "❌ 格式：牛牛妖市 操盘 <金额>\n"
                     "正数拉盘，负数砸盘，花的是你自己的钱！\n"
-                    "例：牛牛股市 操盘 5000\n"
-                    "例：牛牛股市 操盘 -3000"
+                    "例：牛牛妖市 操盘 5000\n"
+                    "例：牛牛妖市 操盘 -3000"
                 )
                 return
 
@@ -1590,7 +1590,7 @@ class NiuniuPlugin(Star):
                 yield event.plain_result(msg_text)
 
         else:
-            yield event.plain_result("❌ 未知命令\n📌 牛牛股市 购买 <金额|梭哈>\n📌 牛牛股市 出售 [数量/全部]\n📌 牛牛股市 持仓\n📌 牛牛股市 操盘 <金额>")
+            yield event.plain_result("❌ 未知命令\n📌 牛牛妖市 购买 <金额|梭哈>\n📌 牛牛妖市 出售 [数量/全部]\n📌 牛牛妖市 持仓\n📌 牛牛妖市 操盘 <金额>")
 
     async def _register(self, event):
         """注册牛牛"""
@@ -2132,7 +2132,7 @@ class NiuniuPlugin(Star):
         if combo_count >= 2:
             final_text += f"\n🔥 当前连击：{combo_count}"
 
-        # 股市钩子
+        # 妖牛市钩子
         stock_msg = stock_hook(group_id, nickname, event_type="dajiao", length_change=total_change)
         if stock_msg:
             final_text += f"\n{stock_msg}"
@@ -2251,7 +2251,7 @@ class NiuniuPlugin(Star):
                 yield event.plain_result("❌ 10分钟内只能比划三次")
                 return
 
-            # ===== 解析赌注 =====
+            # ===== 解析彩头 =====
             bet_amount = 0
             msg_parts = event.message_str.split()
             for part in msg_parts:
@@ -2259,10 +2259,10 @@ class NiuniuPlugin(Star):
                     bet_amount = int(part)
                     break
 
-            # 验证赌注（只检查最小值，无上限）
+            # 验证彩头（只检查最小值，无上限）
             if bet_amount > 0:
                 if bet_amount < CompareBet.MIN_BET:
-                    yield event.plain_result(f"❌ 赌注最少 {CompareBet.MIN_BET} 金币")
+                    yield event.plain_result(f"❌ 彩头最少 {CompareBet.MIN_BET} 金币")
                     return
                 # 检查金币是否足够
                 user_coins = self.shop.get_user_coins(group_id, user_id)
@@ -2474,22 +2474,22 @@ class NiuniuPlugin(Star):
                     target_coins = self.shop.get_user_coins(group_id, target_id)
                     target_pay = min(bet_amount, max(0, target_coins))
                     if target_pay > 0:
-                        # 计算税收仅针对对手赔付部分（复用股市税率）
+                        # 计算税收仅针对对手赔付部分（复用妖牛市税率）
                         tax_amount, effective_rate, bracket_str = NiuniuStock.get()._calculate_tax(target_pay, avg_coins)
                         net_from_target = target_pay - tax_amount
                     else:
                         tax_amount, effective_rate, bracket_str = 0.0, 0.0, ""
                         net_from_target = 0.0
-                    # 返还自己的赌注 + 对手赔付（税后）
+                    # 返还自己的彩头 + 对手赔付（税后）
                     total_return = bet_amount + int(net_from_target)
-                    bet_tax_info = f"\n💰 赢得赌注池！返还 {bet_amount} + 对手赔付 {net_from_target:.0f}（税前 {target_pay}，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
+                    bet_tax_info = f"\n💰 赢得彩头池！返还 {bet_amount} + 对手赔付 {net_from_target:.0f}（税前 {target_pay}，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
                     if bracket_str and bracket_str != "免税":
                         bet_tax_info += f"\n📊 税率明细：{bracket_str}"
                     if target_pay < bet_amount:
-                        bet_tax_info += f"\n⚠️ {target_data['nickname']} 金币不足，实际赔付 {target_pay} 枚（原赌注 {bet_amount}）"
+                        bet_tax_info += f"\n⚠️ {target_data['nickname']} 金币不足，实际赔付 {target_pay} 枚（原彩头 {bet_amount}）"
                     # 扣除输家金币（最多扣到0）
                     self.modify_coins_cached(group_id, target_id, -target_pay)
-                    # 返还赢家自己的赌注 + 对手赔付（税后）
+                    # 返还赢家自己的彩头 + 对手赔付（税后）
                     self.modify_coins_cached(group_id, user_id, total_return)
 
                 text = random.choice(self.niuniu_texts['compare']['win']).format(
@@ -2597,10 +2597,10 @@ class NiuniuPlugin(Star):
 
                 # 处理金币下注（失败方）
                 if bet_amount > 0:
-                    # 发起方已在开始时扣除赌注，直接给赢家（税后）
+                    # 发起方已在开始时扣除彩头，直接给赢家（税后）
                     tax_amount, effective_rate, bracket_str = NiuniuStock.get()._calculate_tax(bet_amount, avg_coins)
                     net_gain = bet_amount - tax_amount
-                    bet_tax_info = f"\n💸 损失赌注 {bet_amount} 枚（{target_data['nickname']} 获得 {net_gain:.0f}，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
+                    bet_tax_info = f"\n💸 损失彩头 {bet_amount} 枚（{target_data['nickname']} 获得 {net_gain:.0f}，税收 {tax_amount:.0f}，税率 {effective_rate*100:.1f}%）"
                     if bracket_str and bracket_str != "免税":
                         bet_tax_info += f"\n📊 税率明细：{bracket_str}"
                     # 增加赢家金币（税后）
@@ -2958,7 +2958,7 @@ class NiuniuPlugin(Star):
             huagu_msgs = self._trigger_huagu_debuff(group_id, user_id)
             result_msg.extend(huagu_msgs)
 
-            # 股市钩子 - 用赢家的增益作为变化量
+            # 妖牛市钩子 - 用赢家的增益作为变化量
             compare_change = user_length_gain if user_length_gain > 0 else -target_length_gain
             stock_msg = stock_hook(group_id, nickname, event_type="compare", length_change=compare_change)
             if stock_msg:
@@ -3382,7 +3382,7 @@ class NiuniuPlugin(Star):
 
         result_lines.append("═══════════════════")
 
-        # 股市钩子 - 抢劫金币变动影响股市
+        # 妖牛市钩子 - 抢劫金币变动影响妖牛市
         stock_msg = stock_hook(group_id, nickname, event_type="compare", coins_change=final_gain)
         if stock_msg:
             result_lines.append(stock_msg)
@@ -3396,6 +3396,9 @@ class NiuniuPlugin(Star):
 
     async def _bainian(self, event):
         """牛牛拜年 - 春节互动功能"""
+        yield event.plain_result("❌ 春节已过，牛牛拜年活动已结束，明年再来拜年吧！🐂")
+        return
+
         from niuniu_config import BainianConfig
 
         # 检查是否是"所有人"批量模式
@@ -3703,7 +3706,7 @@ class NiuniuPlugin(Star):
                             if fn in items_check:
                                 del items_check[fn]
 
-                        # 计算50%总资产奖励（金币 + 股票市值）
+                        # 计算50%总资产奖励（金币 + 妖牛券市值）
                         current_coins = user_data_check.get('coins', 0)
                         stock = NiuniuStock.get()
                         user_shares = stock.get_holdings(group_id, user_id)
@@ -4104,7 +4107,7 @@ class NiuniuPlugin(Star):
                                 if fn in items_check:
                                     del items_check[fn]
 
-                            # 计算50%总资产奖励（金币 + 股票市值）
+                            # 计算50%总资产奖励（金币 + 妖牛券市值）
                             current_coins = user_data_check.get('coins', 0)
                             stock = NiuniuStock.get()
                             user_shares = stock.get_holdings(group_id, user_id)
